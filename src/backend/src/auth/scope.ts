@@ -8,7 +8,7 @@ export function autoScopeForRoute(): RequestHandler {
   return async (req: Request, _res: Response, next: NextFunction) => {
     const rule = findRouteRule(req.method as HttpMethod, req.path, req.query)
     if (!rule) {
-      if (req.path === '/api/profiles' || req.path.startsWith('/api/profiles/') || req.path.startsWith('/api/authored-notes/')) return next()
+      if (req.path === '/api/profiles' || req.path.startsWith('/api/profiles/')) return next()
       return next(new AppError('Unmapped route', 404, 'NOT_FOUND'))
     }
     try {

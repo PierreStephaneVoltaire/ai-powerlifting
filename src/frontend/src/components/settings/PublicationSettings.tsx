@@ -9,7 +9,7 @@ const domains = [
   ['competition', 'Competition Entries and Attempts'], ['performance', 'Maxes and max history'],
   ['weight-log', 'Body measurements and weight history'], ['lift-profiles', 'Lift profiles'],
   ['analytics', 'Analysis and reports'], ['videos', 'Training videos'], ['goals', 'Goals'],
-  ['budget', 'Competition budget'], ['glossary', 'Exercise library'], ['templates', 'Templates'],
+  ['glossary', 'Exercise library'], ['templates', 'Templates'],
   ['federation', 'Federation library'], ['imports', 'Imported training files'],
 ] as const
 interface Publication { domains: string[] }

@@ -22,25 +22,6 @@ export function offlineProgram() {
   return { ...value, sessions: value.sessions.map(session => structuredClone(session)) }
 }
 
-export const offlineNote = {
-  note_id: 'offline-note',
-  author_person_pk: offlinePerson,
-  text: 'Original private note',
-  revision: 2,
-  created_at: '2026-09-01T00:00:00Z',
-  updated_at: '2026-09-01T00:00:00Z',
-}
-
-export const offlineAttachment = {
-  attachment_id: 'attachment-1',
-  note_id: 'offline-note',
-  text: 'Previously shared revision',
-  author_person_pk: offlinePerson,
-  source_revision: 2,
-  revision: 1,
-  context_domain: 'program',
-}
-
 export const offlineCompetition = {
   master_id: 'offline-meet',
   name: 'Offline Meet',

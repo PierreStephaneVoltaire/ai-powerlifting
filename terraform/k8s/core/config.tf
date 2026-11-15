@@ -24,9 +24,7 @@ resource "kubernetes_config_map_v1" "app" {
     POWERLIFTING_MASTER_FEDERATIONS_TABLE  = var.tables.master_federations
     POWERLIFTING_USER_FEDERATIONS_TABLE    = var.tables.user_federations
     POWERLIFTING_GOALS_TABLE               = var.tables.goals
-    POWERLIFTING_BUDGET_TABLE              = var.tables.budget
     GLOSSARY_TABLE_NAME                    = var.tables.glossary
-    BUDGET_MEDIA_BUCKET                    = var.budget_media_bucket
     NODE_ENV                               = "production"
     PORT                                   = "3005"
     FRONTEND_URL                           = "https://${var.app_domain}"

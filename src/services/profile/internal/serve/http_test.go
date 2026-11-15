@@ -62,8 +62,8 @@ func TestEveryOperationIsDocumented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 42 {
-		t.Fatalf("expected the 42 operations of profile.json, got %d", len(registry.All()))
+	if len(registry.All()) != 37 {
+		t.Fatalf("expected the 37 operations of profile.json, got %d", len(registry.All()))
 	}
 	for _, operation := range registry.All() {
 		entry, ok := document.Paths["/operations/"+operation.Name]["post"]
@@ -221,8 +221,8 @@ func TestMCPInitializeListAndCall(t *testing.T) {
 	if !names["access_context"] || !names["profile_search"] || names["identity_resolve"] {
 		t.Fatalf("internal-only tools must be hidden: %d tools", len(names))
 	}
-	if len(names) != 41 {
-		t.Fatalf("expected 41 public tools, got %d", len(names))
+	if len(names) != 36 {
+		t.Fatalf("expected 36 public tools, got %d", len(names))
 	}
 	called := rpc(t, f, self, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"access_context","arguments":{}}}`)
 	content, _ := called["result"].(map[string]any)
@@ -248,7 +248,7 @@ func TestToolSchemasCarryTheScopedPrimaryKey(t *testing.T) {
 		tool := entry.(map[string]any)
 		properties, _ := tool["inputSchema"].(map[string]any)["properties"].(map[string]any)
 		switch tool["name"] {
-		case "note_list_private", "favorites", "notifications":
+		case "favorites", "notifications":
 			if _, ok := properties["pk"]; !ok {
 				t.Errorf("%s must expose the injected pk property", tool["name"])
 			}

@@ -23,12 +23,10 @@ import { settingsRouter } from './routes/settings'
 import { profilesRouter } from './routes/profiles'
 import { goalsRouter } from './routes/goals'
 import { federationsRouter } from './routes/federations'
-import { budgetRouter } from './routes/budget'
 import { setupRouter } from './routes/setup'
 import { grantsRouter } from './routes/grants'
 import { jobsRouter } from './routes/jobs'
 import { onboardingRouter } from './routes/onboarding'
-import { authoredNotesRouter } from './routes/authoredNotes'
 import { errorHandler } from './middleware/errorHandler'
 import { configureAuthentication, requireUserOptional, requireWriteAuth, resolvePk } from './middleware/auth'
 
@@ -65,11 +63,9 @@ app.use('/api/setup', setupRouter)
 app.use('/api/grants', grantsRouter)
 app.use('/api/jobs', jobsRouter)
 app.use('/api/onboarding', onboardingRouter)
-app.use('/api/authored-notes', authoredNotesRouter)
 app.use('/api/programs', programsRouter)
 app.use('/api/goals', goalsRouter)
 app.use('/api/federations', federationsRouter)
-app.use('/api/budget', budgetRouter)
 app.use('/api/sessions', sessionsRouter)
 app.use('/api/exercises', exercisesRouter)
 app.use('/api/maxes', maxesRouter)

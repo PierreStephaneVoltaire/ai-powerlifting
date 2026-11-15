@@ -13,7 +13,6 @@ locals {
   small = { limits = { cpu = "500m", memory = "256Mi" }, requests = { cpu = "25m", memory = "64Mi" } }
 
   services = {
-    "pl-budget"        = merge(local.small, { domain = "budget" })
     "pl-calculations"  = merge(local.small, { domain = "calculations" })
     "pl-export"        = { domain = "export", limits = { cpu = "1", memory = "512Mi" }, requests = { cpu = "50m", memory = "128Mi" } }
     "pl-federation"    = merge(local.small, { domain = "federation" })

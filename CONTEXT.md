@@ -43,11 +43,11 @@ Athlete. Public Sessions cover the current block only.
 **Profile tag** — A label an Athlete submits for their profile. The operator
 approves tags directly in DynamoDB, and only approved tags are shown.
 
-**Authored note** — Words owned by the Person who wrote them. A private original
-is separate from an attributed revision attached to an Athlete's record. The
-Athlete may remove the attachment but cannot rewrite another Person's words.
-An authorized author may explicitly publish a new shared revision. Programs,
-Sessions and Attempts remain Athlete-owned even when a delegate edits them.
+**Private log note** — A dated Block note the Athlete marks private. Only the
+Athlete sees it; Coaches, Handlers, viewers and public profiles do not. The
+Athlete's own AI coach, exports and analysis still use it. A delegate editing
+Block notes cannot see, mark or remove private entries. Programs, Sessions and
+Attempts remain Athlete-owned even when a delegate edits them.
 
 ## Competition
 
@@ -65,7 +65,7 @@ own store and lifecycle independent of the Program.
 > Capability test: a domain concept gets its own function (and thus its own
 > uniform portal + agent path) when it has its own store, its own identity, and
 > its own lifecycle independent of the Program aggregate. Competition Entries,
-> Sessions, Goals, Budget, and the Weight Log pass this test; sub-collections
+> Sessions, Goals, and the Weight Log pass this test; sub-collections
 > that live inside the Program document do not.
 
 **Federation** — An organization that sanctions Competition Events and publishes
@@ -146,16 +146,6 @@ context, used to track progression.
 > Invariant: for the same method and the same date range, every interface must
 > produce the same Max or Estimated 1RM. Any divergence between interfaces is a
 > bug, fixed by routing both through one shared function.
-
-## Budget
-
-**Budget** — The Athlete's meet-prep financial plan: a set of expense items,
-each with a priority (mandatory, important, or optional), in a chosen currency.
-Competition-linked mandatory items are never candidates for cutting.
-
-**Budget Item** — A single expense in a Budget, with a cost, date, priority, and
-optional media. An item can be flagged as cut (by the Athlete or the AI advisor)
-without being deleted.
 
 ## Analysis
 

@@ -23,16 +23,6 @@ variable "session_videos_origin_id" {
   description = "Origin ID for the session videos bucket (e.g. \"powerlifting-session-videos\")."
 }
 
-variable "budget_media_bucket_regional_domain_name" {
-  type        = string
-  description = "Regional domain name of the budget media S3 bucket."
-}
-
-variable "budget_media_origin_id" {
-  type        = string
-  description = "Origin ID for the budget media bucket (e.g. \"powerlifting-budget-media\")."
-}
-
 variable "video_url_ttl_seconds" {
   type        = number
   default     = 259200

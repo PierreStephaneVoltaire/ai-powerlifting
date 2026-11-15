@@ -9,9 +9,9 @@ import (
 	"powerlifting/profile/internal/value"
 )
 
-var Domains = []string{"profile", "program", "sessions", "competition", "federation", "glossary", "goals", "budget", "calculations", "performance", "weight-log", "templates", "imports", "lift-profiles", "analytics", "videos"}
+var Domains = []string{"profile", "program", "sessions", "competition", "federation", "glossary", "goals", "calculations", "performance", "weight-log", "templates", "imports", "lift-profiles", "analytics", "videos"}
 
-var handlerDomains = []string{"profile", "program", "sessions", "competition", "budget", "performance", "lift-profiles", "videos", "calculations"}
+var handlerDomains = []string{"profile", "program", "sessions", "competition", "performance", "lift-profiles", "videos", "calculations"}
 
 var (
 	CoachPermissions   = domainPermissions(Domains, "read", "write")

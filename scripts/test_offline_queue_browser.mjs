@@ -21,10 +21,9 @@ try {
     const passed = []
     const check = (condition, name) => { if (!condition) throw new Error(name); passed.push(name) }
     const actor = (person, athlete) => { context.setRequestPerson(person); context.setRequestAthlete(athlete) }
-    const input = (key, text = 'local') => ({ method: 'PUT', url: '/authored-notes/private', data: { note_id: 'note', text, expected_revision: 2, idempotency_key: key }, expected_revision: 2, idempotency_key: key })
+    const input = (key, text = 'local') => ({ method: 'PUT', url: '/block-notes/current', data: { note_id: 'note', text, expected_revision: 2, idempotency_key: key }, expected_revision: 2, idempotency_key: key })
     actor('author', 'athlete')
     const partition = context.requestPartition()
-    await drafts.saveDraft('authored-note:note', { note_id: 'note', text: 'local' })
     const original = await drafts.prepareMutation(input('lost-response'))
     let attempts = 0
     const applied = new Set()
@@ -40,7 +39,6 @@ try {
     check(retry.idempotency_key === original.idempotency_key, 'retry preserves original idempotency key')
     await drafts.synchronizePendingMutations(sender)
     check(applied.size === 1 && !(await drafts.listMutations()).length, 'lost response replay applies exactly once')
-    check(!(await drafts.readDraft('authored-note:note')), 'successful replay clears original draft')
     const rejected = await drafts.prepareMutation(input('rejected'))
     await drafts.synchronizePendingMutations(async () => { throw { response: { status: 409, data: { code: 'rejected' } } } })
     check(!(await drafts.listMutations()).some(record => record.id === rejected.id), 'server-rejected edit is dropped, not held for review')

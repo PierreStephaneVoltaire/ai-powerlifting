@@ -122,9 +122,8 @@ flowchart TB
     Competition["pl-competition<br/>entries, attempts, results"]
     Federation["pl-federation<br/>master directory + user library"]
     Goals["pl-goals<br/>athlete goals"]
-    Budget["pl-budget<br/>expenses, advice, purchase timeline"]
     WeightLog["pl-weight-log<br/>dated bodyweight entries"]
-    Competition ~~~ Federation ~~~ Goals ~~~ Budget ~~~ WeightLog
+    Competition ~~~ Federation ~~~ Goals ~~~ WeightLog
   end
 
   subgraph Analysis["Analysis and performance"]
@@ -173,7 +172,7 @@ flowchart LR
   Analytics["pl-analytics"]
   AI["pl-analytics-ai"]
   Export["pl-analytics-export"]
-  Features["AI-enabled domain operations<br/>pl-templates, pl-glossary, pl-imports,<br/>pl-lift-profiles, pl-budget"]
+  Features["AI-enabled domain operations<br/>pl-templates, pl-glossary, pl-imports,<br/>pl-lift-profiles"]
   Coach["pl-coach<br/>Codex runtime"]
   Valkey[("pl-valkey<br/>analysis, report pointers,<br/>prompt cache entries")]
   PromptCache["pl-prompt-cache-api<br/>exact + semantic lookup"]
@@ -241,14 +240,14 @@ operations go through `pl-prompt-cache-api`.
 flowchart LR
   subgraph Services["Domain + analysis services"]
     direction TB
-    SvcList["pl-program · pl-sessions · pl-templates · pl-glossary<br/>pl-lift-profiles · pl-competition · pl-federation · pl-goals<br/>pl-budget · pl-weight-log · pl-performance · pl-calculations<br/>pl-profile · pl-videos · pl-imports · pl-export<br/>pl-analytics · pl-analytics-ai · pl-analytics-export"]
+    SvcList["pl-program · pl-sessions · pl-templates · pl-glossary<br/>pl-lift-profiles · pl-competition · pl-federation · pl-goals<br/>pl-weight-log · pl-performance · pl-calculations<br/>pl-profile · pl-videos · pl-imports · pl-export<br/>pl-analytics · pl-analytics-ai · pl-analytics-export"]
   end
   BE["Express backend"]
   Rankings["pl-rankings"]
   UI["Browser"]
 
   subgraph AWS["AWS"]
-    DDB[("DynamoDB<br/>profiles, training, grants,<br/>competitions, budgets")]
+    DDB[("DynamoDB<br/>profiles, training, grants,<br/>competitions")]
     Master[("DynamoDB<br/>master competitions + federations")]
     S3[("S3<br/>videos, thumbnails, media,<br/>reports + OpenPowerlifting dataset")]
     CDN["CloudFront<br/>private S3 origin"]
@@ -270,8 +269,8 @@ flowchart LR
 
 Application data stays in DynamoDB and S3; Postgres is for Authentik.
 Thumbnails are served unsigned through CloudFront. Full videos require an
-authorized redirect to a signed CDN URL; budget media and avatars retain
-their authorized API endpoints. The two retained AWS Lambdas generate video
+authorized redirect to a signed CDN URL; avatars retain their authorized
+API endpoints. The two retained AWS Lambdas generate video
 thumbnails and copy master competition/federation updates to athlete directories.
 
 ### Mesh, monitoring and deployment
@@ -412,9 +411,7 @@ erDiagram
 | `if-powerlifting-notifications` | DynamoDB | Durable Person inbox and event deduplication |
 | `if-powerlifting-requests` | DynamoDB | Relationships, role slots, favorites, indexed inbox/roster |
 | `if-powerlifting-goals` | DynamoDB | Athlete goals |
-| `if-powerlifting-budget` | DynamoDB | Budget items + config |
 | `powerlifting-session-videos` | S3 | Lift videos (+ thumbnails, + processed) |
-| `powerlifting-budget-media` | S3 | Budget item photos |
 | `video-thumbnail-generator` | Lambda | S3-triggered ffmpeg thumbnail generation |
 
 ### Person and selected Athlete
@@ -604,30 +601,6 @@ job results also require access to the domains and competition ties used in
 their source. Report deduplication and import review/apply retain their existing
 native contracts. Environment variables left in retained AI helpers do not
 select a separate inference provider.
-
-### Budget analysis
-
-The current Budget gateway builds permitted Budget items/configuration and
-Competition Entries, then calls `budget_priority_timeline` for its deterministic
-advice. `budget_advisor` remains a separate typed native AI operation. The current
-gateway does not implement the old documented 48-hour advisor cache; this
-architecture document does not claim that historical behavior is deployed.
-
-### Budget UX conventions
-
-- **Currency** is a profile-level setting (`settingsStore.currency`, default
-  `CAD`), editable from the Settings drawer. It overrides `BudgetConfig.currency`
-  across all budget surfaces so the symbol stays consistent.
-- **Priority badges** use high-contrast Mantine `filled` variants (MANDATORY =
-  blue, IMPORTANT = indigo) and an `outline` gray for OPTIONAL. `light`/`subtle`
-  yellow badge backgrounds are avoided — the text is unreadable. Yellow is
-  reserved for the read-only "viewing athlete's budget" alert.
-- **Mobile navigation** — at ≤560 px the four-tab bar collapses to a single
-  `Select` dropdown so every tab stays reachable without horizontal scroll. The
-  expense form is single-column on mobile and the date-precision control is a
-  dropdown rather than a two-segment control. The collapsed mobile item row hides
-  the cost column (shown on expand instead) to keep rows scannable.
-
 
 ## Authentication and publication
 

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Save, BookOpen, Plus, Trash2, Calendar, X } from 'lucide-react'
+import { Save, BookOpen, Plus, Trash2, Calendar, X, Lock } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
 import {
-  Paper, Text, Group, Stack, Button, Textarea, Box, ActionIcon,
+  Paper, Text, Group, Stack, Button, Textarea, Box, ActionIcon, Switch, Badge,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import type { BlockNote } from '@powerlifting/types'
@@ -62,15 +62,18 @@ function previewText(text: string): string {
 }
 
 export default function NotesPage() {
-  const { readOnly } = useAuth()
+  const { readOnly, mapped_pk, own_athlete_pk } = useAuth()
+  const isOwnLog = Boolean(own_athlete_pk) && mapped_pk === own_athlete_pk
   const { program, updateBlockNotes } = useProgramStore()
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<BlockNote[]>([])
   const [newDate, setNewDate] = useState(todayString())
   const [newText, setNewText] = useState('')
+  const [newPrivate, setNewPrivate] = useState(false)
   const [editingDate, setEditingDate] = useState<string | null>(null)
   const [editDate, setEditDate] = useState('')
   const [editText, setEditText] = useState('')
+  const [editPrivate, setEditPrivate] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -101,12 +104,14 @@ export default function NotesPage() {
     setEditingDate(note.date)
     setEditDate(note.date)
     setEditText(note.notes)
+    setEditPrivate(Boolean(note.private))
   }
 
   function cancelEdit() {
     setEditingDate(null)
     setEditDate('')
     setEditText('')
+    setEditPrivate(false)
   }
 
   async function addNote() {
@@ -119,10 +124,11 @@ export default function NotesPage() {
 
     const now = new Date().toISOString()
     await persistNotes(
-      [{ date: newDate, notes: text, updated_at: now }, ...notes],
+      [{ date: newDate, notes: text, updated_at: now, private: newPrivate }, ...notes],
       'Note added'
     )
     setNewText('')
+    setNewPrivate(false)
     setNewDate(todayString())
   }
 
@@ -138,7 +144,7 @@ export default function NotesPage() {
     const now = new Date().toISOString()
     const nextNotes = notes.map((note) => (
       note.date === originalDate
-        ? { ...note, date: editDate, notes: text, updated_at: now }
+        ? { ...note, date: editDate, notes: text, updated_at: now, private: editPrivate }
         : note
     ))
     await persistNotes(nextNotes, 'Note updated')
@@ -188,7 +194,15 @@ export default function NotesPage() {
             disabled={readOnly || saving}
             data-testid="notes-new-text"
           />
-          <Group justify="flex-end">
+          <Group justify="space-between">
+            {isOwnLog ? <Switch
+              label="Private"
+              description="Only you can see this entry"
+              checked={newPrivate}
+              onChange={(e) => setNewPrivate(e.currentTarget.checked)}
+              disabled={readOnly || saving}
+              data-testid="notes-new-private"
+            /> : <span />}
             <Button
               leftSection={<Plus size={16} />}
               disabled={!canAdd}
@@ -270,6 +284,15 @@ export default function NotesPage() {
                     data-testid="program-note-text"
                   />
 
+                  {isOwnLog && <Switch
+                    label="Private"
+                    description="Only you can see this entry"
+                    checked={editPrivate}
+                    onChange={(e) => setEditPrivate(e.currentTarget.checked)}
+                    disabled={saving || readOnly}
+                    data-testid="program-note-private"
+                  />}
+
                   <Group justify="flex-end">
                     <Button variant="subtle" onClick={cancelEdit} disabled={saving}>
                       Cancel
@@ -316,6 +339,11 @@ export default function NotesPage() {
                     <Calendar size={16} style={{ opacity: 0.6 }} />
                     <Text fw={700}>{formatDate(note.date)}</Text>
                     <Text size="xs" c="dimmed">{note.date}</Text>
+                    {note.private && (
+                      <Badge size="xs" variant="light" color="gray" leftSection={<Lock size={10} />} data-testid="program-note-private-badge">
+                        Private
+                      </Badge>
+                    )}
                   </Group>
                   <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
                     {previewText(note.notes)}
