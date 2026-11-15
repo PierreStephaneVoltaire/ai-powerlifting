@@ -297,9 +297,6 @@
   "lift_profile_suggest": {
     "permission": "lift-profiles:write"
   },
-  "master_copy_seed_user": {
-    "permission": "settings:write"
-  },
   "max_history_add": {
     "permission": "performance:write"
   },
@@ -394,10 +391,6 @@
   },
   "session_replace_all": {
     "permission": "sessions:write"
-  },
-  "settings_create": {
-    "permission": "settings:write",
-    "internal_only": true
   },
   "settings_get": {
     "permission": "settings:read"
