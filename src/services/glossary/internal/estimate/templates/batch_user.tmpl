@@ -1,0 +1,18 @@
+{{- with .AthleteLines}}Athlete context:
+{{range .}}{{.}}
+{{end}}
+{{end -}}
+Exercises:
+{{range .Subjects}}
+id: {{.ID}}
+{{template "exercise" .Exercise}}
+{{- with .Exercise.Description}}
+Description: {{.}}{{end}}
+{{- with .Exercise.HowToPerform}}
+How performed: {{.}}{{end}}
+{{- with .Exercise.WhyDoIt}}
+Training purpose: {{.}}{{end}}
+{{- with .History}}
+Past sets: {{.}}{{end}}
+Return: {{join .Aspects}}
+{{end}}

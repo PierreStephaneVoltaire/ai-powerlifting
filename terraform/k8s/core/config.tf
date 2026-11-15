@@ -16,6 +16,7 @@ resource "kubernetes_config_map_v1" "app" {
     AWS_REGION                             = var.region
     DYNAMODB_TABLE                         = var.tables.powerlifting
     IF_USER_TABLE                          = var.tables.users
+    IF_HEALTH_TABLE_NAME                   = var.tables.powerlifting
     IF_SESSIONS_TABLE_NAME                 = var.tables.sessions
     WORKOUT_VIDEOS_TABLE_NAME              = var.workout_videos_table
     POWERLIFTING_MASTER_COMPETITIONS_TABLE = var.tables.master_competitions
@@ -24,6 +25,7 @@ resource "kubernetes_config_map_v1" "app" {
     POWERLIFTING_USER_FEDERATIONS_TABLE    = var.tables.user_federations
     POWERLIFTING_GOALS_TABLE               = var.tables.goals
     POWERLIFTING_BUDGET_TABLE              = var.tables.budget
+    GLOSSARY_TABLE_NAME                    = var.tables.glossary
     BUDGET_MEDIA_BUCKET                    = var.budget_media_bucket
     NODE_ENV                               = "production"
     PORT                                   = "3005"

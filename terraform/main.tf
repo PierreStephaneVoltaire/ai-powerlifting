@@ -2,7 +2,7 @@ module "ecr" {
   source = "./modules/ecr"
 
   repository_prefix                = "if"
-  repository_names                 = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-rankings", "powerlifting-analytics-ai", "powerlifting-prompt-cache-api", "powerlifting-analytics-export", "powerlifting-sessions", "powerlifting-program", "powerlifting-competition", "powerlifting-profile", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
+  repository_names                 = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-rankings", "powerlifting-analytics-ai", "powerlifting-prompt-cache-api", "powerlifting-glossary", "powerlifting-analytics-export", "powerlifting-sessions", "powerlifting-program", "powerlifting-competition", "powerlifting-profile", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
   untagged_expiry_repository_names = ["powerlifting-fns"]
 }
 
@@ -48,6 +48,18 @@ module "budget_media" {
 
 module "powerlifting_dynamodb" {
   source = "./modules/powerlifting_dynamodb"
+
+  glossary_table_name = var.glossary_table_name
+}
+
+module "glossary_catalog_lambda" {
+  source = "./modules/glossary_catalog_lambda"
+
+  function_name = var.glossary_catalog_function_name
+  table_name    = module.powerlifting_dynamodb.glossary_table_name
+  table_arn     = module.powerlifting_dynamodb.glossary_table_arn
+  stream_arn    = module.powerlifting_dynamodb.glossary_stream_arn
+  zip_path      = "${path.module}/../src/lambda/glossary-catalog/dist/bootstrap.zip"
 }
 
 module "powerlifting_dataset" {

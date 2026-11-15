@@ -19,6 +19,7 @@ type Tables struct {
 	Entries  string
 	Health   string
 	Sessions string
+	Glossary string
 }
 
 type Dynamo struct {
@@ -146,6 +147,10 @@ func (d Dynamo) Pointer(ctx context.Context, pk string) (Item, error) {
 
 func (d Dynamo) Item(ctx context.Context, pk, sk string) (Item, error) {
 	return d.get(ctx, d.Tables.Health, pk, sk, false)
+}
+
+func (d Dynamo) GlossaryEntries(ctx context.Context, pk string) ([]Item, error) {
+	return d.query(ctx, d.Tables.Glossary, "", pk, GlossarySKPrefix)
 }
 
 func (d Dynamo) Versions(ctx context.Context, pk string) ([]Item, error) {

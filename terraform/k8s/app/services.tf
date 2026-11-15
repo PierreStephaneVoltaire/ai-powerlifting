@@ -17,7 +17,6 @@ locals {
     "pl-calculations"  = merge(local.small, { domain = "calculations" })
     "pl-export"        = { domain = "export", limits = { cpu = "1", memory = "512Mi" }, requests = { cpu = "50m", memory = "128Mi" } }
     "pl-federation"    = merge(local.small, { domain = "federation" })
-    "pl-glossary"      = { domain = "glossary", limits = { cpu = "500m", memory = "384Mi" }, requests = { cpu = "25m", memory = "64Mi" } }
     "pl-goals"         = merge(local.small, { domain = "goals" })
     "pl-imports"       = merge(local.small, { domain = "imports" })
     "pl-lift-profiles" = merge(local.small, { domain = "lift-profiles" })

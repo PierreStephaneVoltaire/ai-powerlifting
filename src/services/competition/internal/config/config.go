@@ -13,6 +13,7 @@ type Config struct {
 	EntriesTable  string
 	HealthTable   string
 	SessionsTable string
+	GlossaryTable string
 	LogLevel      string
 }
 
@@ -36,6 +37,7 @@ func Load() Config {
 		EntriesTable:  env("POWERLIFTING_USER_COMPETITIONS_TABLE", "if-powerlifting-user-competitions"),
 		HealthTable:   env("IF_HEALTH_TABLE_NAME", "if-health"),
 		SessionsTable: env("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+		GlossaryTable: env("GLOSSARY_TABLE_NAME", ""),
 		LogLevel:      env("LOG_LEVEL", "info"),
 	}
 }

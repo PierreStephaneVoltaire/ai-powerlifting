@@ -62,7 +62,7 @@ Code is done (see above). Once deployed and the quota resets:
 ### 2. Glossary `lift_transfer` backfill (needs AI quota, after 00:29)
 
 - Rule defaults are already written: 64 of 91 exercises for athlete `operator`.
-- The AI estimates still have to run. For each exercise whose `lift_transfer.source != "ai"`, call `glossary_estimate_lift_transfer` with `{pk:"operator", id}`; the result is persisted.
+- The AI estimates still have to run. For each exercise whose `lift_transfer.source != "ai"`, call `glossary_estimate_batch` with `{pk:"operator", ids:[...up to 25], aspects:["lift_transfer"]}`; each exercise is saved individually.
 - Script used: a node script run in the backend pod. It POSTs `http://pl-glossary:8000/operations/<op>` with headers `X-Person-Pk: sir_simpalot`, `X-Athlete-Pk: operator`, then polls `$IF_API_URL/v1/jobs/<job_id>/result` until it is no longer 202. Use concurrency 3.
 - Afterwards, spot-check the weights in the Glossary page.
 
@@ -91,3 +91,12 @@ Code is done (see above). Once deployed and the quota resets:
 Open before the PR can deploy:
 - `K8S_TFVARS` `repositories` needs `sessions`, `program`, `competition` and `profile` keys.
 - The `stage` environment only allows `feat/analytics-rankings-rust` and `istio`; runs on `seesion-go` and `refs/pull/10/merge` are rejected.
+
+## Glossary table (branch `glossary`, 2026-11-14)
+
+- [ ] After the pipeline creates the glossary table: run the one-off migration (kept outside the repo, session scratchpad `migrate_glossary.py`; dry run = 100 catalog items, 92 operator overlays):
+  `python migrate_glossary.py --health-table if-health --glossary-table if-powerlifting-glossary --pk operator --person sir_simpalot --apply`
+- [ ] After the Go `pl-glossary` is deployed and verified: delete the old item `if-health` `pk=operator, sk=glossary#v1`.
+- [x] GH config set 2026-11-14: `K8S_TFVARS` (repositories.glossary, tables.glossary, litellm_models.pl-background), `COACH_TFVARS` (operation_ai.glossary_generic_estimate), repo vars `GLOSSARY_TABLE_NAME`, `GLOSSARY_CATALOG_FUNCTION_NAME`.
+- [ ] Operator: set repo var `STAGE_DEPLOY_BRANCHES` (head-branch globs allowed to deploy to stage; empty = none) and environment branch rule `refs/pull/*/merge` on `stage` and `main`.
+- [ ] After PR #11 merges: drop `glossary_estimate_{muscles,fatigue,lift_transfer,e1rm}` and `glossary_generate_text` from `COACH_TFVARS` `operation_ai` (kept only so master's coach still starts before the merge).

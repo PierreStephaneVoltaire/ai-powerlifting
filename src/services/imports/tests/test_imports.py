@@ -97,7 +97,7 @@ def test_parse_stages_csv_using_authenticated_scope_and_native_parser(monkeypatc
         async def get_glossary(self):
             return []
 
-        async def fuzzy_resolve(self, name, threshold):
+        async def fuzzy_resolve(self, name, threshold, exercises=None):
             return "glossary#squat" if name == "Squat" else None
 
     async def parse(*args):

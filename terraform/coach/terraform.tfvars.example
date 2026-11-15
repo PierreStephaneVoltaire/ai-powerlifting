@@ -23,13 +23,10 @@ operation_ai = {
   import_parse_file               = { provider = "chatgpt", model = "gpt-6-astra", effort = "high" }
   lift_profile_suggest            = { provider = "", model = "", effort = "" }
   lift_profile_estimate_stimulus  = { provider = "", model = "", effort = "" }
-  glossary_estimate_muscles       = { provider = "", model = "", effort = "" }
+  glossary_estimate_batch         = { provider = "litellm", model = "pl-light", effort = "high" }
   muscle_group_estimate           = { provider = "", model = "", effort = "" }
-  glossary_estimate_fatigue       = { provider = "", model = "", effort = "" }
-  glossary_estimate_lift_transfer = { provider = "", model = "", effort = "" }
   fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
-  glossary_estimate_e1rm          = { provider = "", model = "", effort = "" }
-  glossary_generate_text          = { provider = "", model = "", effort = "" }
+  glossary_generic_estimate       = { provider = "litellm", model = "pl-background", effort = "minimal" }
   budget_advisor                  = { provider = "", model = "", effort = "" }
   budget_priority_timeline        = { provider = "", model = "", effort = "" }
 }

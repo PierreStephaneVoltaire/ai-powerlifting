@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Modal, Stack, TextInput, Button, Group, Table, Alert } from '@mantine/core'
 import { Info } from 'lucide-react'
-import { estimateExerciseE1rm } from '../../api/client'
+import { estimateExercises, fetchGlossary } from '../../api/client'
 
 interface Props {
   missingMaxes: string[]
@@ -20,14 +20,11 @@ export const MaxResolutionGate: React.FC<Props> = ({ missingMaxes, onResolved, o
   const handleEstimate = async (exercise: string) => {
     setLoading(prev => ({ ...prev, [exercise]: true }))
     try {
-      // Need id for the API call, but we might only have names here.
-      // Assuming the backend handles name-based lookup or we need to resolve names to IDs first.
-      // For now, let's assume the missingMaxes are IDs or we have a way to handle them.
-      // If they are names, this might need a different endpoint or search.
-      // Let's assume they are exercise IDs for this implementation.
-      const res = await estimateExerciseE1rm(exercise)
-      if (res.value_kg) {
-        setValues(prev => ({ ...prev, [exercise]: res.value_kg }))
+      const result = await estimateExercises([exercise], ['e1rm'])
+      if (result.saved.length === 0) return
+      const estimated = (await fetchGlossary()).find((entry) => entry.id === exercise)?.e1rm_estimate?.value_kg
+      if (estimated) {
+        setValues(prev => ({ ...prev, [exercise]: estimated }))
       }
     } catch (err) {
       console.error(err)

@@ -545,7 +545,9 @@ export interface FatigueProfile {
   systemic: number    // 0.0-1.0, cardiovascular/metabolic demand
 }
 
-export type FatigueProfileSource = 'ai_estimated' | 'manual'
+export type FatigueProfileSource = 'ai_estimated' | 'ai_personal' | 'ai_generic' | 'manual' | 'default'
+
+export type GenericStatus = 'pending' | 'ready' | 'failed'
 
 export type LiftTransferSource = 'ai' | 'rule' | 'user'
 
@@ -582,6 +584,10 @@ export interface GlossaryExercise {
   fatigue_profile?: FatigueProfile
   fatigue_profile_source?: FatigueProfileSource
   fatigue_profile_reasoning?: string | null
+  generic_fatigue_profile?: FatigueProfile
+  fatigue_profile_personalized?: boolean
+  generic_status?: GenericStatus
+  custom?: boolean
   lift_transfer?: LiftTransfer
   e1rm_estimate?: E1rmEstimate
   archived?: boolean
@@ -796,7 +802,6 @@ export interface ProgramListItem {
 
 export interface GlossaryStore {
   pk: string
-  sk: string
   exercises: GlossaryExercise[]
   updated_at: string
 }

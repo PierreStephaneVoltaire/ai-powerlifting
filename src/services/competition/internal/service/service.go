@@ -16,8 +16,6 @@ import (
 
 var reserved = []string{"_person_pk", "_access", "_if_job_id"}
 
-const glossarySK = "glossary#v1"
-
 var analysisInputWrites = map[string]bool{
 	"health_update_user_competition":   true,
 	"health_complete_user_competition": true,

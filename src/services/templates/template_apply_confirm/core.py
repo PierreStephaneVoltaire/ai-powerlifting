@@ -19,7 +19,7 @@ def _get_template_store():
 
 def _get_glossary_store(actor_pk):
     from services.runtime.glossary_store import GlossaryStore
-    return GlossaryStore(table_name=os.environ.get("IF_HEALTH_TABLE_NAME", "if-health"), pk=actor_pk, region=os.environ.get("AWS_REGION", "ca-central-1"))
+    return GlossaryStore(pk=actor_pk, region=os.environ.get("AWS_REGION", "ca-central-1"))
 
 
 def _template_phases(template: dict) -> list[dict]:

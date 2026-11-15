@@ -103,61 +103,6 @@ analyticsRouter.get('/program-evaluation', async (req, res) => {
   }
 })
 
-analyticsRouter.post('/fatigue-profile/estimate', async (req, res) => {
-  try {
-    const exercise = req.body?.exercise ?? req.body
-    const data = await invokeToolDirect('fatigue_profile_estimate', { exercise, pk: req.mapped_pk })
-    res.json({ data, error: null })
-  } catch (err) {
-    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
-  }
-})
-
-analyticsRouter.post('/lift-transfer/estimate', async (req, res) => {
-  try {
-    const exercise = req.body?.exercise ?? req.body
-    const data = await invokeToolDirect('glossary_estimate_lift_transfer', { exercise, pk: req.mapped_pk })
-    res.json({ data, error: null })
-  } catch (err) {
-    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
-  }
-})
-
-analyticsRouter.post('/muscle-groups/estimate', async (req, res) => {
-  try {
-    const body = req.body ?? {}
-    const exercise = body.exercise ?? body
-    const lift_profiles = Array.isArray(body.lift_profiles) ? body.lift_profiles : undefined
-    const data = await invokeToolDirect('muscle_group_estimate', {
-      exercise,
-      ...(lift_profiles ? { lift_profiles } : {}),
-      pk: req.mapped_pk,
-    })
-    res.json({ data, error: null })
-  } catch (err) {
-    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
-  }
-})
-
-analyticsRouter.post('/glossary/text/generate', async (req, res) => {
-  try {
-    const body = req.body ?? {}
-    const exercise = body.exercise ?? body
-    if (!exercise?.name) {
-      return res.status(400).json({ data: null, error: 'Exercise name is required' })
-    }
-    const lift_profiles = Array.isArray(body.lift_profiles) ? body.lift_profiles : undefined
-    const data = await invokeToolDirect('glossary_generate_text', {
-      exercise,
-      ...(lift_profiles ? { lift_profiles } : {}),
-      pk: req.mapped_pk,
-    })
-    res.json({ data, error: null })
-  } catch (err) {
-    res.status(502).json({ data: null, error: `Tool invocation error: ${err}` })
-  }
-})
-
 analyticsRouter.post('/lift-profile/estimate-stimulus', async (req, res) => {
   try {
     const profile = req.body?.profile ?? req.body

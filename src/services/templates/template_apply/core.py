@@ -16,7 +16,7 @@ _glossary_store = None
 def _get_glossary_store(actor_pk):
     import os
     from services.runtime.glossary_store import GlossaryStore
-    _glossary_store = GlossaryStore(table_name=os.environ.get("IF_HEALTH_TABLE_NAME","if-health"), pk=actor_pk, region=os.environ.get("AWS_REGION","ca-central-1"))
+    _glossary_store = GlossaryStore(pk=actor_pk, region=os.environ.get("AWS_REGION","ca-central-1"))
     return _glossary_store
 
 async def template_apply(sk, target="new_block", start_date=None, week_start_day=None, actor_pk=None, block_id=None, block_name=None, athlete_pk=None):

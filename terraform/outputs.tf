@@ -29,3 +29,15 @@ output "cloudfront_media_base_url" {
 output "video_thumbnail_function_name" {
   value = module.video_thumbnail_lambda.function_name
 }
+
+output "glossary_table_name" {
+  value = module.powerlifting_dynamodb.glossary_table_name
+}
+
+output "glossary_table_arn" {
+  value = module.powerlifting_dynamodb.glossary_table_arn
+}
+
+output "glossary_catalog_function_name" {
+  value = module.glossary_catalog_lambda.function_name
+}

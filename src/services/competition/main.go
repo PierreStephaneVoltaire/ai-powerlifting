@@ -55,9 +55,12 @@ func run(cfg config.Config, log *slog.Logger) error {
 	valkey := redis.NewClient(options)
 	defer valkey.Close()
 
+	if cfg.GlossaryTable == "" {
+		return errors.New("missing environment: GLOSSARY_TABLE_NAME")
+	}
 	tables := store.Dynamo{
 		API:    dynamodb.NewFromConfig(awsCfg),
-		Tables: store.Tables{Entries: cfg.EntriesTable, Health: cfg.HealthTable, Sessions: cfg.SessionsTable},
+		Tables: store.Tables{Entries: cfg.EntriesTable, Health: cfg.HealthTable, Sessions: cfg.SessionsTable, Glossary: cfg.GlossaryTable},
 	}
 	svc, err := service.New(registry, auth.NewAccess(cfg.ProfileURL), tables, tables, store.Valkey{Client: valkey}, time.Now, log)
 	if err != nil {

@@ -8,6 +8,7 @@ pub struct Tables {
     pub sessions: String,
     pub competitions: String,
     pub goals: String,
+    pub glossary: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,6 +73,7 @@ impl Config {
                     "if-powerlifting-user-competitions",
                 ),
                 goals: var("POWERLIFTING_GOALS_TABLE", "if-powerlifting-goals"),
+                glossary: var("GLOSSARY_TABLE_NAME", ""),
             },
             source: if var("ANALYTICS_SOURCE", "dynamo") == "fixture" {
                 SourceKind::Fixture

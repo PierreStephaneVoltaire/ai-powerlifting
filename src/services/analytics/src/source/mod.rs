@@ -7,6 +7,7 @@ use crate::error::Error;
 
 pub mod dynamo;
 pub mod fixture;
+pub mod glossary;
 
 pub const SESSION_PREFIX: &str = "session#";
 pub const UPPER_BOUND: char = '\u{10ffff}';

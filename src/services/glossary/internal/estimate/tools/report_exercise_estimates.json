@@ -1,0 +1,225 @@
+{
+  "type": "function",
+  "function": {
+    "name": "report_exercise_estimates",
+    "description": "Report the requested estimates for every listed exercise in one call",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "description": "One entry per listed exercise id",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "fatigue": {
+                "type": "object",
+                "description": "Fatigue profile, each axis 0.0-1.0",
+                "properties": {
+                  "axial": {
+                    "type": "number",
+                    "description": "Spinal compression loading"
+                  },
+                  "neural": {
+                    "type": "number",
+                    "description": "CNS demand baseline"
+                  },
+                  "peripheral": {
+                    "type": "number",
+                    "description": "Local muscle damage potential"
+                  },
+                  "systemic": {
+                    "type": "number",
+                    "description": "Cardiovascular/metabolic demand"
+                  },
+                  "reasoning": {
+                    "type": "string"
+                  }
+                }
+              },
+              "e1rm": {
+                "type": "object",
+                "description": "Estimated training max in kg",
+                "properties": {
+                  "e1rm_kg": {
+                    "type": "number",
+                    "description": "Estimated 1-rep max in kg"
+                  },
+                  "ratio": {
+                    "type": "number",
+                    "description": "Ratio to the primary lift e1RM"
+                  },
+                  "primary_lift_used": {
+                    "type": "string",
+                    "enum": [
+                      "squat",
+                      "bench",
+                      "deadlift"
+                    ]
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "medium",
+                      "low"
+                    ]
+                  }
+                }
+              },
+              "muscles": {
+                "type": "object",
+                "description": "Muscle group buckets",
+                "properties": {
+                  "primary_muscles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quads",
+                        "hamstrings",
+                        "glutes",
+                        "calves",
+                        "tibialis_anterior",
+                        "hip_flexors",
+                        "adductors",
+                        "chest",
+                        "triceps",
+                        "front_delts",
+                        "side_delts",
+                        "rear_delts",
+                        "lats",
+                        "traps",
+                        "rhomboids",
+                        "teres_major",
+                        "biceps",
+                        "forearms",
+                        "erectors",
+                        "lower_back",
+                        "core",
+                        "obliques",
+                        "serratus"
+                      ]
+                    }
+                  },
+                  "secondary_muscles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quads",
+                        "hamstrings",
+                        "glutes",
+                        "calves",
+                        "tibialis_anterior",
+                        "hip_flexors",
+                        "adductors",
+                        "chest",
+                        "triceps",
+                        "front_delts",
+                        "side_delts",
+                        "rear_delts",
+                        "lats",
+                        "traps",
+                        "rhomboids",
+                        "teres_major",
+                        "biceps",
+                        "forearms",
+                        "erectors",
+                        "lower_back",
+                        "core",
+                        "obliques",
+                        "serratus"
+                      ]
+                    }
+                  },
+                  "tertiary_muscles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "quads",
+                        "hamstrings",
+                        "glutes",
+                        "calves",
+                        "tibialis_anterior",
+                        "hip_flexors",
+                        "adductors",
+                        "chest",
+                        "triceps",
+                        "front_delts",
+                        "side_delts",
+                        "rear_delts",
+                        "lats",
+                        "traps",
+                        "rhomboids",
+                        "teres_major",
+                        "biceps",
+                        "forearms",
+                        "erectors",
+                        "lower_back",
+                        "core",
+                        "obliques",
+                        "serratus"
+                      ]
+                    }
+                  },
+                  "reasoning": {
+                    "type": "string"
+                  }
+                }
+              },
+              "lift_transfer": {
+                "type": "object",
+                "description": "Transfer to each competition lift, 0.0-1.0",
+                "properties": {
+                  "squat": {
+                    "type": "number",
+                    "description": "Transfer to the competition squat"
+                  },
+                  "bench": {
+                    "type": "number",
+                    "description": "Transfer to the competition bench press"
+                  },
+                  "deadlift": {
+                    "type": "number",
+                    "description": "Transfer to the competition deadlift"
+                  },
+                  "reasoning": {
+                    "type": "string"
+                  }
+                }
+              },
+              "text": {
+                "type": "object",
+                "description": "Glossary prose",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "how_to_perform": {
+                    "type": "string"
+                  },
+                  "why_do_it": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      },
+      "required": [
+        "results"
+      ]
+    }
+  }
+}

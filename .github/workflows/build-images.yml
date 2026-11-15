@@ -176,6 +176,8 @@ jobs:
             repository: powerlifting-competition
           - image: powerlifting-profile
             repository: powerlifting-profile
+          - image: powerlifting-glossary
+            repository: powerlifting-glossary
     steps:
       - uses: actions/checkout@v4
 
@@ -329,6 +331,8 @@ jobs:
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
       TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
+      TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
+      TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
     steps:
       - uses: actions/checkout@v4
 
@@ -336,6 +340,16 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/lambda/glossary-catalog/go.mod
+          cache-dependency-path: src/lambda/glossary-catalog/go.sum
+
+      - name: Build glossary catalog lambda
+        working-directory: src/lambda/glossary-catalog
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o dist/bootstrap . && cd dist && zip bootstrap.zip bootstrap
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -362,6 +376,8 @@ jobs:
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
       TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
+      TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
+      TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
     steps:
       - uses: actions/checkout@v4
 
@@ -369,6 +385,16 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/lambda/glossary-catalog/go.mod
+          cache-dependency-path: src/lambda/glossary-catalog/go.sum
+
+      - name: Build glossary catalog lambda
+        working-directory: src/lambda/glossary-catalog
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o dist/bootstrap . && cd dist && zip bootstrap.zip bootstrap
 
       - uses: hashicorp/setup-terraform@v3
         with:

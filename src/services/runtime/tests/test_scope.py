@@ -41,7 +41,7 @@ def test_nested_store_constructors_inherit_only_current_athlete(monkeypatch):
     from services.runtime.storage_scope import current_athlete
 
     def handler(arguments, context):
-        return [ProgramStore('unused').pk, GlossaryStore('unused').pk]
+        return [ProgramStore('unused').pk, GlossaryStore(table_name='unused').pk]
 
     monkeypatch.setitem(sys.modules, 'services.scope_canary.handler', SimpleNamespace(handler=handler))
     operation = Operation(name='scope_canary', domain='program', description='scope check', handler='services.scope_canary.handler', input_schema={'type': 'object'}, result_schema={'type': 'array'})
