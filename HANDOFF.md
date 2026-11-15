@@ -92,11 +92,7 @@ Open before the PR can deploy:
 - `K8S_TFVARS` `repositories` needs `sessions`, `program`, `competition` and `profile` keys.
 - The `stage` environment only allows `feat/analytics-rankings-rust` and `istio`; runs on `seesion-go` and `refs/pull/10/merge` are rejected.
 
-## Glossary table (branch `glossary`, 2026-11-14)
+## Glossary table (PR #11, merged 2026-11-15)
 
-- [ ] After the pipeline creates the glossary table: run the one-off migration (kept outside the repo, session scratchpad `migrate_glossary.py`; dry run = 100 catalog items, 92 operator overlays):
-  `python migrate_glossary.py --health-table if-health --glossary-table if-powerlifting-glossary --pk operator --person sir_simpalot --apply`
-- [ ] After the Go `pl-glossary` is deployed and verified: delete the old item `if-health` `pk=operator, sk=glossary#v1`.
-- [x] GH config set 2026-11-14: `K8S_TFVARS` (repositories.glossary, tables.glossary, litellm_models.pl-background), `COACH_TFVARS` (operation_ai.glossary_generic_estimate), repo vars `GLOSSARY_TABLE_NAME`, `GLOSSARY_CATALOG_FUNCTION_NAME`.
-- [ ] Operator: set repo var `STAGE_DEPLOY_BRANCHES` (head-branch globs allowed to deploy to stage; empty = none) and environment branch rule `refs/pull/*/merge` on `stage` and `main`.
-- [ ] After PR #11 merges: drop `glossary_estimate_{muscles,fatigue,lift_transfer,e1rm}` and `glossary_generate_text` from `COACH_TFVARS` `operation_ai` (kept only so master's coach still starts before the merge).
+- [x] Migrated `if-health` `operator/glossary#v1` into `if-powerlifting-glossary` (99 catalog items, 92 operator overlays; duplicate "Ab Rollout" merged) and deleted the old item.
+- [x] `COACH_TFVARS` keeps only `glossary_generic_estimate` (`pl-background`) and `glossary_estimate_batch` (`pl-light`).
