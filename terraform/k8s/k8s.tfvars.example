@@ -36,6 +36,10 @@ repositories = {
   analytics_ai = ""
   prompt_cache_api = ""
   analytics_export = ""
+  sessions = ""
+  program = ""
+  competition = ""
+  profile = ""
   backend   = ""
   frontend  = ""
 }

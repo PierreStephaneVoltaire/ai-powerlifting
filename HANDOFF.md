@@ -85,3 +85,9 @@ Code is done (see above). Once deployed and the quota resets:
 - Rust only for compute-heavy services; Go for the rest. Never split a service by layer.
 - No git writes, no comments in code, no new low-value tests, never write fixtures to prod.
 - Check live state (kubectl / git) before claiming anything. Clean build artifacts (shared disk).
+
+## Go rewrite of sessions, program, competition, profile (branch `seesion-go`, PR #10)
+
+Open before the PR can deploy:
+- `K8S_TFVARS` `repositories` needs `sessions`, `program`, `competition` and `profile` keys.
+- The `stage` environment only allows `feat/analytics-rankings-rust` and `istio`; runs on `seesion-go` and `refs/pull/10/merge` are rejected.

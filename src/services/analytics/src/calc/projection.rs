@@ -156,8 +156,13 @@ pub fn meet_projection(
         let Some(current) = maxes.get(lift) else {
             continue;
         };
-        let progression =
-            progression::progression_rate(sessions, lift.key(), program_start, reference);
+        let progression = progression::lift_progression_rate(
+            sessions,
+            lift,
+            env.glossary,
+            program_start,
+            reference,
+        );
         let (slope, fit) = match &progression {
             Computed::Ready(result) => {
                 has_progression = true;

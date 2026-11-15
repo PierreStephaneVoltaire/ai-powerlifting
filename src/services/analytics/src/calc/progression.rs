@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use super::weeks::infer_program_start;
 use super::{Computed, Sessions, deload, e1rm};
-use crate::model::Phase;
+use crate::model::{Glossary, Lift, Phase};
 use crate::util::{clamp, int_of, kendall_tau, mad, parse_date, round, theil_sen};
 
 const LOOKBACK_DAYS: i64 = 90;
@@ -57,7 +57,7 @@ pub fn fit_quality(xs: &[f64], ys: &[f64], slope: f64, intercept: f64) -> (f64, 
 
 fn exercise_sessions<'a>(
     sessions: Sessions<'a>,
-    name_lower: &str,
+    matches: &dyn Fn(&str) -> bool,
 ) -> Vec<&'a crate::model::Session> {
     sessions
         .iter()
@@ -67,7 +67,7 @@ fn exercise_sessions<'a>(
                 && session
                     .exercises
                     .iter()
-                    .any(|exercise| exercise.key == name_lower)
+                    .any(|exercise| matches(&exercise.key))
         })
         .collect()
 }
@@ -78,6 +78,31 @@ pub fn progression_rate(
     program_start: &str,
     reference: NaiveDate,
 ) -> Computed<Progression> {
+    let name_lower = crate::util::normalize_name(exercise);
+    progression_by(sessions, exercise, program_start, reference, &|key| {
+        key == name_lower
+    })
+}
+
+pub fn lift_progression_rate(
+    sessions: Sessions<'_>,
+    lift: Lift,
+    glossary: &Glossary,
+    program_start: &str,
+    reference: NaiveDate,
+) -> Computed<Progression> {
+    progression_by(sessions, lift.key(), program_start, reference, &|key| {
+        glossary.narrow_lift(key) == Some(lift)
+    })
+}
+
+fn progression_by(
+    sessions: Sessions<'_>,
+    exercise: &str,
+    program_start: &str,
+    reference: NaiveDate,
+    matches: &dyn Fn(&str) -> bool,
+) -> Computed<Progression> {
     let owned_start;
     let program_start = if program_start.is_empty() {
         owned_start = infer_program_start(sessions);
@@ -85,9 +110,8 @@ pub fn progression_rate(
     } else {
         program_start
     };
-    let name_lower = crate::util::normalize_name(exercise);
     let cutoff = reference - Duration::days(LOOKBACK_DAYS);
-    let in_range: Vec<&crate::model::Session> = exercise_sessions(sessions, &name_lower)
+    let in_range: Vec<&crate::model::Session> = exercise_sessions(sessions, matches)
         .into_iter()
         .filter(|session| {
             session
@@ -109,11 +133,7 @@ pub fn progression_rate(
         else {
             continue;
         };
-        for item in session
-            .exercises
-            .iter()
-            .filter(|item| item.key == name_lower)
-        {
+        for item in session.exercises.iter().filter(|item| matches(&item.key)) {
             if item.failed_sets() > 0
                 || item.executed_sets() <= 0.0
                 || item.kg <= 0.0
@@ -221,7 +241,7 @@ pub fn rpe_drift(
         program_start
     };
     let name_lower = crate::util::normalize_name(exercise);
-    let in_exercise = exercise_sessions(sessions, &name_lower);
+    let in_exercise = exercise_sessions(sessions, &|key| key == name_lower);
     if in_exercise.len() < 3 {
         return Computed::insufficient(format!(
             "Need at least 3 completed sessions with {exercise}"
@@ -313,4 +333,68 @@ pub fn rpe_drift(
         r_squared: quality,
         mode: if use_residual { "residual" } else { "raw" },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::model::Session;
+
+    fn sessions(names: [&str; 5]) -> Vec<Session> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                Session::from_value(json!({
+                    "date": format!("2027-02-{:02}", 1 + index * 7),
+                    "week_number": index + 1,
+                    "completed": true,
+                    "exercises": [{"name": name, "kg": 100 + (index + 1) * 5, "reps": 5, "sets": 3}],
+                }))
+            })
+            .collect()
+    }
+
+    fn slope(sessions: &[Session], lift: Lift, glossary: &Glossary) -> Option<f64> {
+        let refs: Vec<&Session> = sessions.iter().collect();
+        let reference = NaiveDate::from_ymd_opt(2027, 3, 10).unwrap();
+        match lift_progression_rate(&refs, lift, glossary, "2027-02-01", reference) {
+            Computed::Ready(result) => Some(result.slope_kg_per_week),
+            Computed::Insufficient(_) => None,
+        }
+    }
+
+    #[test]
+    fn lift_progression_resolves_bench_press_naming() {
+        let glossary = Glossary::default();
+        let named = sessions(["Bench Press"; 5]);
+        assert!(slope(&named, Lift::Bench, &glossary).is_some_and(|value| value > 0.0));
+        let mixed = sessions([
+            "Bench",
+            "Bench Press",
+            "bench press (pause)",
+            "Bench",
+            "Bench Press",
+        ]);
+        assert!(slope(&mixed, Lift::Bench, &glossary).is_some_and(|value| value > 0.0));
+        assert!(slope(&named, Lift::Deadlift, &glossary).is_none());
+    }
+
+    #[test]
+    fn lift_progression_uses_glossary_lift_transfer_for_variants() {
+        let variants = sessions(["Back Squat"; 5]);
+        assert!(slope(&variants, Lift::Squat, &Glossary::default()).is_none());
+        let glossary = Glossary::from_values(&[json!({
+            "name": "Back Squat",
+            "lift_transfer": {"squat": 0.95, "bench": 0.0, "deadlift": 0.2},
+        })]);
+        assert!(slope(&variants, Lift::Squat, &glossary).is_some_and(|value| value > 0.0));
+        let weak = Glossary::from_values(&[json!({
+            "name": "Back Squat",
+            "lift_transfer": {"squat": 0.85},
+        })]);
+        assert!(slope(&variants, Lift::Squat, &weak).is_none());
+    }
 }

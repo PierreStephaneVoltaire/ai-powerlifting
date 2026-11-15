@@ -2,7 +2,7 @@ module "ecr" {
   source = "./modules/ecr"
 
   repository_prefix                = "if"
-  repository_names                 = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-rankings", "powerlifting-analytics-ai", "powerlifting-prompt-cache-api", "powerlifting-analytics-export", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
+  repository_names                 = ["powerlifting-app-backend", "powerlifting-app-frontend", "powerlifting-analytics", "powerlifting-rankings", "powerlifting-analytics-ai", "powerlifting-prompt-cache-api", "powerlifting-analytics-export", "powerlifting-sessions", "powerlifting-program", "powerlifting-competition", "powerlifting-profile", "powerlifting-coach-agent", "powerlifting-coach-discord", "powerlifting-fns"]
   untagged_expiry_repository_names = ["powerlifting-fns"]
 }
 

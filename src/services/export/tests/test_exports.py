@@ -42,27 +42,6 @@ def test_history_exports_are_scoped_and_isolated(monkeypatch):
     load_operations("export")["export_program_history"].validate_result(results[0])
 
 
-def test_markdown_export_uses_the_callers_athlete_and_private_tempfile(monkeypatch):
-    core = importlib.import_module("services.program.export_program_markdown.core")
-    module_name = "services.program.export_program_markdown.export"
-    fake_export = ModuleType(module_name)
-
-    def build(program, path, **_kwargs):
-        Path(path).write_text(program["pk"], encoding="utf-8")
-
-    fake_export.build_program_markdown = build
-    monkeypatch.setattr(core, "_get_store", lambda args: Store(args["pk"]))
-    monkeypatch.setattr(competition_entries, "load_entries", lambda pk, *_args, **_kwargs: [])
-    monkeypatch.setattr(core, "_build_analysis_bundle", lambda *_args: {})
-    monkeypatch.setattr(core, "_scope_program_to_current_block", lambda program: program)
-    with monkeypatch.context() as context:
-        context.setitem(sys.modules, module_name, fake_export)
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(lambda pk: core.export_program_markdown({"pk": pk}), ("athlete-a", "athlete-b")))
-
-    assert {result["markdown"] for result in results} == {"athlete-a", "athlete-b"}
-
-
 def test_export_dispatch_includes_only_permitted_independent_entries(monkeypatch):
     core = importlib.import_module("services.export.export_program_history.core")
     monkeypatch.setattr(core, "_get_store", lambda args: Store(args["pk"]))

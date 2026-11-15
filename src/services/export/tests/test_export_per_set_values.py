@@ -26,7 +26,7 @@ RDL = {
     "sets_data": [{"kg": 83.915, "rpe": 8.5, "reps": 8}, {"kg": 83.915, "rpe": 8.5, "reps": 8}],
 }
 SESSION = {"date": "2026-10-19", "week_number": 3, "block": "current", "status": "completed", "exercises": [BENCH, PUSHDOWN, RDL]}
-MODULES = ["services.export.export_program_history.export", "services.program.export_program_markdown.export"]
+MODULES = ["services.export.export_program_history.export"]
 
 
 def test_varied_sets_become_one_row_per_set_with_their_own_values():

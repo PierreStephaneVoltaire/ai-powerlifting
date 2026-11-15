@@ -1,6 +1,6 @@
 import { callOperation } from '../utils/operations'
 
-export type GrantType = 'coach' | 'handler'
+export type GrantType = 'coach' | 'handler' | 'peer'
 export type GrantScope = 'read' | 'write'
 
 interface Grant {
