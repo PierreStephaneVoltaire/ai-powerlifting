@@ -40,12 +40,6 @@ resource "aws_cloudfront_distribution" "this" {
     origin_access_control_id = aws_cloudfront_origin_access_control.this.id
   }
 
-  origin {
-    domain_name              = var.budget_media_bucket_regional_domain_name
-    origin_id                = var.budget_media_origin_id
-    origin_access_control_id = aws_cloudfront_origin_access_control.this.id
-  }
-
   enabled         = true
   is_ipv6_enabled = true
   price_class     = "PriceClass_100"
@@ -59,17 +53,6 @@ resource "aws_cloudfront_distribution" "this" {
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.caching_optimized.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.immutable_thumbnails.id
-  }
-
-  ordered_cache_behavior {
-    path_pattern           = "budget/*"
-    target_origin_id       = var.budget_media_origin_id
-    viewer_protocol_policy = "https-only"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
-    trusted_key_groups     = [aws_cloudfront_key_group.media.id]
   }
 
   default_cache_behavior {

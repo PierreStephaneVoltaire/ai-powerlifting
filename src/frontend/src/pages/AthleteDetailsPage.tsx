@@ -7,7 +7,6 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { toDisplayUnit, formatDisplayWeight } from '@/utils/units'
 import type { CompetitionAttempt, LiftResults } from '@powerlifting/types'
 import type { PublicProfile } from '@/api/profiles'
-import AuthoredNotes from '@/components/notes/AuthoredNotes'
 import LiftProfileContext from '@/components/lift-profiles/LiftProfileContext'
 
 interface Context {
@@ -54,6 +53,5 @@ export default function AthleteDetailsPage() {
     {data.competitions.length ? data.competitions.map(entry => <Card key={entry.sk} withBorder><Stack gap="xs"><Text fw={600}>{entry.name || entry.competition_name || 'Competition'}</Text><Text>{entry.date || entry.start_date}</Text>{entry.notes && <Text>{entry.notes}</Text>}{entry.post_meet_report?.attempts?.length ? <Table><Table.Thead><Table.Tr><Table.Th>Lift</Table.Th><Table.Th>Attempt</Table.Th><Table.Th>Weight</Table.Th><Table.Th>Result</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{entry.post_meet_report.attempts.map(attempt => <Table.Tr key={attempt.attempt_id || `${attempt.lift}:${attempt.attempt_number}`}><Table.Td tt="capitalize">{attempt.lift}</Table.Td><Table.Td>{attempt.attempt_number}</Table.Td><Table.Td>{attempt.kg == null ? 'Not set' : `${formatDisplayWeight(attempt.kg, entry.units || 'kg')} ${entry.units || 'kg'}`}</Table.Td><Table.Td>{attempt.result}</Table.Td></Table.Tr>)}</Table.Tbody></Table> : <Text c="dimmed" size="sm">Attempts have not been logged.</Text>}{entry.results && <Text>Total: {formatDisplayWeight(entry.results.total_kg || 0, entry.units || 'kg')} {entry.units || 'kg'}</Text>}</Stack></Card>) : <Text c="dimmed">No current tied Competition Entries. Access continues through seven days after the latest tied competition.</Text>}
     <Title order={3}>Block notes</Title>
     {data.notes.length ? data.notes.map((note, index) => <Card key={`${note.date}:${index}`} withBorder><Text size="xs">{note.date}</Text><Text style={{ whiteSpace: 'pre-wrap' }}>{note.notes}</Text></Card>) : <Text c="dimmed">No shared Block notes.</Text>}
-    <AuthoredNotes initialDomain="competition" />
   </Stack>
 }

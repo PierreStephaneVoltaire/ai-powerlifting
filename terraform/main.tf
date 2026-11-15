@@ -34,16 +34,6 @@ module "cloudfront" {
   session_videos_bucket_arn                  = module.session_videos.bucket_arn
   session_videos_bucket_regional_domain_name = module.session_videos.bucket_regional_domain_name
   session_videos_origin_id                   = "powerlifting-session-videos"
-
-  budget_media_bucket_regional_domain_name = module.budget_media.bucket_regional_domain_name
-  budget_media_origin_id                   = "powerlifting-budget-media"
-}
-
-module "budget_media" {
-  source = "./modules/budget_media"
-
-  bucket_name                 = "powerlifting-budget-media"
-  cloudfront_distribution_arn = module.cloudfront.distribution_arn
 }
 
 module "powerlifting_dynamodb" {

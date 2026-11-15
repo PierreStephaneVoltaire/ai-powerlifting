@@ -26,3 +26,13 @@ def test_public_viewers_see_only_current_block_sessions():
     assert len(publication.program_view(program, coach)['sessions']) == 3
     assert len(publication.operation_result('program_get', program, owner)['sessions']) == 3
     assert [s['date'] for s in publication.operation_result('session_list', program['sessions'], public)] == ['2026-10-01', '2026-10-02']
+
+
+def test_private_block_notes_are_hidden_from_other_people():
+    notes = [{'date': '2026-11-01', 'notes': 'shared'}, {'date': '2026-11-02', 'notes': 'mine', 'private': True}]
+    program = {'meta': {'block_notes': notes}}
+    coach = {'is_self': False, 'permissions': ['program:read']}
+    owner = {**coach, 'is_self': True}
+    assert [note['notes'] for note in publication.program_view(program, coach)['meta']['block_notes']] == ['shared']
+    assert [note['notes'] for note in publication.operation_result('block_notes_get', {'block_notes': notes}, coach)['block_notes']] == ['shared']
+    assert len(publication.operation_result('program_get', program, owner)['meta']['block_notes']) == 2

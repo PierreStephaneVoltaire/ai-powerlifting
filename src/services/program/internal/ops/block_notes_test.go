@@ -121,3 +121,87 @@ func TestBlockNotesGetMissingVersionStillNotFound(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func privateNotesProgram() store.Item {
+	return store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b1", "block_notes": []any{
+		map[string]any{"date": "2026-11-01", "notes": "shared", "block_id": "b1"},
+		map[string]any{"date": "2026-11-02", "notes": "mine", "block_id": "b1", "private": true},
+	}}}
+}
+
+func noteTexts(notes any) []string {
+	texts := []string{}
+	list, _ := notes.([]any)
+	for _, raw := range list {
+		texts = append(texts, raw.(map[string]any)["notes"].(string))
+	}
+	return texts
+}
+
+func TestOtherPeopleDoNotSeePrivateBlockNotes(t *testing.T) {
+	deps, _ := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	result, err := blockNotesGet(deps, notesRequest(map[string]any{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	coach := Access{"is_self": false, "permissions": []any{"program:read"}}
+	if got := noteTexts(OperationResult("block_notes_get", result, coach).(map[string]any)["block_notes"]); len(got) != 1 || got[0] != "shared" {
+		t.Fatalf("coach saw %v", got)
+	}
+	program := map[string]any{"meta": map[string]any{"block_notes": privateNotesProgram()["meta"].(map[string]any)["block_notes"]}}
+	if got := noteTexts(ProgramView(program, coach)["meta"].(map[string]any)["block_notes"]); len(got) != 1 || got[0] != "shared" {
+		t.Fatalf("coach program view saw %v", got)
+	}
+}
+
+func TestAthleteSeesOwnPrivateBlockNotes(t *testing.T) {
+	deps, _ := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	result, err := blockNotesGet(deps, notesRequest(map[string]any{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := Access{"is_self": true, "permissions": []any{"program:read"}}
+	if got := noteTexts(OperationResult("block_notes_get", result, owner).(map[string]any)["block_notes"]); len(got) != 2 {
+		t.Fatalf("athlete saw %v", got)
+	}
+	program := map[string]any{"meta": map[string]any{"block_notes": privateNotesProgram()["meta"].(map[string]any)["block_notes"]}}
+	if got := noteTexts(ProgramView(program, owner)["meta"].(map[string]any)["block_notes"]); len(got) != 2 {
+		t.Fatalf("athlete program view saw %v", got)
+	}
+}
+
+func TestDelegateUpdateKeepsPrivateNotesAndCannotMarkPrivate(t *testing.T) {
+	deps, db := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	request := notesRequest(map[string]any{"block_notes": []any{
+		map[string]any{"date": "2026-11-01", "notes": "shared edited", "block_id": "b1"},
+		map[string]any{"date": "2026-11-03", "notes": "coach", "block_id": "b1", "private": true},
+	}})
+	request.Access = map[string]any{"is_self": false}
+	if _, err := blockNotesUpdate(deps, request); err != nil {
+		t.Fatal(err)
+	}
+	stored := storedNotes(t, db, "program#v001")
+	byText := map[string]map[string]any{}
+	for _, raw := range stored {
+		note := raw.(map[string]any)
+		byText[note["notes"].(string)] = note
+	}
+	if len(stored) != 3 || byText["mine"]["private"] != true || byText["coach"] == nil || byText["coach"]["private"] != nil || byText["shared edited"] == nil {
+		t.Fatalf("stored %v", stored)
+	}
+}
+
+func TestAthleteUpdateCanRemoveAndMarkPrivateNotes(t *testing.T) {
+	deps, db := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	request := notesRequest(map[string]any{"block_notes": []any{
+		map[string]any{"date": "2026-11-01", "notes": "shared", "block_id": "b1", "private": true},
+	}})
+	request.Access = map[string]any{"is_self": true}
+	if _, err := blockNotesUpdate(deps, request); err != nil {
+		t.Fatal(err)
+	}
+	stored := storedNotes(t, db, "program#v001")
+	if len(stored) != 1 || stored[0].(map[string]any)["private"] != true {
+		t.Fatalf("stored %v", stored)
+	}
+}

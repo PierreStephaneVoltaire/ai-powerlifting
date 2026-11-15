@@ -24,13 +24,8 @@ variable "tables" {
     master_federations  = string
     user_federations    = string
     goals               = string
-    budget              = string
     glossary            = string
   })
-}
-
-variable "budget_media_bucket" {
-  type = string
 }
 
 variable "discord_client_id" {

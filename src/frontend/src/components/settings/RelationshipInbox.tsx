@@ -12,7 +12,7 @@ import {
 } from '@/api/relationships'
 import { fetchUserCompetitions } from '@/api/client'
 
-const PERMISSION_OPTIONS = ['profile', 'program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'lift-profiles', 'analytics', 'videos'].flatMap(domain => [`${domain}:read`, `${domain}:write`])
+const PERMISSION_OPTIONS = ['profile', 'program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'lift-profiles', 'analytics', 'videos'].flatMap(domain => [`${domain}:read`, `${domain}:write`])
 
 type View = 'received' | 'sent' | 'history'
 

@@ -1,5 +1,5 @@
 locals {
-  mesh_domains            = ["budget", "calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "sessions", "templates", "videos", "weight-log"]
+  mesh_domains            = ["calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "sessions", "templates", "videos", "weight-log"]
   domain_callers          = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
   litellm_mcp_domains     = ["sessions", "program", "competition", "profile", "glossary", "templates", "goals", "performance", "lift-profiles", "weight-log", "federation", "calculations"]
   analysis_domain_callers = ["pl-competition", "pl-export", "pl-profile", "pl-program", "pl-templates"]

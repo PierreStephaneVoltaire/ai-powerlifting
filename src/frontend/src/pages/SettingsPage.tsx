@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Paper, SegmentedControl, Stack, Text, Title } from '@mantine/core'
 import ProfileTags from '@/components/settings/ProfileTags'
 import PublicationSettings from '@/components/settings/PublicationSettings'
+import PreferencesSettings from '@/components/settings/PreferencesSettings'
 import { RelationshipInbox } from '@/components/settings/RelationshipInbox'
 import { RelationshipRoster } from '@/components/settings/RelationshipRoster'
 import { GrantsPanel } from '@/components/settings/GrantsPanel'
@@ -21,7 +22,8 @@ export default function SettingsPage() {
   return <Stack maw={720} mx="auto">
       <Title order={2}>Settings</Title>
     {user && user.roles.length > 1 && <SelectRole user={user} personPk={person_pk} onChange={selectRole} />}
-    <SegmentedControl value={section} onChange={setSection} fullWidth data={[{ value: 'profile', label: 'Profile' }, { value: 'relationships', label: 'Roster' }, { value: 'inbox', label: 'Inbox' }]} />
+    <SegmentedControl value={section} onChange={setSection} fullWidth data={[{ value: 'profile', label: 'Profile' }, { value: 'preferences', label: 'Preferences' }, { value: 'relationships', label: 'Roster' }, { value: 'inbox', label: 'Inbox' }]} />
+    {section === 'preferences' && <Paper withBorder p="md"><Stack><Title order={3}>Preferences</Title><PreferencesSettings /></Stack></Paper>}
     {section === 'profile' && <Paper withBorder p="md"><Stack>
       <Title order={3}>Profile and privacy</Title>
       {settings && <SegmentedControl value={settings.profile_visibility} onChange={async value => { const next = await updateProfile({ profile_visibility: value as 'private' | 'public', display_name: settings.display_name, bio: settings.bio }); setSettings(next) }} data={[{ value: 'private', label: 'Private' }, { value: 'public', label: 'Public' }]} fullWidth />}

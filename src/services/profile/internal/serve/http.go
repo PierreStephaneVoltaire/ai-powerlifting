@@ -83,7 +83,7 @@ func Handler(svc *service.Service, log *slog.Logger) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer, middleware.Timeout(requestTimeout), accessLog(log))
 	config := huma.DefaultConfig(serviceName, "1.0.0")
-	config.Info.Description = "Identity, access evaluation, grants, relationships, tags, notes and profile views."
+	config.Info.Description = "Identity, access evaluation, grants, relationships, tags and profile views."
 	config.DocsRenderer = huma.DocsRendererSwaggerUI
 	config.CreateHooks = nil
 	config.DefaultFormat = "application/json"

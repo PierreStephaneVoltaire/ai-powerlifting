@@ -89,10 +89,6 @@ def test_cross_domain_metadata_and_note_permissions_are_checked():
         check_context('program_update_meta_field', {'updates': {'current_body_weight_kg': 80}}, claims, context)
     with pytest.raises(OperationError, match='lift-profiles:write'):
         check_context('video_upload_presign', {'lift': 'squat'}, claims, context)
-    assert check_context('note_list_attachments', {'context_domain': 'competition'}, claims, context) is context
-    with pytest.raises(OperationError):
-        check_context('note_share', {'context_domain': 'competition'}, claims, context)
-    assert operation_permission('note_share', {'context_domain': 'identity'}) is None
     assert operation_permission('health_list_competitions', {}) == 'competition:read'
     for arguments in ({'op': 'update'}, {'op': 'complete'}, {'master_id': 'meet', 'patch': {}}, {'master_id': 'meet', 'results': {}}):
         with pytest.raises(OperationError):

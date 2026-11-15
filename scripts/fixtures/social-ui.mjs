@@ -40,8 +40,6 @@ export function analysisSection(sectionKey, asOfDate) {
 const emptyRankingCard = { squat: null, bench: null, deadlift: null, total: null, top10_mean_squat: null, top10_mean_bench: null, top10_mean_deadlift: null, top10_mean_total: null }
 export const rankingPercentile = { global: emptyRankingCard, national: null, regional: null, weight_class_label: null, meta: { global_n: 0, national_n: null, regional_n: null } }
 
-export const privateNote = { note_id: 'note-own', author_person_pk: 'person-luna', text: 'Private original', revision: 2, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }
-export const sharedNote = { attachment_id: 'attachment-own', note_id: 'note-own', text: 'Shared revision', author_person_pk: 'person-luna', source_revision: 2, revision: 1, context_domain: 'program' }
 
 export const profiles = [
   { person_pk: coachPerson, athlete_pk: coachAthlete, nickname: 'coach', display_name: 'Coach Casey', profile_visibility: 'public', public_training_summary_enabled: false, is_self: false, tags: [], bio: '', roles: ['coach'] },

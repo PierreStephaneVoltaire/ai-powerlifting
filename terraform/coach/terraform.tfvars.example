@@ -26,8 +26,6 @@ operation_ai = {
   muscle_group_estimate           = { provider = "", model = "", effort = "" }
   fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
   glossary_generic_estimate       = { provider = "litellm", model = "pl-background", effort = "minimal" }
-  budget_advisor                  = { provider = "", model = "", effort = "" }
-  budget_priority_timeline        = { provider = "", model = "", effort = "" }
 }
 dataset_bucket = "<powerlifting-dataset-bucket-name>"
 coach_replicas = 1

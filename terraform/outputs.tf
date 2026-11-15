@@ -10,10 +10,6 @@ output "session_videos_bucket_id" {
   value = module.session_videos.bucket_id
 }
 
-output "budget_media_bucket_id" {
-  value = module.budget_media.bucket_id
-}
-
 output "cloudfront_distribution_id" {
   value = module.cloudfront.distribution_id
 }

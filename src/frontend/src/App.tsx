@@ -22,7 +22,6 @@ import BiometricsPage from '@/pages/BiometricsPage'
 import CompetitionsPage from '@/pages/CompetitionsPage'
 import GoalsPage from '@/pages/GoalsPage'
 import FederationsPage from '@/pages/FederationsPage'
-import BudgetPage from '@/pages/BudgetPage'
 import VideosPage from '@/pages/VideosPage'
 import AthleteDetailsPage from '@/pages/AthleteDetailsPage'
 import SettingsPage from '@/pages/SettingsPage'
@@ -36,7 +35,6 @@ import TemplateEditPage from '@/pages/TemplateEditPage'
 import TemplateImportPage from '@/pages/TemplateImportPage'
 import RankingsPage from '@/pages/RankingsPage'
 import NotesPage from '@/pages/NotesPage'
-import AuthoredNotes from '@/components/notes/AuthoredNotes'
 import ProfilesPage from '@/pages/ProfilesPage'
 import ProfilePage from '@/pages/ProfilePage'
 import LogPage from '@/pages/LogPage'
@@ -93,7 +91,6 @@ function AppContent() {
         <Route path="/designer/sessions" element={<DesignerPage />} />
         <Route path="/designer/goals" element={<GoalsPage />} />
         <Route path="/designer/federations" element={<FederationsPage />} />
-        <Route path="/budget" element={<BudgetPage />} />
         <Route path="/list" element={<ListPage />} />
         <Route path="/session/:date/:index?" element={<SessionDetailPage />} />
         <Route path="/list/:date/:index?" element={<SessionDetailPage />} />
@@ -101,7 +98,6 @@ function AppContent() {
         <Route path="/rankings" element={<RankingsPage />} />
         <Route path="/log" element={<LogPage />} />
         <Route path="/notes" element={<NotesPage />} />
-        <Route path="/my-notes" element={<AuthoredNotes />} />
         <Route path="/supplements" element={<SupplementsPage />} />
         <Route path="/biometrics" element={<BiometricsPage />} />
         <Route path="/diet" element={<BiometricsPage />} />

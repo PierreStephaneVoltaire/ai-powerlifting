@@ -8,7 +8,7 @@ import { coachUrl } from './coachUrl'
 type Operation = { name: string; domain: string }
 const SERVICE_BASE_URL = process.env.POWERLIFTING_SERVICE_BASE_URL
 const operations = new Map<string, Operation>()
-for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'analytics-ai', 'analytics-export', 'videos', 'export', 'rankings']) {
+for (const domain of ['program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'profile', 'lift-profiles', 'analytics', 'analytics-ai', 'analytics-export', 'videos', 'export', 'rankings']) {
   const records = JSON.parse(readFileSync(resolve(__dirname, '../../../services/operations', `${domain}.json`), 'utf8')) as Operation[]
   for (const operation of records) {
     operations.set(operation.name, operation)

@@ -225,19 +225,24 @@ func blockNotesUpdate(d *Deps, r *Request) (any, error) {
 		}
 		selected = sk
 	}
+	self := Access(r.Access).isSelf()
 	return d.mutateSource(r, selected, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		active := scope.CurrentBlockID(program)
 		kept := []any{}
 		existing, _ := meta["block_notes"].([]any)
 		for _, raw := range existing {
-			if note, ok := raw.(map[string]any); ok && scope.RecordBlock(note, "meta.block_notes", program) != active {
+			if note, ok := raw.(map[string]any); ok && (scope.RecordBlock(note, "meta.block_notes", program) != active || !self && isPrivateNote(note)) {
 				kept = append(kept, pyval.DeepCopy(note))
 			}
 		}
 		for _, raw := range notes {
 			if note, ok := raw.(map[string]any); ok && scope.RecordBlock(note, "meta.block_notes", program) == active {
-				kept = append(kept, scope.Stamp(pyval.CopyMap(note), program, "", "meta.block_notes"))
+				written := pyval.CopyMap(note)
+				if !self {
+					delete(written, "private")
+				}
+				kept = append(kept, scope.Stamp(written, program, "", "meta.block_notes"))
 			}
 		}
 		meta["block_notes"] = kept

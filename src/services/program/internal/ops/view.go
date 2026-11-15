@@ -187,8 +187,31 @@ func ProgramView(program map[string]any, access Access) map[string]any {
 			}
 		}
 	}
+	if !access.isSelf() {
+		if notes, ok := meta["block_notes"].([]any); ok {
+			meta["block_notes"] = sharedNotes(notes)
+		}
+		if notes, ok := out["block_notes"].([]any); ok {
+			out["block_notes"] = sharedNotes(notes)
+		}
+	}
 	out["meta"] = meta
 	return out
+}
+
+func isPrivateNote(raw any) bool {
+	note, ok := raw.(map[string]any)
+	return ok && pyval.Truthy(note["private"])
+}
+
+func sharedNotes(notes []any) []any {
+	shared := []any{}
+	for _, raw := range notes {
+		if !isPrivateNote(raw) {
+			shared = append(shared, raw)
+		}
+	}
+	return shared
 }
 
 func OperationResult(name string, value any, access Access) any {
@@ -224,6 +247,17 @@ func OperationResult(name string, value any, access Access) any {
 			}
 			out["meta"] = ProgramView(map[string]any{"meta": meta}, access)["meta"]
 			return out
+		}
+	case "block_notes_get", "block_notes_update":
+		if result, ok := value.(map[string]any); ok {
+			if notes, ok := result["block_notes"].([]any); ok {
+				out := make(map[string]any, len(result))
+				for key, item := range result {
+					out[key] = item
+				}
+				out["block_notes"] = sharedNotes(notes)
+				return out
+			}
 		}
 	case "block_transition":
 		if result, ok := value.(map[string]any); ok {

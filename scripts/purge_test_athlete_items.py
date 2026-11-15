@@ -9,7 +9,6 @@ TABLES = [
     "if-health-templates",
     "if-user",
     "if-powerlifting-requests",
-    "if-powerlifting-budget",
     "if-powerlifting-goals",
     "if-powerlifting-analysis-cache",
     "if-powerlifting-user-competitions",

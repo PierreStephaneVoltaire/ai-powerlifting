@@ -62,15 +62,6 @@ func OperationPermission(rules func(string) (contract.Rule, bool), name string, 
 			return "competition:write"
 		}
 		return ""
-	case "note_list_attachments", "note_share":
-		domain, _ := arguments["context_domain"].(string)
-		if domain != "program" && domain != "sessions" && domain != "competition" {
-			return ""
-		}
-		if name == "note_list_attachments" {
-			return domain + ":read"
-		}
-		return domain + ":write"
 	case "domain_resume":
 		resumed, _ := arguments["operation"].(string)
 		if resumed == "domain_resume" || resumed == "generation_status" {

@@ -1,11 +1,11 @@
-export const SCOPES = ['profile', 'program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'budget', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'lift-profiles', 'analytics', 'videos', 'settings', 'grants', 'operator'] as const
+export const SCOPES = ['profile', 'program', 'sessions', 'competition', 'federation', 'glossary', 'goals', 'calculations', 'performance', 'weight-log', 'templates', 'imports', 'lift-profiles', 'analytics', 'videos', 'settings', 'grants', 'operator'] as const
 export type Scope = (typeof SCOPES)[number]
 export type Access = 'read' | 'write'
 export type HttpMethod = 'GET' | 'HEAD' | 'OPTIONS' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 const ROUTE_SCOPES: Record<string, Scope> = {
   programs: 'program', sessions: 'sessions', exercises: 'glossary', maxes: 'performance', weight: 'weight-log',
   supplements: 'program', 'diet-notes': 'program', 'block-notes': 'program', competitions: 'competition',
-  goals: 'goals', federations: 'federation', budget: 'budget', analytics: 'analytics', videos: 'videos',
+  goals: 'goals', federations: 'federation', analytics: 'analytics', videos: 'videos',
   templates: 'templates', export: 'program', import: 'imports', grants: 'grants', settings: 'settings', onboarding: 'settings', setup: 'settings', stats: 'analytics', jobs: 'settings', assistant: 'settings',
 }
 

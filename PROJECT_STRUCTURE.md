@@ -57,7 +57,7 @@ powerlifting-app/
 │       │   ├── videos/       VideoCard, VideoPlayerModal
 │       │   ├── setup/        SetupOnboarding
 │       │   └── shared/       Num, LoadTypeBadge, ReadOnlyBanner
-│       ├── store/            Zustand stores (program, settings, budget, federation, competitions, ui, restTimer)
+│       ├── store/            Zustand stores (program, settings, federation, competitions, ui, restTimer)
 │       ├── utils/            Pure helpers (rpe, volume, units, plates, dots, ipfGl, dates, muscles, …)
 │       └── constants/
 │           ├── formulaDescriptions.ts  Human-facing formula prose (mirrors the math)
@@ -65,7 +65,7 @@ powerlifting-app/
 ├── src/dependencies/types/         Shared TypeScript types (@powerlifting/types)
 │   ├── package.json
 │   ├── tsconfig.json
-│   └── index.ts             Program, Session, Exercise, Competition, Glossary, Budget, …
+│   └── index.ts             Program, Session, Exercise, Competition, Glossary, …
 ├── src/services/
 │   ├── <domain>/             One package per Python domain: operation handlers, domain helpers, tests/
 │   ├── runtime/              Shared Python runtime, stores, scoping, prompts, permissions.json, tests/
@@ -78,7 +78,7 @@ powerlifting-app/
 ├── docker/                  Container build context
 ├── terraform/               Main stack, applied by CI (see AGENTS.md)
 │   ├── main.tf              Module wiring: ECR, media buckets, CloudFront, DynamoDB, dataset, Lambdas, tunnel
-│   ├── modules/             ecr, session_videos, budget_media, cloudfront, powerlifting_dynamodb,
+│   ├── modules/             ecr, session_videos, cloudfront, powerlifting_dynamodb,
 │   │                        powerlifting_dataset, powerlifting_master_sync, video_thumbnail_lambda, tunnel
 │   ├── backend.tf           S3 state backend
 │   ├── providers.tf, versions.tf, variables.tf, outputs.tf

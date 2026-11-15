@@ -13,7 +13,7 @@ import (
 	"powerlifting/profile/internal/value"
 )
 
-var servedMediaPath = regexp.MustCompile(`^/api/(?:budget|profiles|videos)/media/`)
+var servedMediaPath = regexp.MustCompile(`^/api/(?:profiles|videos)/media/`)
 
 type Analytics interface {
 	EstimatedMaxes(ctx context.Context, person, athlete string) map[string]any
@@ -85,7 +85,22 @@ func filteredMeta(meta map[string]any, granted *access.Context) map[string]any {
 			}
 		}
 	}
+	if !granted.IsSelf {
+		if notes, ok := out["block_notes"].([]any); ok {
+			out["block_notes"] = sharedNotes(notes)
+		}
+	}
 	return out
+}
+
+func sharedNotes(notes []any) []any {
+	shared := []any{}
+	for _, raw := range notes {
+		if note, ok := raw.(map[string]any); !ok || !value.Truthy(note["private"]) {
+			shared = append(shared, raw)
+		}
+	}
+	return shared
 }
 
 func (v *Views) loadProgram(ctx context.Context, athlete string) (map[string]any, error) {
