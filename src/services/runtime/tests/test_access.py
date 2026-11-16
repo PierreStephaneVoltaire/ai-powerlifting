@@ -38,6 +38,20 @@ def test_every_operation_has_an_explicit_permission_and_generating_requires_writ
     assert operation_permission('analytics.blocks_get', {'cacheOnly': True, 'refresh': True}) == 'analytics:write'
 
 
+def test_public_block_analysis_can_compute_without_granting_refresh_or_ai_generation():
+    owner = {'pk': 'athlete', 'profile_visibility': 'public', 'publication': {'domains': ['analytics']}}
+    anonymous = evaluate_facts('', 'athlete', owner, None, [], {})
+    for arguments in ({}, {'cacheOnly': False}, {'cacheOnly': True}):
+        assert permits(anonymous, operation_permission('analytics.blocks_get', arguments))
+    for arguments in ({'refresh': True}, {'cacheOnly': True, 'refresh': True}):
+        assert not permits(anonymous, operation_permission('analytics.blocks_get', arguments))
+    assert not permits(anonymous, operation_permission('analytics.block_evaluation', {}))
+    assert permits(anonymous, operation_permission('analytics.block_evaluation', {'cacheOnly': True}))
+    for hidden in ({**owner, 'profile_visibility': 'private'}, {**owner, 'publication': {'domains': ['program', 'sessions']}}):
+        context = evaluate_facts('', 'athlete', hidden, None, [], {})
+        assert not permits(context, operation_permission('analytics.blocks_get', {}))
+
+
 def test_access_context_result_contract_accepts_actual_evaluator_fields():
     context = evaluate_facts('', 'athlete', None, None, [], {})
     load_operations('profile')['access_context'].validate_result(context)

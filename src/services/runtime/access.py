@@ -38,7 +38,7 @@ def operation_permission(name: str, arguments: dict) -> str | None:
     if not rule:
         return None
     cache_only = arguments.get('cache_only') is True or arguments.get('cacheOnly') is True
-    if cache_only and arguments.get('refresh') is not True:
+    if (cache_only or name == 'analytics.blocks_get') and arguments.get('refresh') is not True:
         return rule.get('cache_read', rule['permission'])
     return rule['permission']
 
