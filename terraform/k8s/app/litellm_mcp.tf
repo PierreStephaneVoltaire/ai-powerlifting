@@ -27,8 +27,14 @@ locals {
   }
 
   litellm_virtual_key_consumers = {
-    assistant = ["pl-coordinator", "pl-responder-fast", "pl-embed", "pl-light", "pl-strong"]
-    coach     = ["pl-analysis", "pl-standard", "pl-light", "pl-documents", "pl-background"]
+    assistant = {
+      models      = ["pl-coordinator", "pl-responder-fast", "pl-embed", "pl-light", "pl-strong"]
+      mcp_servers = sort(keys(local.litellm_mcp_registry))
+    }
+    coach = {
+      models      = ["pl-analysis", "pl-standard", "pl-light", "pl-documents", "pl-background"]
+      mcp_servers = []
+    }
   }
 
   litellm_virtual_key_registration = sha256(jsonencode({
@@ -47,17 +53,23 @@ locals {
       sleep 5
     done
     register() {
-      consumer="$1"; key="$2"; models="$3"
+      consumer="$1"; key="$2"; models="$3"; servers="$4"
       status=$(curl -s -o /dev/null -w '%%{http_code}' -G "$base/key/info" --data-urlencode "key=$key" -H "Authorization: Bearer $LITELLM_MASTER_KEY")
-      if [ "$status" = "200" ]; then echo "$consumer key present"; return 0; fi
-      body=$(jq -n --arg key "$key" --arg alias "$consumer" --argjson models "$models" '{key: $key, key_alias: $alias, models: $models, metadata: {consumer: $alias}}')
+      if [ "$status" = "200" ]; then
+        body=$(jq -n --arg key "$key" --arg alias "$consumer" --argjson models "$models" --argjson servers "$servers" '{key: $key, key_alias: $alias, models: $models, metadata: {consumer: $alias}, object_permission: {mcp_servers: $servers}}')
+        status=$(curl -s -o /tmp/response -w '%%{http_code}' "$base/key/update" -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H "Content-Type: application/json" -d "$body")
+        if [ "$status" = "200" ]; then echo "$consumer key updated"; return 0; fi
+        cat /tmp/response >&2
+        return 1
+      fi
+      body=$(jq -n --arg key "$key" --arg alias "$consumer" --argjson models "$models" --argjson servers "$servers" '{key: $key, key_alias: $alias, models: $models, metadata: {consumer: $alias}, object_permission: {mcp_servers: $servers}}')
       status=$(curl -s -o /tmp/response -w '%%{http_code}' "$base/key/generate" -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H "Content-Type: application/json" -d "$body")
       if [ "$status" = "200" ]; then echo "$consumer key registered"; return 0; fi
       if grep -qi "already exists\|already in use\|duplicate" /tmp/response; then echo "$consumer key already exists"; return 0; fi
       cat /tmp/response >&2
       return 1
     }
-    ${join("\n    ", [for consumer, models in local.litellm_virtual_key_consumers : "register ${consumer} \"$KEY_${upper(consumer)}\" '${jsonencode(models)}'"])}
+    ${join("\n    ", [for consumer, access in local.litellm_virtual_key_consumers : "register ${consumer} \"$KEY_${upper(consumer)}\" '${jsonencode(access.models)}' '${jsonencode(access.mcp_servers)}'"])}
   EOT
 }
 
