@@ -296,8 +296,12 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 		eventKind = "escalate"
 	}
 	model := models.Model(tier)
+	usedWeb := delegation.NeedsWeb && w.Config.WebModel != ""
+	if usedWeb {
+		model = w.Config.WebModel
+	}
 	w.record(ctx, params.Identity.Person, params.ConversationID, eventKind, model, "started", map[string]any{
-		"delegation_id": sequence, "kind": kind, "tier": tier.String(), "complexity": delegation.Complexity, "escalate_from": delegation.EscalateFrom, "depth": params.Depth + 1,
+		"delegation_id": sequence, "kind": kind, "tier": tier.String(), "complexity": delegation.Complexity, "escalate_from": delegation.EscalateFrom, "needs_web": delegation.NeedsWeb, "web": usedWeb, "model": model, "depth": params.Depth + 1,
 	})
 	params.State.Delegations[sequence] = delegationRecord{Tier: tier}
 	var output SubagentOutput

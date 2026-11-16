@@ -6,6 +6,7 @@ locals {
     PL_MODEL_SECURITY       = "pl-light"
     PL_MODEL_EMBED          = "pl-embed"
     PL_MODEL_STRONG         = "pl-strong"
+    PL_MODEL_WEB            = "pl-web"
   }
   assistant_postgres_keys = {
     PGHOST     = "host"

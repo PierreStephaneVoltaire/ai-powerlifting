@@ -98,6 +98,7 @@ type Delegation struct {
 	Task         string
 	Complexity   string
 	EscalateFrom int
+	NeedsWeb     bool
 }
 
 func ParseDelegation(arguments map[string]any) (Delegation, error) {
@@ -111,7 +112,8 @@ func ParseDelegation(arguments map[string]any) (Delegation, error) {
 		return Delegation{}, errors.New("complexity must be low, medium or high")
 	}
 	escalate, _ := arguments["escalate_from"].(float64)
-	return Delegation{Kind: kind, Task: task, Complexity: complexity, EscalateFrom: int(escalate)}, nil
+	needsWeb, _ := arguments["needs_web"].(bool)
+	return Delegation{Kind: kind, Task: task, Complexity: complexity, EscalateFrom: int(escalate), NeedsWeb: needsWeb}, nil
 }
 
 type Review struct {
@@ -182,8 +184,8 @@ func PseudoTools(scope []string, depth, maxDepth int) []llm.ToolDef {
 		defs = append(defs,
 			llm.ToolDef{Type: "function", Function: llm.FunctionDef{
 				Name:        DelegateTool,
-				Description: "Hand a self-contained task to a responder subagent and receive its answer with a delegation_id. The subagent can use every portal tool the Person may use. Pick complexity to choose its model: low for lookups and simple edits, medium for multi-step analysis or drafting, high for hard multi-object work. kind is an optional focus hint. Set escalate_from to a failed delegation_id to retry on a stronger model.",
-				Parameters:  json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"kind":{"type":"string","enum":%s},"task":{"type":"string"},"complexity":{"type":"string","enum":["low","medium","high"]},"escalate_from":{"type":"integer"}},"required":["task"],"additionalProperties":false}`, kinds)),
+				Description: "Hand a self-contained task to a responder subagent and receive its answer with a delegation_id. The subagent can use every portal tool the Person may use. Pick complexity to choose its model: low for lookups and simple edits, medium for multi-step analysis or drafting, high for hard multi-object work. kind is an optional focus hint. Set needs_web to true when the task needs current external information from the web. Set escalate_from to a failed delegation_id to retry on a stronger model.",
+				Parameters:  json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"kind":{"type":"string","enum":%s},"task":{"type":"string"},"complexity":{"type":"string","enum":["low","medium","high"]},"escalate_from":{"type":"integer"},"needs_web":{"type":"boolean"}},"required":["task"],"additionalProperties":false}`, kinds)),
 			}},
 			llm.ToolDef{Type: "function", Function: llm.FunctionDef{
 				Name:        ReviewTool,

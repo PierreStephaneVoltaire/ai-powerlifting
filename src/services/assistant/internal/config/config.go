@@ -35,6 +35,7 @@ type Config struct {
 	RatePerMinute    int
 	CoordinatorModel string
 	StrongModel      string
+	WebModel         string
 	FastModel        string
 	SecurityModel    string
 	EmbedModel       string
@@ -105,6 +106,7 @@ func Load() Config {
 		CoordinatorModel: coordinator,
 		FastModel:        fast,
 		StrongModel:      env("PL_MODEL_STRONG", coordinator),
+		WebModel:         env("PL_MODEL_WEB", ""),
 		SecurityModel:    env("PL_MODEL_SECURITY", "pl-light"),
 		EmbedModel:       env("PL_MODEL_EMBED", "pl-embed"),
 		SubagentModels: map[string]string{

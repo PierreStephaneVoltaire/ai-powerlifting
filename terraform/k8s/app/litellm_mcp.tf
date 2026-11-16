@@ -28,7 +28,7 @@ locals {
 
   litellm_virtual_key_consumers = {
     assistant = {
-      models      = ["pl-coordinator", "pl-responder-fast", "pl-embed", "pl-light", "pl-strong"]
+      models      = ["pl-coordinator", "pl-responder-fast", "pl-embed", "pl-light", "pl-strong", "pl-web"]
       mcp_servers = sort(keys(local.litellm_mcp_registry))
     }
     coach = {
