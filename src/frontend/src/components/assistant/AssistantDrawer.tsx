@@ -24,6 +24,8 @@ interface AssistantDrawerProps {
   readOnly?: boolean
 }
 
+const wrapText = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' } as const
+
 function errorMessage(error: unknown): string {
   const body = (error as { response?: { data?: { detail?: string; error?: string } } })?.response?.data
   return body?.detail || body?.error || (error as Error)?.message || 'Request failed'
@@ -62,7 +64,7 @@ function ProposalCard({ proposal, readOnly, onChange }: { proposal: AssistantPro
             <Badge color={pending ? 'yellow' : proposal.state === 'rejected' ? 'gray' : 'green'} variant="light">{proposal.state}</Badge>
           </Group>
         </Group>
-        <Code block style={{ maxHeight: 240, overflow: 'auto' }}>{formatDiff(proposal.diff)}</Code>
+        <Code block style={{ ...wrapText, maxHeight: '40dvh', overflowY: 'auto', overflowX: 'hidden' }}>{formatDiff(proposal.diff)}</Code>
         {pending && proposal.destructive && (
           <Checkbox
             checked={confirmed}
@@ -93,6 +95,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
   const [job, setJob] = useState<AssistantJob | null>(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [progressOpen, setProgressOpen] = useState(true)
   const cancelled = useRef(false)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
@@ -177,7 +180,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
   useEffect(() => {
     const node = progressBox.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [progressText])
+  }, [progressText, progressOpen])
   const activity = job?.activity?.length ? job.activity[job.activity.length - 1].label : 'working'
 
   useEffect(() => {
@@ -212,7 +215,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
       styles={{ content: { display: 'flex', flexDirection: 'column' }, body: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } }}
     >
       <Stack gap="md" style={{ flex: 1, minHeight: 0 }}>
-        <Stack gap="md" ref={scroller} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <Stack gap="md" ref={scroller} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         {turns.length === 0 && <Text size="sm" c="dimmed">No turns yet.</Text>}
         <Stack gap={4}>
           {turns.map((turn) => (
@@ -229,7 +232,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
                   {turn.content ? (
                     <>
                       <Text size="sm" fw={600}>{turn.content.request}</Text>
-                      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{turn.content.reply}</Text>
+                      <Text size="sm" style={wrapText}>{turn.content.reply}</Text>
                     </>
                   ) : (
                     <Loader size="xs" />
@@ -245,20 +248,23 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
           <Stack gap="xs">
             {running && (
               <Group gap="xs" justify="space-between" wrap="nowrap">
-                <Group gap="xs" wrap="nowrap"><Loader size="xs" /><Text size="xs" c="dimmed">{activity}</Text></Group>
+                <UnstyledButton onClick={() => setProgressOpen((open) => !open)} style={{ flex: 1, minWidth: 0 }}>
+                  <Group gap="xs" wrap="nowrap">
+                    {progressOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <Loader size="xs" />
+                    <Text size="xs" c="dimmed" truncate>{job.progress?.stage || activity}</Text>
+                  </Group>
+                </UnstyledButton>
                 <Button size="compact-xs" variant="default" leftSection={<Square size={12} />} onClick={() => void stop()}>Stop</Button>
               </Group>
             )}
-            {running && progressText && (
-              <Stack gap={2}>
-                <Text size="xs" c="dimmed">{job.progress?.stage}</Text>
-                <div ref={progressBox} style={{ maxHeight: '12rem', overflowY: 'auto' }}>
-                  <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>{progressText}</Text>
-                </div>
-              </Stack>
+            {running && progressOpen && progressText && (
+              <div ref={progressBox} style={{ maxHeight: '35dvh', overflowY: 'auto', overflowX: 'hidden' }}>
+                <Text size="sm" c="dimmed" style={wrapText}>{progressText}</Text>
+              </div>
             )}
             {job.status === 'cancelled' && <Text size="sm" c="dimmed">Stopped</Text>}
-            {job.result?.content && <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{job.result.content}</Text>}
+            {job.result?.content && <Text size="sm" style={wrapText}>{job.result.content}</Text>}
             {job.status === 'failed' && job.error && <Alert color="red">{job.error}</Alert>}
             {job.proposals.map((proposal) => (
               <ProposalCard key={proposal.id} proposal={proposal} readOnly={readOnly} onChange={updateProposal} />
