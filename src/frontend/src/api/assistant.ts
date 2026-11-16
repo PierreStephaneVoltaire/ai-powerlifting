@@ -1,12 +1,13 @@
 import api from './http'
 
-export type AssistantScope = 'session-design' | 'template-phase' | 'goals' | 'supplements' | 'biometrics' | 'research'
+export type AssistantScope = 'general' | 'session-design' | 'template-phase' | 'goals' | 'supplements' | 'biometrics' | 'research'
 
 export interface AssistantContext {
   session_date?: string
   session_index?: number
   exercise_index?: number
   template_sk?: string
+  area?: 'program'
 }
 
 export type ProposalState = 'pending' | 'approved' | 'rejected' | 'applied' | 'failed' | 'cancelled' | 'expired' | string
@@ -102,8 +103,23 @@ export async function pollTurn(jobId: string, onUpdate: (job: AssistantJob) => v
   throw new Error('Turn is still running. Reopen the assistant to check it.')
 }
 
-export async function fetchHistory(scope: AssistantScope, expand?: string): Promise<AssistantHistory> {
-  const response = await api.get<AssistantHistory>(`${scopePath(scope)}/history`, {
+export interface AssistantConversation {
+  id: string
+  kind: 'web' | 'discord'
+  shared: boolean
+  scope: string
+  updated_at: string
+  label: string
+}
+
+export async function fetchConversations(): Promise<AssistantConversation[]> {
+  const response = await api.get<{ conversations: AssistantConversation[] }>('/assistant/conversations')
+  return response.data.conversations
+}
+
+export async function fetchHistory(scope: AssistantScope, expand?: string, conversationId?: string): Promise<AssistantHistory> {
+  const path = conversationId ? `/assistant/history/${encodeURIComponent(conversationId)}` : `${scopePath(scope)}/history`
+  const response = await api.get<AssistantHistory>(path, {
     params: { limit: 20, ...(expand ? { expand } : {}) },
   })
   return response.data

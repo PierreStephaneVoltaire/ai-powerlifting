@@ -22,6 +22,7 @@ interface AssistantDrawerProps {
   scope: AssistantScope
   context: AssistantContext
   readOnly?: boolean
+  conversationId?: string
 }
 
 const wrapText = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' } as const
@@ -122,7 +123,7 @@ function ProposalCard({ proposal, readOnly, onChange }: { proposal: AssistantPro
   )
 }
 
-export default function AssistantDrawer({ opened, onClose, scope, context, readOnly }: AssistantDrawerProps) {
+export default function AssistantDrawer({ opened, onClose, scope, context, readOnly, conversationId }: AssistantDrawerProps) {
   const [turns, setTurns] = useState<AssistantHistoryTurn[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState('')
@@ -136,14 +137,14 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
 
   const loadHistory = useCallback(async () => {
     try {
-      const history = await fetchHistory(scope)
+      const history = await fetchHistory(scope, undefined, conversationId)
       const ordered = [...history.turns].reverse()
       setTurns(ordered)
       const newest = ordered[ordered.length - 1]
       if (newest) {
         setExpanded(new Set([newest.id]))
         if (!newest.content) {
-          const full = await fetchHistory(scope, newest.id)
+          const full = await fetchHistory(scope, newest.id, conversationId)
           const found = full.turns.find((item) => item.id === newest.id)
           if (found?.content) setTurns((current) => current.map((item) => (item.id === newest.id ? { ...item, content: found.content } : item)))
         }
@@ -151,7 +152,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
     } catch (err) {
       setError(errorMessage(err))
     }
-  }, [scope])
+  }, [scope, conversationId])
 
   useEffect(() => {
     if (!opened) return
@@ -175,7 +176,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
     setExpanded(next)
     if (turn.content) return
     try {
-      const history = await fetchHistory(scope, turn.id)
+      const history = await fetchHistory(scope, turn.id, conversationId)
       const full = history.turns.find((item) => item.id === turn.id)
       if (full?.content) setTurns((current) => current.map((item) => (item.id === turn.id ? { ...item, content: full.content } : item)))
     } catch (err) {
@@ -309,7 +310,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
         {error && <Alert color="red">{error}</Alert>}
         </Stack>
 
-        <Textarea
+        {!conversationId && <Textarea
           value={message}
           onChange={(event) => setMessage(event.currentTarget.value)}
           placeholder="Write your request."
@@ -318,12 +319,12 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
           maxRows={6}
           maxLength={8000}
           disabled={readOnly || sending}
-        />
-        <Group justify="flex-end">
+        />}
+        {!conversationId && <Group justify="flex-end">
           <Button leftSection={<Send size={16} />} onClick={() => void send()} loading={sending} disabled={readOnly || !message.trim() || running}>
             Send
           </Button>
-        </Group>
+        </Group>}
       </Stack>
     </Drawer>
   )

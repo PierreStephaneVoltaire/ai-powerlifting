@@ -16,6 +16,7 @@ type PromptContext struct {
 	SessionIndex  *int
 	ExerciseIndex *int
 	TemplateSK    string
+	Area          string
 	Task          string
 	Signals       []string
 	HistoryGap    bool
@@ -79,6 +80,9 @@ func SystemPrompt(context PromptContext) string {
 	}
 	if context.TemplateSK != "" {
 		pinned = append(pinned, "template_sk="+context.TemplateSK)
+	}
+	if context.Area != "" {
+		pinned = append(pinned, "area="+context.Area)
 	}
 	if len(pinned) > 0 {
 		builder.WriteString("\n\nThe Person opened this from: " + strings.Join(pinned, ", ") + ".")

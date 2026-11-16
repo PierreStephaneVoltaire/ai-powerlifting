@@ -102,6 +102,7 @@ func decode(r *http.Request, into any) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
+	mux.HandleFunc("GET /v1/conversations", s.listConversations)
 	mux.HandleFunc("POST /v1/conversations/{conversation_id}/turns", s.createTurn)
 	mux.HandleFunc("GET /v1/conversations/{conversation_id}/history", s.history)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.job(false))

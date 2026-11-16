@@ -19,6 +19,7 @@ import GlossaryPage from '@/pages/GlossaryPage'
 import ToolsPage from '@/pages/ToolsPage'
 import SupplementsPage from '@/pages/SupplementsPage'
 import BiometricsPage from '@/pages/BiometricsPage'
+import AssistantConversationsPage from '@/pages/AssistantConversationsPage'
 import CompetitionsPage from '@/pages/CompetitionsPage'
 import GoalsPage from '@/pages/GoalsPage'
 import FederationsPage from '@/pages/FederationsPage'
@@ -99,6 +100,7 @@ function AppContent() {
         <Route path="/log" element={<LogPage />} />
         <Route path="/notes" element={<NotesPage />} />
         <Route path="/supplements" element={<SupplementsPage />} />
+        <Route path="/assistant" element={<AssistantConversationsPage />} />
         <Route path="/biometrics" element={<BiometricsPage />} />
         <Route path="/diet" element={<BiometricsPage />} />
         <Route path="/designer/competitions" element={<CompetitionsPage />} />

@@ -17,6 +17,7 @@ type RequestContext struct {
 	SessionIndex  *int   `json:"session_index,omitempty"`
 	ExerciseIndex *int   `json:"exercise_index,omitempty"`
 	TemplateSK    string `json:"template_sk,omitempty"`
+	Area          string `json:"area,omitempty"`
 }
 
 type TurnInput struct {

@@ -3,7 +3,8 @@ import { AppError } from '../middleware/errorHandler'
 import { serviceHeaders } from '../utils/serviceHeaders'
 import { assistantUrl } from '../utils/coachUrl'
 
-const SCOPES = ['session-design', 'template-phase', 'goals', 'supplements', 'biometrics', 'research']
+const SCOPES = ['general', 'session-design', 'template-phase', 'goals', 'supplements', 'biometrics', 'research']
+const AREAS = ['program']
 const router = Router()
 
 function identity(req: Request): { athlete: string; person: string } {
@@ -33,6 +34,7 @@ function turnBody(req: Request, athlete: string) {
   const clean: Record<string, unknown> = {}
   if (typeof source.session_date === 'string') clean.session_date = source.session_date
   if (typeof source.template_sk === 'string') clean.template_sk = source.template_sk
+  if (typeof source.area === 'string' && AREAS.includes(source.area)) clean.area = source.area
   const sessionIndex = optionalInt(source.session_index)
   const exerciseIndex = optionalInt(source.exercise_index)
   if (sessionIndex !== undefined) clean.session_index = sessionIndex
@@ -68,6 +70,12 @@ function historyQuery(req: Request): string {
   return query ? `?${query}` : ''
 }
 
+router.get('/conversations', proxy(() => '/v1/conversations', 'GET'))
+router.get('/history/:id', proxy((req, athlete) => {
+  const id = String(req.params.id)
+  if (!id.startsWith(`powerlifting:${athlete}:discord:`)) throw new AppError('Unknown conversation', 404, 'NOT_FOUND')
+  return `/v1/conversations/${encodeURIComponent(id)}/history${historyQuery(req)}`
+}, 'GET'))
 router.post('/conversations/:scope/turns', proxy(
   (req, athlete, person) => `/v1/conversations/${encodeURIComponent(conversationId(req, athlete, person))}/turns`,
   'POST',

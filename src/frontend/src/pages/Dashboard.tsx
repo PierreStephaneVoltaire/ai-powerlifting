@@ -37,6 +37,7 @@ import {
   Box
 } from '@mantine/core'
 import { useAuth } from '@/auth/AuthProvider'
+import { useAssistant } from '@/components/assistant/useAssistant'
 import type { Exercise, MuscleGroup, Phase, WeightEntry, LiftProfile, Session, SessionWellness } from '@powerlifting/types'
 
 const LIFT_ORDER = ['squat', 'bench', 'deadlift'] as const
@@ -244,6 +245,7 @@ function phaseState(phase: Phase, currentWeek: number): 'completed' | 'current' 
 }
 
 export default function Dashboard() {
+  const assistant = useAssistant('general', {}, useAuth().readOnly)
   const navigate = useNavigate()
   const { readOnly } = useAuth()
   const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases } = useProgramStore()
@@ -657,9 +659,11 @@ export default function Dashboard() {
 
   return (
     <Stack gap={0} className="if-mock-page" data-testid="dashboard-page">
+      {assistant.drawer}
       <div className="if-mock-header">
         <h1 className="if-mock-title">Dashboard</h1>
         <div className="if-mock-toolbar">
+          {assistant.button}
           <a className="if-mock-button" href={programExportUrl('xlsx')} download="program_history.xlsx">
             <Download size={12} /> Excel
           </a>

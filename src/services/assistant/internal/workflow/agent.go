@@ -147,7 +147,7 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 	defs := append(agent.ToolDefs(listed.Tools, subject.Scope), agent.PseudoTools(subject.Scope, params.Depth, w.Config.MaxDepth)...)
 	state := agent.State{Messages: append([]llm.Message{{Role: "system", Content: agent.SystemPrompt(agent.PromptContext{
 		Orchestrator: params.Orchestrator, Profile: params.Profile, SessionDate: params.Context.SessionDate, SessionIndex: params.Context.SessionIndex, ExerciseIndex: params.Context.ExerciseIndex,
-		TemplateSK: params.Context.TemplateSK, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets,
+		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets,
 	})}}, params.Messages...)}
 	limits := agent.Limits{MaxSteps: w.Config.MaxSteps, MaxTokens: w.Config.MaxTokens}
 	meta := llm.Metadata{UserID: params.Identity.Person, ConversationID: params.ConversationID, WorkflowID: ctx.ID(), TurnID: turnIDOf(ctx.ID()), Role: params.role()}
