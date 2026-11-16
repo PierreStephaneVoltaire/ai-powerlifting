@@ -5,12 +5,13 @@ Software and technical deep-dive for the powerlifting portal. For the math, see
 
 ## Current request flow
 
-Powerlifting runs in the `powerlifting` namespace as eighteen domain
+Powerlifting runs in the `powerlifting` namespace as nineteen domain
 Services/Deployments, one per operation manifest in
 `src/services/operations/*.json`. Each manifest defines typed HTTP and MCP
 operations. The Express gateway calls them over the cluster network, and the
-Coach (`pl-coach`) answers their inference steps and exposes them as tools in
-chat. DynamoDB and S3 hold the data.
+Assistant (`pl-assistant`) runs conversational turns and calls them as tools.
+The Coach (`pl-coach`) remains the `/v1/jobs` broker and Codex inference
+answerer for analytics reports and imports. DynamoDB and S3 hold the data.
 
 The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
@@ -23,11 +24,13 @@ reports sidecar is built from `docker/powerlifting-analytics.pkr.hcl` into
 ```mermaid
 flowchart LR
   Browser["Browser"] --> Gateway["Express gateway"]
-  Gateway --> Service["18 typed HTTP/MCP services"]
+  Gateway --> Service["19 typed HTTP/MCP services"]
   Gateway --> Coach["pl-coach"]
+  Gateway --> Assistant["pl-assistant"]
   Service -->|"inference steps"| Coach
-  Coach -->|"tools"| Service
-  Bot["pl-coach-discord"] --> Coach
+  Assistant -->|"MCP tools via LiteLLM"| Service
+  Bot["pl-coach-discord"] --> Assistant
+  Assistant --> AssistantDB[("assistant-postgres")]
   Service --> Store[("DynamoDB and S3")]
   Gateway --> Profile["Profile permission evaluator"]
   Service --> Profile
@@ -68,7 +71,9 @@ flowchart TB
     Auth["authentik-server<br/>OIDC identity authority"]
     AuthWorker["authentik-worker<br/>background tasks"]
     Postgres[("CNPG Postgres<br/>Authentik data")]
-    Coach["pl-coach<br/>Codex worker"]
+    Coach["pl-coach<br/>Codex worker, jobs"]
+    Assistant["pl-assistant<br/>Dapr workflows"]
+    AssistantDB[("assistant-postgres<br/>CNPG + pgvector")]
     Bot["pl-coach-discord<br/>gateway bot"]
     LiteLLM["litellm<br/>model aliases"]
   end
@@ -86,8 +91,11 @@ flowchart TB
   BE -->|"application cache"| Valkey
   BE -->|"AI jobs and polling"| Coach
   DiscordApp <-->|"websocket"| Bot
-  Bot -->|"chat"| Coach
+  BE -->|"chat"| Assistant
+  Bot -->|"chat"| Assistant
+  Assistant --> AssistantDB
   Gateway -->|"llm hostname"| LiteLLM
+  Assistant -->|"model calls + MCP"| LiteLLM
   Coach -->|"model calls"| LiteLLM
 ```
 
@@ -99,13 +107,13 @@ Discord OAuth callback. Both public hostnames pass through NGINX.
 ### Every domain service
 
 Each box below is a separate service, with typed HTTP operations for the
-backend and MCP tools for the Coach. The four frames organize the inventory
+backend and MCP tools for the Assistant. The four frames organize the inventory
 by purpose; they are not shared processes or extra routing layers.
 
 ```mermaid
 flowchart TB
   BE["Express backend<br/>HTTP operations"]
-  Coach["pl-coach<br/>MCP tools"]
+  Coach["pl-assistant<br/>MCP tools"]
 
   subgraph Training["Training"]
     direction TB
@@ -149,7 +157,7 @@ flowchart TB
   Coach --> Training & MeetPrep & Analysis & Records
 ```
 
-The sixteen Python services share the `if-powerlifting-fns` image. Analytics
+The ten Python services share the `if-powerlifting-fns` image. Analytics
 and Rankings have their own Rust images; Analytics AI and Analytics Export
 have their own Go images. The old analytics reports sidecar has been replaced
 by these separate services.
@@ -163,7 +171,8 @@ records; it is not a central authorization hop for every operation.
 All model traffic goes through the **LiteLLM layer** at `llm.nolift.training`.
 LiteLLM holds the provider credentials (from SSM Parameter Store) and the
 ChatGPT subscription login, once. Apps only name **model aliases**
-(`pl-standard`, `pl-light`, `pl-documents`); each alias groups one or more
+(for example `pl-coordinator`, `pl-responder-fast`, `pl-strong`, `pl-web`,
+`pl-embed`, `pl-light`); each alias groups one or more
 provider deployments and can fall back to another alias. The admin UI signs in
 through Authentik, limited to the users in `litellm_admins`.
 
@@ -184,7 +193,7 @@ flowchart LR
 
   subgraph LLM["LiteLLM layer"]
     direction TB
-    Aliases["model aliases<br/>pl-standard · pl-light · pl-documents"]
+    Aliases["model aliases<br/>pl-coordinator · pl-responder-fast · pl-strong · pl-web · pl-embed · pl-light"]
     Router["router<br/>load balancing + alias fallbacks"]
     Creds["provider credentials<br/>SSM /powerlifting/litellm/*"]
     Token[("litellm-chatgpt-token PVC<br/>subscription login")]
@@ -230,9 +239,8 @@ Decisions API (`POST /v1/decisions`, model `gpt-6-luna`) so a small model
 judges whether a stored answer still holds. Valkey keeps the entries and the
 fast report pointers, Qdrant only holds the search index, and S3 holds
 finished AI reports. A cache service error never fails an operation; it is
-just a miss. Coach chat replies are separate: they keep their own exact and
-semantic reply cache in `src/services/coach/chat_cache.py`, and only domain AI
-operations go through `pl-prompt-cache-api`.
+just a miss. Assistant conversations are separate and do not use this cache;
+only domain AI operations go through `pl-prompt-cache-api`.
 
 ### Storage and media
 
@@ -403,7 +411,7 @@ erDiagram
 | `analysis-reports/{athlete}/{generation_id}.json` | S3 (powerlifting bucket) | Finished AI reports (correlation / ROI, program evaluation, block comparison and any other generation), saved after the calculations. Valkey holds the pointer |
 | `pl-valkey` | Valkey | Deterministic analysis sections, block bundles and markdown exports (30-day TTL), ranking percentiles (7-day TTL), and prompt cache keys and entries (`pl:ai-cache:*`, 30-day TTL). AI report pointers (`pl:report:{athlete}:{generation_id}`) have no TTL once complete; in-flight reservations expire after one hour. Also holds the per-Athlete `pl:analysis-version` and `pl:analysis-build` marker |
 | `pl-prompt-cache-api` | Go service | Owns the domain AI prompt cache: exact Valkey lookup, Qdrant candidates through the MCP service, one Decisions API call, store after inference |
-| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Semantic search index only. Domain AI prompts use one collection per Athlete and operation; Coach chat replies use separate collections named `chat_template_{version}` (`src/services/coach/chat_cache.py`). Each domain AI point carries an entry id and the entry itself lives in Valkey at `pl:ai-cache:entry:{entry_id}`. Losing it costs semantic hits, never answers |
+| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Semantic search index only. Domain AI prompts use one collection per Athlete and operation. Each domain AI point carries an entry id and the entry itself lives in Valkey at `pl:ai-cache:entry:{entry_id}`. Losing it costs semantic hits, never answers |
 | `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
 | `if-powerlifting-master-competitions` | DynamoDB | Master competition directory |
 | `if-powerlifting-master-federations` | DynamoDB | Federation library + qualification standards |
@@ -587,12 +595,60 @@ they are written down here.
 - Visitor (signed-out) views read cached results only and never start
   inference. A miss for a visitor stays a miss until the owner generates it.
 
+## Assistant
+
+`pl-assistant` (`src/services/assistant`, 3 replicas) is a Go service on Dapr
+durable workflows (`durabletask-go`, Dapr 1.18 control plane). Each
+conversation turn is a workflow, and every model call, tool call and proposal
+is a checkpointed activity. Workflow and actor state and the assistant's own
+schema (conversations, turns, participants, embeddings, proposals, audit,
+orchestration events) live in the pgvector-enabled CNPG cluster
+`assistant-postgres`, so a turn resumes on another replica after a crash. See
+ADR-0007.
+
+- **Conversations.** History is held server-side; a request carries only the
+  new message. The turn loads recent turns, filtered by the caller's live
+  permissions, plus pgvector snippets from other conversations, with the
+  authorization filter applied before similarity ranking. Discord keeps one
+  shared conversation per (athlete, channel) with speaker-labelled history,
+  and delivery is gated on every participant's live permissions.
+- **Orchestration.** There is no classifier gate. The coordinator model
+  answers or calls `delegate_subagent` with a complexity tier (low, medium,
+  high) and `needs_web`, then `review_delegation` and `escalate_from`. A
+  conditional security subagent can only tighten scope. Decisions are
+  recorded in `orchestration_events`.
+- **Models.** Only LiteLLM aliases are used and providers are registered once:
+  `pl-coordinator` (ChatGPT subscription, OpenRouter fallback),
+  `pl-responder-fast` and `pl-strong` (the low and higher tiers), `pl-web`
+  (OpenRouter web plugin, web research subagent only), `pl-embed`, and
+  `pl-light` (security). The concrete models are set in tfvars.
+- **Identity.** Each tool call gets a short-lived ES256 job token (person,
+  athlete, conversation, workflow, scope) verified by every domain service.
+  The LiteLLM MCP gateway forwards it, with a virtual key per consumer limited
+  by `object_permission.mcp_servers`. The mesh-header path for non-AI callers
+  is unchanged, access is default-deny, and the model never picks identity or
+  scope. See ADR-0008.
+- **Writes.** Only `propose_change`. The arguments are validated against the
+  operation's MCP input schema when proposed, stored with a structured diff
+  and the target version, then committed after explicit approval (web buttons
+  or a Discord reply). Commit re-checks the version, is idempotent, and
+  surfaces failures to the user and on the proposal card.
+- **Frontend.** `AssistantDrawer`, opened from session, goals, supplements,
+  biometrics and template entry points. It polls, shows live streamed model
+  text (reasoning and content) from a per-turn progress buffer, has Stop
+  (workflow termination), and a collapsible scrollable history.
+- **Audit.** An append-only audit table, `orchestration_events`, and LiteLLM
+  request metadata and tags.
+
 ## AI execution model
 
+This section covers domain AI jobs (analytics reports, imports); chat is the
+Assistant above.
+
 The gateway calls the typed domain operation. AI operations submit a domain job
-through the existing IF API and native Codex worker. A retained handler requests
+through the `pl-coach` `/v1/jobs` broker and native Codex worker. A retained handler requests
 inference through `services.ai`; its continuation yields a structured challenge.
-The existing native Specialist answers it, and `domain_resume` validates the
+The native Specialist answers it, and `domain_resume` validates the
 response before the handler continues. There is no separate model queue,
 OpenRouter fallback, Fission service or second Codex host.
 

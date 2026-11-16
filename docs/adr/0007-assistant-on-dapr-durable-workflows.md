@@ -32,3 +32,15 @@ gates workflow starts; stuck-PENDING workflows indicate a scheduler problem.
 Conversation state survives pod loss without PVCs or node pinning. The
 `/v1/jobs` contract consumed by analytics-ai is unchanged. Old SQLite
 conversations are not migrated.
+
+## Update (2026-11-16)
+
+Orchestration is direct: there is no classification step ahead of the
+coordinator. The coordinator model (`pl-coordinator`) answers itself or calls
+`delegate_subagent` with a complexity tier (low, medium, high) and `needs_web`,
+reviews results (`review_delegation`) and escalates (`escalate_from`); a
+conditional security subagent can only tighten. Decisions are recorded in
+`orchestration_events`. Models are LiteLLM aliases only (`pl-coordinator`,
+`pl-responder-fast`, `pl-strong`, `pl-web`, `pl-embed`, `pl-light`); concrete
+models are tfvars configuration. Retrieval applies the authorization filter
+before pgvector similarity ranking. Dapr control plane is 1.18.

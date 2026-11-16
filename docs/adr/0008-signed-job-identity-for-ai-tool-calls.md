@@ -26,3 +26,13 @@ Object-level authorization is enforced by the services independently of agent
 decisions, so a compromised or confused agent cannot widen its scope.
 Revocation applies on the next call because grants are evaluated live.
 Signing keys live in SSM; rotation invalidates outstanding jobs.
+
+## Update (2026-11-16)
+
+Tokens are ES256 and minted per tool call. The only write path is
+`propose_change`: arguments are validated against the operation's MCP input
+schema at propose time, a structured diff and target version are captured, and
+commit follows explicit approval with a version re-check and idempotency key.
+Commit failures are surfaced to the user and on the proposal card. LiteLLM
+virtual keys are per consumer and limited with `object_permission.mcp_servers`.
+Audit also includes `orchestration_events` and LiteLLM request metadata/tags.
