@@ -21,6 +21,20 @@ export interface AssistantProposal {
   diff: unknown
 }
 
+export interface AssistantActivity {
+  at: string
+  kind: string
+  model: string
+  outcome: string
+  label: string
+}
+
+export interface AssistantProgress {
+  stage: string
+  text: string
+  updated_at: string
+}
+
 export interface AssistantJob {
   id: string
   job_id: string
@@ -28,6 +42,8 @@ export interface AssistantJob {
   error?: string
   result?: { content?: string } | null
   proposals: AssistantProposal[]
+  activity?: AssistantActivity[]
+  progress?: AssistantProgress | null
 }
 
 export interface AssistantHistoryTurn {
@@ -66,6 +82,11 @@ export async function submitTurn(scope: AssistantScope, message: string, context
 
 export async function fetchJob(jobId: string): Promise<AssistantJob> {
   const response = await api.get<AssistantJob>(`/assistant/jobs/${encodeURIComponent(jobId)}`)
+  return response.data
+}
+
+export async function cancelJob(jobId: string): Promise<AssistantJob> {
+  const response = await api.post<AssistantJob>(`/assistant/jobs/${encodeURIComponent(jobId)}/cancel`, {})
   return response.data
 }
 

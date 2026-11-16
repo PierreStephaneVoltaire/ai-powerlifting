@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Drawer, Stack, Group, Paper, Text, Textarea, Button, Badge, Checkbox, Code, Loader, UnstyledButton, Alert } from '@mantine/core'
-import { ChevronDown, ChevronRight, Send } from 'lucide-react'
+import { ChevronDown, ChevronRight, Send, Square } from 'lucide-react'
 import {
   approveProposal,
+  cancelJob,
   fetchHistory,
   isTerminal,
   pollTurn,
@@ -93,11 +94,23 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const cancelled = useRef(false)
+  const scroller = useRef<HTMLDivElement>(null)
+  const pinned = useRef(true)
 
   const loadHistory = useCallback(async () => {
     try {
       const history = await fetchHistory(scope)
-      setTurns([...history.turns].reverse())
+      const ordered = [...history.turns].reverse()
+      setTurns(ordered)
+      const newest = ordered[ordered.length - 1]
+      if (newest) {
+        setExpanded(new Set([newest.id]))
+        if (!newest.content) {
+          const full = await fetchHistory(scope, newest.id)
+          const found = full.turns.find((item) => item.id === newest.id)
+          if (found?.content) setTurns((current) => current.map((item) => (item.id === newest.id ? { ...item, content: found.content } : item)))
+        }
+      }
     } catch (err) {
       setError(errorMessage(err))
     }
@@ -109,6 +122,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
     setJob(null)
     setError(null)
     setExpanded(new Set())
+    pinned.current = true
     void loadHistory()
     return () => { cancelled.current = true }
   }, [opened, loadHistory])
@@ -158,10 +172,47 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
   }
 
   const running = job !== null && !isTerminal(job.status)
+  const progressBox = useRef<HTMLDivElement>(null)
+  const progressText = job?.progress?.text || ''
+  useEffect(() => {
+    const node = progressBox.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [progressText])
+  const activity = job?.activity?.length ? job.activity[job.activity.length - 1].label : 'working'
+
+  useEffect(() => {
+    const node = scroller.current
+    if (node && pinned.current) node.scrollTop = node.scrollHeight
+  }, [turns, expanded, job])
+
+  const onScroll = () => {
+    const node = scroller.current
+    if (node) pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48
+  }
+
+  const stop = async () => {
+    if (!job) return
+    try {
+      setJob(await cancelJob(job.job_id))
+    } catch (err) {
+      setError(errorMessage(err))
+    }
+  }
+
+  const summaryOf = (turn: AssistantHistoryTurn) =>
+    turn.summary || turn.content?.reply?.split('\n').find((line) => line.trim()) || 'Turn'
 
   return (
-    <Drawer opened={opened} onClose={onClose} position="right" size="lg" title="Assistant">
-      <Stack gap="md">
+    <Drawer
+      opened={opened}
+      onClose={onClose}
+      position="right"
+      size="lg"
+      title="Assistant"
+      styles={{ content: { display: 'flex', flexDirection: 'column' }, body: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } }}
+    >
+      <Stack gap="md" style={{ flex: 1, minHeight: 0 }}>
+        <Stack gap="md" ref={scroller} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {turns.length === 0 && <Text size="sm" c="dimmed">No turns yet.</Text>}
         <Stack gap={4}>
           {turns.map((turn) => (
@@ -169,7 +220,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
               <UnstyledButton onClick={() => void toggleTurn(turn)} style={{ width: '100%' }}>
                 <Group gap="xs" wrap="nowrap">
                   {expanded.has(turn.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <Text size="sm" truncate style={{ flex: 1 }}>{turn.summary || 'Turn'}</Text>
+                  <Text size="sm" truncate style={{ flex: 1 }}>{summaryOf(turn)}</Text>
                   <Text size="xs" c="dimmed">{new Date(turn.created_at).toLocaleDateString()}</Text>
                 </Group>
               </UnstyledButton>
@@ -192,7 +243,21 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
 
         {job && (
           <Stack gap="xs">
-            {running && <Group gap="xs"><Loader size="xs" /><Text size="sm" c="dimmed">Working.</Text></Group>}
+            {running && (
+              <Group gap="xs" justify="space-between" wrap="nowrap">
+                <Group gap="xs" wrap="nowrap"><Loader size="xs" /><Text size="xs" c="dimmed">{activity}</Text></Group>
+                <Button size="compact-xs" variant="default" leftSection={<Square size={12} />} onClick={() => void stop()}>Stop</Button>
+              </Group>
+            )}
+            {running && progressText && (
+              <Stack gap={2}>
+                <Text size="xs" c="dimmed">{job.progress?.stage}</Text>
+                <div ref={progressBox} style={{ maxHeight: '12rem', overflowY: 'auto' }}>
+                  <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>{progressText}</Text>
+                </div>
+              </Stack>
+            )}
+            {job.status === 'cancelled' && <Text size="sm" c="dimmed">Stopped</Text>}
             {job.result?.content && <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{job.result.content}</Text>}
             {job.status === 'failed' && job.error && <Alert color="red">{job.error}</Alert>}
             {job.proposals.map((proposal) => (
@@ -202,6 +267,7 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
         )}
 
         {error && <Alert color="red">{error}</Alert>}
+        </Stack>
 
         <Textarea
           value={message}

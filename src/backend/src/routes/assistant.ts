@@ -79,6 +79,7 @@ router.get('/conversations/:scope/history', proxy(
 ))
 router.get('/jobs/:id/result', proxy(req => `/v1/jobs/${encodeURIComponent(req.params.id as string)}/result`, 'GET'))
 router.get('/jobs/:id', proxy(req => `/v1/jobs/${encodeURIComponent(req.params.id as string)}`, 'GET'))
+router.post('/jobs/:id/cancel', proxy(req => `/v1/jobs/${encodeURIComponent(req.params.id as string)}/cancel`, 'POST', () => ({})))
 router.post('/proposals/:id/approve', proxy(
   req => `/v1/proposals/${encodeURIComponent(req.params.id as string)}/approve`,
   'POST',

@@ -30,6 +30,43 @@ type JobView struct {
 	Artifacts      []string       `json:"artifacts"`
 	Result         *JobResult     `json:"result"`
 	Proposals      []ProposalItem `json:"proposals"`
+	Activity       []ActivityItem `json:"activity"`
+	Progress       *ProgressItem  `json:"progress"`
+}
+
+type ProgressItem struct {
+	Stage     string `json:"stage"`
+	Text      string `json:"text"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type ActivityItem struct {
+	At      string `json:"at"`
+	Kind    string `json:"kind"`
+	Model   string `json:"model"`
+	Outcome string `json:"outcome"`
+	Label   string `json:"label"`
+}
+
+const activityLimit = 8
+
+func activityLabel(event store.ActivityEvent) string {
+	switch event.Kind {
+	case "orchestrate":
+		return "planning"
+	case "delegate":
+		if event.Web {
+			return "searching the web"
+		}
+		return "working on a subtask"
+	case "escalate":
+		return "retrying on a stronger model"
+	case "review":
+		return "checking results"
+	case "security":
+		return "security check"
+	}
+	return event.Kind
 }
 
 type JobResult struct {
@@ -48,7 +85,7 @@ func (s *Server) view(r *http.Request, turn store.Turn) JobView {
 	view := JobView{
 		ID: turn.ID, JobID: turn.ID, Status: turn.Status, Kind: "conversation", ConversationID: turn.ConversationID,
 		CreatedAt: turn.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"), UpdatedAt: turn.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		Error: turn.Error, Artifacts: []string{}, Proposals: []ProposalItem{},
+		Error: turn.Error, Artifacts: []string{}, Proposals: []ProposalItem{}, Activity: []ActivityItem{},
 	}
 	if !terminal(turn.Status) {
 		if engine, err := s.Engine.Status(r.Context(), turn.WorkflowID); err == nil {
@@ -63,6 +100,16 @@ func (s *Server) view(r *http.Request, turn store.Turn) JobView {
 					turn = fresh
 					view.Status, view.Error = turn.Status, turn.Error
 				}
+			}
+		}
+	}
+	if !terminal(view.Status) {
+		if progress, err := s.Store.Progress(r.Context(), turn.ID); err == nil && progress != nil {
+			view.Progress = &ProgressItem{Stage: progress.Stage, Text: progress.Text, UpdatedAt: progress.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z")}
+		}
+		if events, err := s.Store.RecentActivity(r.Context(), turn.PersonPK, turn.WorkflowID, activityLimit); err == nil {
+			for _, event := range events {
+				view.Activity = append(view.Activity, ActivityItem{At: event.At.UTC().Format("2006-01-02T15:04:05Z"), Kind: event.Kind, Model: event.Model, Outcome: event.Outcome, Label: activityLabel(event)})
 			}
 		}
 	}

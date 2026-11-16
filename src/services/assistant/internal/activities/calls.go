@@ -15,7 +15,14 @@ func (d *Deps) ModelCall(ctx context.Context, in ModelCallInput) (llm.ChatRespon
 		return llm.ChatResponse{}, err
 	}
 	defer release()
-	return d.LLM.Chat(ctx, llm.ChatRequest{Model: in.Model, Meta: in.Meta, Messages: in.Messages, Tools: in.Tools, MaxTokens: in.MaxTokens})
+	request := llm.ChatRequest{Model: in.Model, Meta: in.Meta, Messages: in.Messages, Tools: in.Tools, MaxTokens: in.MaxTokens}
+	if in.Meta.TurnID == "" || d.Store == nil {
+		return d.LLM.Chat(ctx, request)
+	}
+	stream := newProgressStream(ctx, d.Store, in.Meta.TurnID, in.Meta.Role+" · "+in.Model)
+	response, err := d.LLM.ChatStream(ctx, request, stream.Add)
+	stream.Flush()
+	return response, err
 }
 
 func (d *Deps) ListTools(ctx context.Context, in ListToolsInput) (ListToolsOutput, error) {
