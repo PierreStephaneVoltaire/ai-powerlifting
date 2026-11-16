@@ -125,7 +125,7 @@ resource "kubernetes_job_v1" "litellm_keys" {
 
         container {
           name    = "register"
-          image   = "alpine/k8s:1.34.5"
+          image   = "public.ecr.aws/aws-cli/aws-cli:2.37.0"
           command = ["/bin/sh", "-c"]
           args    = [local.litellm_key_registration_script]
 
