@@ -39,7 +39,11 @@ func historyMessages(turn store.HistoryTurn) []llm.Message {
 	if request == "" {
 		return nil
 	}
-	user := llm.Message{Role: "user", Content: agent.Truncate(request, historyMessageCap)}
+	content := agent.Truncate(request, historyMessageCap)
+	if turn.Shared {
+		content = "[from " + turn.PersonPK + "] " + content
+	}
+	user := llm.Message{Role: "user", Content: content}
 	switch turn.Status {
 	case "succeeded":
 		reply := strings.TrimSpace(turn.Reply)
@@ -64,7 +68,9 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 	var kept [][]llm.Message
 	var permissions []string
 	size := 0
+	shared := false
 	for _, turn := range turns {
+		shared = shared || turn.Shared
 		pair := historyMessages(turn)
 		if len(pair) == 0 {
 			continue
@@ -82,5 +88,5 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 	for _, pair := range kept {
 		messages = append(messages, pair...)
 	}
-	return HistoryOutput{Messages: messages, Turns: len(kept), Permissions: permissions}, nil
+	return HistoryOutput{Messages: messages, Turns: len(kept), Permissions: permissions, Shared: shared}, nil
 }

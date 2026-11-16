@@ -97,6 +97,7 @@ type HistoryOutput struct {
 	Messages    []llm.Message `json:"messages"`
 	Turns       int           `json:"turns"`
 	Permissions []string      `json:"permissions"`
+	Shared      bool          `json:"shared"`
 }
 
 type ListToolsInput struct {

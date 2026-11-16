@@ -123,10 +123,14 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 	w.record(ctx, input.Person, input.ConversationID, "orchestrate", w.Config.CoordinatorModel, "start", map[string]any{
 		"profile": profile.Name, "signals": guard.Signals, "history_gap": historyGap, "history_turns": history.Turns, "snippets": len(snippets), "security_floor": string(state.Floor),
 	})
+	sharedWith := ""
+	if historyErr == nil && history.Shared {
+		sharedWith = resolved.Identity.Person
+	}
 	result, err := w.runAgent(ctx, run{
 		Profile: profile, Orchestrator: true, Model: w.Config.CoordinatorModel, Identity: resolved.Identity, ConversationID: input.ConversationID,
 		Context: input.Context, Message: message, Messages: append(slices.Clone(history.Messages), input.Messages...), Snippets: snippets,
-		Signals: guard.Signals, HistoryGap: historyGap, HistoryReference: guard.HistoryReference, State: state,
+		Signals: guard.Signals, HistoryGap: historyGap, HistoryReference: guard.HistoryReference, SharedWith: sharedWith, State: state,
 	})
 	if err != nil {
 		return finish(TurnOutput{Status: statusFailed, Error: "assistant failed: " + err.Error(), Proposals: result.Proposals}, result.Used)

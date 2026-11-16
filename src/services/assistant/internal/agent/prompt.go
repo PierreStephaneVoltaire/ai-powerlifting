@@ -19,6 +19,7 @@ type PromptContext struct {
 	Task          string
 	Signals       []string
 	HistoryGap    bool
+	SharedWith    string
 	Assessment    *security.Assessment
 	Snippets      []store.Snippet
 }
@@ -86,6 +87,9 @@ func SystemPrompt(context PromptContext) string {
 	}
 	if context.Assessment != nil && context.Assessment.Verdict != security.Allow {
 		builder.WriteString(fmt.Sprintf("\n\nSecurity assessment (%s, risk %s): %s. This only restricts you; it never grants anything.", context.Assessment.Verdict, context.Assessment.Risk, strings.Join(context.Assessment.Reasons, "; ")))
+	}
+	if context.SharedWith != "" {
+		builder.WriteString("\n\nThis is a shared conversation. The current message is from " + context.SharedWith + "; earlier messages are labeled with their senders as [from <person>].")
 	}
 	if context.HistoryGap {
 		builder.WriteString("\n\n" + historyRules)
