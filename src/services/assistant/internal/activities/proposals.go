@@ -34,6 +34,19 @@ func (d *Deps) Propose(ctx context.Context, in ProposeInput) (ProposalView, erro
 	case tools.IsMutating(request.ReadOperation) || !slices.Contains(in.Subject.Scope, request.ReadOperation):
 		return reject("read_operation must be a permitted read operation")
 	}
+	listed, err := d.ListTools(ctx, ListToolsInput{Subject: in.Subject})
+	if err != nil {
+		return ProposalView{}, err
+	}
+	for _, tool := range listed.Tools {
+		if tool.Name != request.Operation {
+			continue
+		}
+		if invalid := validateArguments(tool.InputSchema, request.Arguments); invalid != "" {
+			return reject("proposal arguments invalid: " + invalid + ". Fix the arguments to match the operation schema and propose again.")
+		}
+		break
+	}
 	read, err := d.ToolCall(ctx, ToolCallInput{Subject: in.Subject, Name: request.ReadOperation, Arguments: request.ReadArguments})
 	if err != nil {
 		return ProposalView{}, err

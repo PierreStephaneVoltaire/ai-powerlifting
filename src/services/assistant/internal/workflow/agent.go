@@ -95,10 +95,11 @@ type run struct {
 }
 
 type outcome struct {
-	Reply     string
-	Used      []string
-	Proposals []string
-	Blocked   bool
+	Reply         string
+	Used          []string
+	Proposals     []string
+	Blocked       bool
+	CommitFailure string
 }
 
 func (p run) role() string {
@@ -153,7 +154,7 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 	sequence := 0
 	for {
 		if err := state.Exhausted(limits); err != nil {
-			result.Reply = lastAssistantText(state.Messages, budgetText)
+			result.Reply = withCommitFailure(lastAssistantText(state.Messages, budgetText), result.CommitFailure)
 			return result, nil
 		}
 		response, err := call[llm.ChatResponse](ctx, activities.NameModelCall, activities.ModelCallInput{Model: params.Model, Meta: meta, Messages: state.Messages, Tools: defs}, modelRetry)
@@ -163,6 +164,9 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 		state.Record(response)
 		if len(response.ToolCalls) == 0 {
 			result.Reply = response.Content
+			if strings.TrimSpace(result.Reply) == "" {
+				result.Reply = withCommitFailure("", result.CommitFailure)
+			}
 			return result, nil
 		}
 		for _, raw := range response.ToolCalls {
@@ -176,6 +180,17 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 			state.AddToolResult(raw.ID, text)
 		}
 	}
+}
+
+func withCommitFailure(reply, failure string) string {
+	if failure == "" {
+		return reply
+	}
+	notice := "The change was approved, but the write failed and nothing was changed: " + agent.Truncate(failure, 600)
+	if strings.TrimSpace(reply) == "" {
+		return notice
+	}
+	return reply + "\n\n" + notice
 }
 
 func lastAssistantText(messages []llm.Message, fallback string) string {
@@ -385,6 +400,9 @@ func (w *Workflows) propose(ctx *workflow.WorkflowContext, params run, subject a
 	}
 	if committed.Outcome == "committed" {
 		result.Used = append(result.Used, request.Operation)
+		result.CommitFailure = ""
+	} else {
+		result.CommitFailure = committed.Text
 	}
 	encoded, _ := json.Marshal(committed)
 	return string(encoded)

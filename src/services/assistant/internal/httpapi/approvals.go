@@ -93,9 +93,7 @@ func (s *Server) decide(approve bool) http.HandlerFunc {
 			return
 		}
 		fresh, _ := s.Store.Proposal(r.Context(), proposal.ID)
-		writeJSON(w, http.StatusOK, ProposalItem{
-			ID: fresh.ID, Operation: fresh.Operation, Summary: fresh.Summary, TargetID: fresh.TargetID, Destructive: fresh.Destructive, State: fresh.State, Diff: fresh.Diff,
-		})
+		writeJSON(w, http.StatusOK, proposalItem(fresh))
 	}
 }
 

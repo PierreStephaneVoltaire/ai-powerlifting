@@ -16,6 +16,28 @@ type ProposalItem struct {
 	Destructive bool            `json:"destructive"`
 	State       store.State     `json:"state"`
 	Diff        json.RawMessage `json:"diff"`
+	CommitError string          `json:"commit_error,omitempty"`
+}
+
+func proposalItem(proposal store.Proposal) ProposalItem {
+	item := ProposalItem{
+		ID: proposal.ID, Operation: proposal.Operation, Summary: proposal.Summary, TargetID: proposal.TargetID,
+		Destructive: proposal.Destructive, State: proposal.State, Diff: proposal.Diff,
+	}
+	if proposal.State == store.StateFailed || proposal.State == store.StateStale {
+		item.CommitError = commitErrorText(proposal.CommitResult)
+	}
+	return item
+}
+
+func commitErrorText(result json.RawMessage) string {
+	var parsed struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(result, &parsed) == nil && parsed.Text != "" {
+		return parsed.Text
+	}
+	return string(result)
 }
 
 type JobView struct {
@@ -118,10 +140,7 @@ func (s *Server) view(r *http.Request, turn store.Turn) JobView {
 	}
 	if proposals, err := s.Store.ProposalsForTurn(r.Context(), turn.ID); err == nil {
 		for _, proposal := range proposals {
-			view.Proposals = append(view.Proposals, ProposalItem{
-				ID: proposal.ID, Operation: proposal.Operation, Summary: proposal.Summary, TargetID: proposal.TargetID,
-				Destructive: proposal.Destructive, State: proposal.State, Diff: proposal.Diff,
-			})
+			view.Proposals = append(view.Proposals, proposalItem(proposal))
 		}
 	}
 	return view

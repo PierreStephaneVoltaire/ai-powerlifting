@@ -19,6 +19,7 @@ export interface AssistantProposal {
   destructive: boolean
   state: ProposalState
   diff: unknown
+  commit_error?: string
 }
 
 export interface AssistantActivity {

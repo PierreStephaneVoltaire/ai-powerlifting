@@ -36,6 +36,34 @@ function formatDiff(diff: unknown): string {
   return JSON.stringify(diff, null, 2)
 }
 
+function stateLabel(state: string) {
+  switch (state) {
+    case 'committed':
+    case 'applied':
+      return 'Applied'
+    case 'rejected':
+      return 'Rejected'
+    case 'failed':
+    case 'stale':
+      return 'Failed'
+  }
+  return state
+}
+
+function stateColor(state: string) {
+  switch (state) {
+    case 'pending':
+      return 'yellow'
+    case 'committed':
+    case 'applied':
+      return 'green'
+    case 'failed':
+    case 'stale':
+      return 'red'
+  }
+  return 'gray'
+}
+
 function ProposalCard({ proposal, readOnly, onChange }: { proposal: AssistantProposal; readOnly?: boolean; onChange: (next: AssistantProposal) => void }) {
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -61,7 +89,7 @@ function ProposalCard({ proposal, readOnly, onChange }: { proposal: AssistantPro
           <Text size="sm" fw={600}>{proposal.summary || proposal.operation}</Text>
           <Group gap={4} wrap="nowrap">
             {proposal.destructive && <Badge color="red" variant="light">Destructive</Badge>}
-            <Badge color={pending ? 'yellow' : proposal.state === 'rejected' ? 'gray' : 'green'} variant="light">{proposal.state}</Badge>
+            <Badge color={stateColor(proposal.state)} variant="light">{stateLabel(proposal.state)}</Badge>
           </Group>
         </Group>
         <Code block style={{ ...wrapText, maxHeight: '40dvh', overflowY: 'auto', overflowX: 'hidden' }}>{formatDiff(proposal.diff)}</Code>
@@ -71,6 +99,12 @@ function ProposalCard({ proposal, readOnly, onChange }: { proposal: AssistantPro
             onChange={(event) => setConfirmed(event.currentTarget.checked)}
             label={`Delete target ${proposal.target_id}.`}
           />
+        )}
+        {(proposal.state === 'failed' || proposal.state === 'stale') && (
+          <Stack gap={2}>
+            <Text size="sm" fw={600} c="red">Approved, but the write failed</Text>
+            {proposal.commit_error && <Text size="xs" c="red" style={wrapText}>{proposal.commit_error}</Text>}
+          </Stack>
         )}
         {error && <Text size="xs" c="red">{error}</Text>}
         {pending && (
