@@ -25,7 +25,7 @@ type progressStream struct {
 
 func newProgressStream(ctx context.Context, s *store.Store, turnID, stage string) *progressStream {
 	stream := &progressStream{ctx: ctx, store: s, turnID: turnID, stage: stage}
-	_ = s.SetProgress(ctx, turnID, stage, "")
+	stream.text.WriteString("\n\n" + stage + "\n")
 	stream.last = time.Now()
 	return stream
 }
@@ -42,7 +42,10 @@ func (p *progressStream) Flush() {
 	if p.pending == 0 {
 		return
 	}
-	_ = p.store.SetProgress(p.ctx, p.turnID, p.stage, p.text.String())
+	if err := p.store.AppendProgress(p.ctx, p.turnID, p.stage, p.text.String()); err != nil {
+		return
+	}
+	p.text.Reset()
 	p.pending = 0
 	p.last = time.Now()
 }

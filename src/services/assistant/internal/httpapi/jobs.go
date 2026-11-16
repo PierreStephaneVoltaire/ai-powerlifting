@@ -103,6 +103,24 @@ func terminal(status string) bool {
 	return false
 }
 
+func (s *Server) progress(r *http.Request, turnID string) *ProgressItem {
+	progress, err := s.Store.Progress(r.Context(), turnID)
+	if err != nil || progress == nil {
+		return nil
+	}
+	return &ProgressItem{Stage: progress.Stage, Text: progress.Text, UpdatedAt: progress.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z")}
+}
+
+func (s *Server) proposals(r *http.Request, turnID string) []ProposalItem {
+	items := []ProposalItem{}
+	if proposals, err := s.Store.ProposalsForTurn(r.Context(), turnID); err == nil {
+		for _, proposal := range proposals {
+			items = append(items, proposalItem(proposal))
+		}
+	}
+	return items
+}
+
 func (s *Server) view(r *http.Request, turn store.Turn) JobView {
 	view := JobView{
 		ID: turn.ID, JobID: turn.ID, Status: turn.Status, Kind: "conversation", ConversationID: turn.ConversationID,
@@ -126,23 +144,17 @@ func (s *Server) view(r *http.Request, turn store.Turn) JobView {
 		}
 	}
 	if !terminal(view.Status) {
-		if progress, err := s.Store.Progress(r.Context(), turn.ID); err == nil && progress != nil {
-			view.Progress = &ProgressItem{Stage: progress.Stage, Text: progress.Text, UpdatedAt: progress.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z")}
-		}
 		if events, err := s.Store.RecentActivity(r.Context(), turn.PersonPK, turn.WorkflowID, activityLimit); err == nil {
 			for _, event := range events {
 				view.Activity = append(view.Activity, ActivityItem{At: event.At.UTC().Format("2006-01-02T15:04:05Z"), Kind: event.Kind, Model: event.Model, Outcome: event.Outcome, Label: activityLabel(event)})
 			}
 		}
 	}
+	view.Progress = s.progress(r, turn.ID)
 	if turn.Status == "succeeded" || (turn.Status == "failed" && turn.Reply != "") {
 		view.Result = &JobResult{Content: turn.Reply}
 	}
-	if proposals, err := s.Store.ProposalsForTurn(r.Context(), turn.ID); err == nil {
-		for _, proposal := range proposals {
-			view.Proposals = append(view.Proposals, proposalItem(proposal))
-		}
-	}
+	view.Proposals = s.proposals(r, turn.ID)
 	return view
 }
 

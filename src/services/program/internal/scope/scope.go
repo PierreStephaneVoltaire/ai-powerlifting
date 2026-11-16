@@ -200,7 +200,7 @@ func RecordBlock(record any, field string, program map[string]any) string {
 		}
 		return stamped
 	}
-	if field == "supplement_phases" {
+	if field == "supplement_phases" || field == "supplements" {
 		if recent := mostRecentCompleted(program); recent != "" {
 			return recent
 		}

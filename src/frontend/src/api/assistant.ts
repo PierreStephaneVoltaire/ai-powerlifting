@@ -54,7 +54,7 @@ export interface AssistantHistoryTurn {
   created_at: string
   summary: string
   error?: string
-  content?: { request: string; reply: string }
+  content?: { request: string; reply: string; progress?: AssistantProgress; proposals?: AssistantProposal[] }
 }
 
 export interface AssistantHistory {

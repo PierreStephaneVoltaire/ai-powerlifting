@@ -34,6 +34,11 @@ func (d *Deps) Propose(ctx context.Context, in ProposeInput) (ProposalView, erro
 	case tools.IsMutating(request.ReadOperation) || !slices.Contains(in.Subject.Scope, request.ReadOperation):
 		return reject("read_operation must be a permitted read operation")
 	}
+	if request.Operation == "supplement_phases_update" {
+		if invalid := validateSupplementCompounds(request.Arguments); invalid != "" {
+			return reject(invalid)
+		}
+	}
 	listed, err := d.ListTools(ctx, ListToolsInput{Subject: in.Subject})
 	if err != nil {
 		return ProposalView{}, err

@@ -107,6 +107,14 @@ counted within a block, not on the calendar.
 with a single training intent (e.g. hypertrophy, strength, peaking). A Block
 contains one or more Phases.
 
+**Supplement Phase** — A supplement protocol for a week range within one Block.
+Each item names an active ingredient or compound and its total daily amount
+across all products used in that phase. Product names, serving counts and each
+product's contribution belong in source notes. Combination products are broken
+down into their verified compounds; unknown quantities are never invented.
+Past-block protocols are read-only and are not carried into the current Block
+unless the Athlete explicitly requests it.
+
 **Session** — A single training day within a Program. A Session belongs to a
 Block and a Phase, and carries the planned exercises (the intent) and the logged
 exercises (what actually happened), plus wellness, RPE, notes, and video

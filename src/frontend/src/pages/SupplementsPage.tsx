@@ -10,17 +10,22 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useAssistant } from '@/components/assistant/useAssistant'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 import { currentBlockId, recordBlock } from '@/utils/blockScope'
+import { invalidateDomain } from '@/api/cache'
 
 export default function SupplementsPage() {
-  const { readOnly } = useAuth()
-  const assistant = useAssistant('supplements', {}, readOnly)
-  const { program, updateSupplementPhases } = useProgramStore()
+  const { readOnly: accessReadOnly } = useAuth()
+  const { program, version, loadProgram, updateSupplementPhases } = useProgramStore()
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
   const [hasChanges, setHasChanges] = useState(false)
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
   const [block, setBlock] = useState(() => currentBlockId(program))
+  const readOnly = accessReadOnly || block !== currentBlockId(program)
+  const assistant = useAssistant('supplements', {}, readOnly || hasChanges, async () => {
+    await invalidateDomain(`program:${version}`)
+    await loadProgram(version)
+  })
 
   const availableBlocks = useMemo(() => {
     const ids = (program?.meta?.blocks ?? []).map((item) => item.id).filter(Boolean)
@@ -46,12 +51,13 @@ export default function SupplementsPage() {
   }, [program?.meta?.current_block_id])
 
   useEffect(() => {
+    if (hasChanges) return
     if (program?.supplement_phases) {
       setPhases(program.supplement_phases)
     } else {
       setPhases([])
     }
-  }, [program])
+  }, [program, hasChanges])
 
   useEffect(() => {
     if (filteredPhases.length === 0) {
@@ -189,6 +195,7 @@ export default function SupplementsPage() {
         <Group gap="sm">
           {assistant.button}
           <Select
+            aria-label="Training block"
             value={block}
             onChange={(v) => setBlock(v ?? currentBlockId(program))}
             data={availableBlocks.map((b) => ({
@@ -318,9 +325,9 @@ export default function SupplementsPage() {
                     </div>
 
                     <div className="if-supp-table-header">
-                      <span className="if-supp-table-label">Name</span>
-                      <span className="if-supp-table-label">Dose</span>
-                      <span className="if-supp-table-label">Notes</span>
+                      <span className="if-supp-table-label">Compound</span>
+                      <span className="if-supp-table-label">Daily total</span>
+                      <span className="if-supp-table-label">Sources / notes</span>
                       <Button
                         variant="default"
                         size="compact-xs"
@@ -340,7 +347,7 @@ export default function SupplementsPage() {
                           onChange={(e) =>
                             updateItem(originalIndex, itemIndex, { name: e.currentTarget.value })
                           }
-                          placeholder="Supplement name"
+                          placeholder="Compound name"
                           size="xs"
                           disabled={readOnly}
                         />

@@ -261,18 +261,3 @@ func dietNotesUpdate(d *Deps, r *Request) (any, error) {
 		return map[string]any{"success": true, "diet_notes": scope.Program(program, "")["diet_notes"]}, nil
 	})
 }
-
-func supplementPhasesUpdate(d *Deps, r *Request) (any, error) {
-	phases, ok := r.Args["phases"].([]any)
-	if !ok {
-		return nil, validation("phases must be a list")
-	}
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
-		program["supplement_phases"] = replaceActiveRecords(program, "supplement_phases", phases)
-		scoped := scope.Program(program, "")
-		return map[string]any{
-			"supplements":       pyval.DeepCopy(listOrEmpty(scoped["supplements"])),
-			"supplement_phases": pyval.DeepCopy(listOrEmpty(scoped["supplement_phases"])),
-		}, nil
-	})
-}

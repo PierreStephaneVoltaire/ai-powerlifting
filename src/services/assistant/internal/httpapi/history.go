@@ -12,8 +12,10 @@ import (
 )
 
 type HistoryContent struct {
-	Request string `json:"request"`
-	Reply   string `json:"reply"`
+	Request   string         `json:"request"`
+	Reply     string         `json:"reply"`
+	Progress  *ProgressItem  `json:"progress,omitempty"`
+	Proposals []ProposalItem `json:"proposals"`
 }
 
 type HistoryItem struct {
@@ -76,6 +78,8 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 		item := HistoryItem{ID: turn.ID, PersonPK: turn.PersonPK, Status: turn.Status, CreatedAt: turn.CreatedAt, Summary: turn.Summary, Error: turn.Error}
 		if expandAll || slices.Contains(expand, turn.ID) {
 			item.Content = &HistoryContent{Request: lastUserText(turn.Request), Reply: turn.Reply}
+			item.Content.Progress = s.progress(r, turn.ID)
+			item.Content.Proposals = s.proposals(r, turn.ID)
 		}
 		items = append(items, item)
 	}

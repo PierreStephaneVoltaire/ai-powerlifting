@@ -5,6 +5,7 @@ import {
   approveProposal,
   cancelJob,
   fetchHistory,
+  fetchJob,
   isTerminal,
   pollTurn,
   rejectProposal,
@@ -15,6 +16,7 @@ import {
   type AssistantProposal,
   type AssistantScope,
 } from '@/api/assistant'
+import AssistantProgress from './AssistantProgress'
 
 interface AssistantDrawerProps {
   opened: boolean
@@ -23,6 +25,7 @@ interface AssistantDrawerProps {
   context: AssistantContext
   readOnly?: boolean
   conversationId?: string
+  onApplied?: () => Promise<void>
 }
 
 const wrapText = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' } as const
@@ -123,32 +126,32 @@ function ProposalCard({ proposal, readOnly, onChange }: { proposal: AssistantPro
   )
 }
 
-export default function AssistantDrawer({ opened, onClose, scope, context, readOnly, conversationId }: AssistantDrawerProps) {
+export default function AssistantDrawer({ opened, onClose, scope, context, readOnly, conversationId, onApplied }: AssistantDrawerProps) {
   const [turns, setTurns] = useState<AssistantHistoryTurn[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState('')
   const [job, setJob] = useState<AssistantJob | null>(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [progressOpen, setProgressOpen] = useState(true)
-  const cancelled = useRef(false)
+  const applied = useRef(new Set<string>())
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (expand?: string) => {
     try {
-      const history = await fetchHistory(scope, undefined, conversationId)
+      const history = await fetchHistory(scope, expand, conversationId)
       const ordered = [...history.turns].reverse()
-      setTurns(ordered)
+      setTurns((current) => ordered.map((turn) => ({ ...turn, content: turn.content || current.find((item) => item.id === turn.id)?.content })))
       const newest = ordered[ordered.length - 1]
       if (newest) {
-        setExpanded(new Set([newest.id]))
+        setExpanded((current) => new Set([...current, newest.id]))
         if (!newest.content) {
           const full = await fetchHistory(scope, newest.id, conversationId)
           const found = full.turns.find((item) => item.id === newest.id)
           if (found?.content) setTurns((current) => current.map((item) => (item.id === newest.id ? { ...item, content: found.content } : item)))
         }
       }
+      return ordered
     } catch (err) {
       setError(errorMessage(err))
     }
@@ -156,14 +159,38 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
 
   useEffect(() => {
     if (!opened) return
-    cancelled.current = false
     setJob(null)
+    setTurns([])
     setError(null)
     setExpanded(new Set())
     pinned.current = true
-    void loadHistory()
-    return () => { cancelled.current = true }
+    let cancelled = false
+    void loadHistory().then(async (history) => {
+      const newest = history?.at(-1)
+      if (newest && !conversationId) {
+        const active = await fetchJob(newest.id)
+        if (!cancelled) setJob(active)
+      }
+    }).catch((err) => { if (!cancelled) setError(errorMessage(err)) })
+    return () => { cancelled = true }
   }, [opened, loadHistory])
+
+  useEffect(() => {
+    if (!opened || !job || isTerminal(job.status)) return
+    let cancelled = false
+    void pollTurn(job.job_id, (next) => { if (!cancelled) setJob(next) }, () => cancelled)
+      .then(async () => { if (!cancelled) await loadHistory(job.job_id) })
+      .catch((err) => { if (!cancelled) setError(errorMessage(err)) })
+    return () => { cancelled = true }
+  }, [opened, job?.job_id, loadHistory])
+
+  useEffect(() => {
+    if (!onApplied) return
+    const committed = job?.proposals.filter((proposal) => ['committed', 'applied'].includes(proposal.state) && !applied.current.has(proposal.id)) || []
+    if (!committed.length) return
+    committed.forEach((proposal) => applied.current.add(proposal.id))
+    void onApplied().catch((err) => setError(`Change applied, but refreshing the page failed: ${errorMessage(err)}`))
+  }, [job, onApplied])
 
   const toggleTurn = async (turn: AssistantHistoryTurn) => {
     const next = new Set(expanded)
@@ -193,11 +220,6 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
       const submitted = await submitTurn(scope, text, context)
       setMessage('')
       setJob(submitted)
-      const finished = await pollTurn(submitted.job_id, setJob, () => cancelled.current)
-      if (!cancelled.current) {
-        setJob(finished)
-        await loadHistory()
-      }
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -205,17 +227,14 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
     }
   }
 
-  const updateProposal = (next: AssistantProposal) => {
+  const updateProposal = (next: AssistantProposal, turnId?: string) => {
     setJob((current) => (current ? { ...current, proposals: current.proposals.map((item) => (item.id === next.id ? next : item)) } : current))
+    setTurns((current) => current.map((turn) => turn.content ? { ...turn, content: { ...turn.content, proposals: turn.content.proposals?.map((item) => item.id === next.id ? next : item) } } : turn))
+    if (turnId && turnId !== job?.job_id) void fetchJob(turnId).then(setJob).catch((err) => setError(errorMessage(err)))
   }
 
   const running = job !== null && !isTerminal(job.status)
-  const progressBox = useRef<HTMLDivElement>(null)
-  const progressText = job?.progress?.text || ''
-  useEffect(() => {
-    const node = progressBox.current
-    if (node) node.scrollTop = node.scrollHeight
-  }, [progressText, progressOpen])
+  const jobInHistory = turns.some((turn) => turn.id === job?.job_id && isTerminal(turn.status) && turn.content)
   const activity = job?.activity?.length ? job.activity[job.activity.length - 1].label : 'working'
 
   useEffect(() => {
@@ -267,7 +286,11 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
                   {turn.content ? (
                     <>
                       <Text size="sm" fw={600}>{turn.content.request}</Text>
+                      {(turn.id !== job?.job_id || jobInHistory) && <AssistantProgress progress={turn.content.progress} />}
                       <Text size="sm" style={wrapText}>{turn.content.reply}</Text>
+                      {(turn.id !== job?.job_id || jobInHistory) && turn.content.proposals?.map((proposal) => (
+                        <ProposalCard key={proposal.id} proposal={proposal} readOnly={readOnly} onChange={(next) => updateProposal(next, turn.id)} />
+                      ))}
                     </>
                   ) : (
                     <Loader size="xs" />
@@ -279,24 +302,13 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
           ))}
         </Stack>
 
-        {job && (
+        {job && !jobInHistory && (
           <Stack gap="xs">
+            <AssistantProgress progress={job.progress} running={running} activity={activity} />
             {running && (
               <Group gap="xs" justify="space-between" wrap="nowrap">
-                <UnstyledButton onClick={() => setProgressOpen((open) => !open)} style={{ flex: 1, minWidth: 0 }}>
-                  <Group gap="xs" wrap="nowrap">
-                    {progressOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <Loader size="xs" />
-                    <Text size="xs" c="dimmed" truncate>{job.progress?.stage || activity}</Text>
-                  </Group>
-                </UnstyledButton>
                 <Button size="compact-xs" variant="default" leftSection={<Square size={12} />} onClick={() => void stop()}>Stop</Button>
               </Group>
-            )}
-            {running && progressOpen && progressText && (
-              <div ref={progressBox} style={{ maxHeight: '35dvh', overflowY: 'auto', overflowX: 'hidden' }}>
-                <Text size="sm" c="dimmed" style={wrapText}>{progressText}</Text>
-              </div>
             )}
             {job.status === 'cancelled' && <Text size="sm" c="dimmed">Stopped</Text>}
             {job.result?.content && <Text size="sm" style={wrapText}>{job.result.content}</Text>}

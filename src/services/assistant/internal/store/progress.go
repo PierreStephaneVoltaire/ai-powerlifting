@@ -8,20 +8,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const progressTextLimit = 6000
-
 type Progress struct {
 	Stage     string
 	Text      string
 	UpdatedAt time.Time
 }
 
-func (s *Store) SetProgress(ctx context.Context, turnID, stage, text string) error {
-	if len(text) > progressTextLimit {
-		text = text[len(text)-progressTextLimit:]
-	}
+func (s *Store) AppendProgress(ctx context.Context, turnID, stage, text string) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO turn_progress (turn_id, stage, text, updated_at) VALUES ($1,$2,$3,now())
-		ON CONFLICT (turn_id) DO UPDATE SET stage=EXCLUDED.stage, text=EXCLUDED.text, updated_at=now()`, turnID, stage, text)
+		ON CONFLICT (turn_id) DO UPDATE SET stage=EXCLUDED.stage, text=turn_progress.text || EXCLUDED.text, updated_at=now()`, turnID, stage, text)
 	return err
 }
 
@@ -35,9 +30,4 @@ func (s *Store) Progress(ctx context.Context, turnID string) (*Progress, error) 
 		return nil, err
 	}
 	return &progress, nil
-}
-
-func (s *Store) ClearProgress(ctx context.Context, turnID string) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM turn_progress WHERE turn_id=$1`, turnID)
-	return err
 }

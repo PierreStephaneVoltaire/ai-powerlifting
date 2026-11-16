@@ -9,6 +9,7 @@ import (
 	"powerlifting/assistant/internal/agent"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/store"
+	"powerlifting/assistant/internal/tools"
 	"powerlifting/assistant/internal/visibility"
 )
 
@@ -54,6 +55,10 @@ func historyMessages(turn store.HistoryTurn, replyCap int) []llm.Message {
 		return []llm.Message{user, {Role: "assistant", Content: agent.Truncate(reply, replyCap)}}
 	case "failed":
 		return []llm.Message{user, {Role: "assistant", Content: historyFailedReply}}
+	case "queued", "running":
+		return []llm.Message{user, {Role: "assistant", Content: "[This request is unfinished; proposals may still be awaiting approval. Do not assume any change was applied.]"}}
+	case "cancelled":
+		return []llm.Message{user, {Role: "assistant", Content: "[This request was stopped. Read the current state before retrying any changes.]"}}
 	}
 	return nil
 }
@@ -76,6 +81,17 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 		pair := historyMessages(turn, replyCap)
 		if len(pair) == 0 {
 			continue
+		}
+		proposals, err := d.Store.ProposalsForTurn(ctx, turn.ID)
+		if err != nil {
+			return HistoryOutput{}, err
+		}
+		for _, proposal := range proposals {
+			if !in.Identity.Has(tools.Permission(proposal.Operation)) {
+				continue
+			}
+			pair[1].Content += "\n\nEarlier proposal (context only; read the current state before retrying): " + proposal.Operation + ", state=" + string(proposal.State) + ", arguments=" + string(proposal.Arguments)
+			permissions = visibility.Union(permissions, []string{tools.Permission(proposal.Operation)})
 		}
 		cost := len(pair[0].Content) + len(pair[1].Content)
 		if size+cost > historyTotalCap && len(kept) > 0 {

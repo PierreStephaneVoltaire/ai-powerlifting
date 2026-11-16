@@ -146,6 +146,8 @@ func getSupplements(d *Deps, r *Request) (any, error) {
 	}
 	scoped := scope.Program(loaded.Program, r.String("block_id"))
 	return map[string]any{
+		"block_id":          scope.Resolve(loaded.Program, r.String("block_id")),
+		"current_block_id":  scope.CurrentBlockID(loaded.Program),
 		"supplements":       listOrEmpty(scoped["supplements"]),
 		"supplement_phases": listOrEmpty(scoped["supplement_phases"]),
 	}, nil

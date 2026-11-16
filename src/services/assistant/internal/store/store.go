@@ -166,9 +166,6 @@ func (s *Store) CompleteTurn(ctx context.Context, done Completion) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE turns SET status=$2, reply=$3, summary=$4, error=$5, required_permissions=$6, updated_at=now()
 		WHERE id=$1 AND status NOT IN ('cancelled')`,
 		done.TurnID, done.Status, done.Reply, done.Summary, done.Error, permissions)
-	if err == nil {
-		_ = s.ClearProgress(ctx, done.TurnID)
-	}
 	return err
 }
 
@@ -254,8 +251,5 @@ func (s *Store) PruneRateCounters(ctx context.Context, before time.Time) error {
 
 func (s *Store) CancelTurn(ctx context.Context, id string) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE turns SET status='cancelled', updated_at=now() WHERE id=$1 AND status IN ('queued','running')`, id)
-	if err == nil {
-		_ = s.ClearProgress(ctx, id)
-	}
 	return err
 }
