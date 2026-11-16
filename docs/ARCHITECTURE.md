@@ -597,48 +597,166 @@ they are written down here.
 
 ## Assistant
 
-`pl-assistant` (`src/services/assistant`, 3 replicas) is a Go service on Dapr
-durable workflows (`durabletask-go`, Dapr 1.18 control plane). Each
-conversation turn is a workflow, and every model call, tool call and proposal
-is a checkpointed activity. Workflow and actor state and the assistant's own
-schema (conversations, turns, participants, embeddings, proposals, audit,
-orchestration events) live in the pgvector-enabled CNPG cluster
-`assistant-postgres`, so a turn resumes on another replica after a crash. See
-ADR-0007.
+`pl-assistant` (`src/services/assistant`) is a Go service on Dapr durable
+workflows (`durabletask-go`, Dapr 1.18 control plane). Each conversation turn
+is a `ConversationTurn` workflow. Every model call, tool call, proposal and
+delivery is a checkpointed activity, stored in the pgvector-enabled CNPG
+cluster `assistant-postgres`, next to the assistant's own schema
+(conversations, turns, participants, embeddings, proposals, audit,
+orchestration events). It replaces the old `pl-coach` chat path; `pl-coach`
+stays only as the `/v1/jobs` broker and Codex inference answerer for analytics
+reports and imports. See ADR-0007 and ADR-0008.
 
-- **Conversations.** History is held server-side; a request carries only the
-  new message. The turn loads recent turns, filtered by the caller's live
-  permissions, plus pgvector snippets from other conversations, with the
-  authorization filter applied before similarity ranking. Discord keeps one
-  shared conversation per (athlete, channel) with speaker-labelled history,
-  and delivery is gated on every participant's live permissions.
-- **Orchestration.** There is no classifier gate. The coordinator model
-  answers or calls `delegate_subagent` with a complexity tier (low, medium,
-  high) and `needs_web`, then `review_delegation` and `escalate_from`. A
-  conditional security subagent can only tighten scope. Decisions are
-  recorded in `orchestration_events`.
-- **Models.** Only LiteLLM aliases are used and providers are registered once:
-  `pl-coordinator` (ChatGPT subscription, OpenRouter fallback),
-  `pl-responder-fast` and `pl-strong` (the low and higher tiers), `pl-web`
-  (OpenRouter web plugin, web research subagent only), `pl-embed`, and
-  `pl-light` (security). The concrete models are set in tfvars.
-- **Identity.** Each tool call gets a short-lived ES256 job token (person,
-  athlete, conversation, workflow, scope) verified by every domain service.
-  The LiteLLM MCP gateway forwards it, with a virtual key per consumer limited
-  by `object_permission.mcp_servers`. The mesh-header path for non-AI callers
-  is unchanged, access is default-deny, and the model never picks identity or
-  scope. See ADR-0008.
-- **Writes.** Only `propose_change`. The arguments are validated against the
-  operation's MCP input schema when proposed, stored with a structured diff
-  and the target version, then committed after explicit approval (web buttons
-  or a Discord reply). Commit re-checks the version, is idempotent, and
-  surfaces failures to the user and on the proposal card.
-- **Frontend.** `AssistantDrawer`, opened from session, goals, supplements,
-  biometrics and template entry points. It polls, shows live streamed model
-  text (reasoning and content) from a per-turn progress buffer, has Stop
-  (workflow termination), and a collapsible scrollable history.
-- **Audit.** An append-only audit table, `orchestration_events`, and LiteLLM
-  request metadata and tags.
+Models are only ever named by LiteLLM alias, with providers registered once:
+`pl-coordinator` (ChatGPT subscription, OpenRouter fallback),
+`pl-responder-fast` and `pl-strong` (the low and higher delegation tiers),
+`pl-web` (OpenRouter web plugin, web research subagent only), `pl-embed` and
+`pl-light` (security). The concrete models are tfvars configuration.
+
+### Turn flow
+
+The client only sends the new message; history is held on the server. The
+workflow resolves who is asking, screens the message, builds context, then
+runs the coordinator model. The coordinator either answers or delegates to
+child workflows; there is no classifier gate in front of it. Writes can only
+be proposals, which wait for a person.
+
+```mermaid
+sequenceDiagram
+  participant C as Drawer or Discord
+  participant BE as Express backend
+  participant A as pl-assistant HTTP
+  participant W as ConversationTurn workflow
+  participant P as Profile
+  participant DB as assistant-postgres
+  participant L as LiteLLM
+  participant G as LiteLLM MCP gateway
+  participant S as Domain services
+
+  C->>BE: new message (surface + context)
+  BE->>A: POST /v1/conversations/{id}/turns
+  A->>DB: store turn, schedule workflow
+  A-->>C: job id
+  W->>P: ResolveIdentity (access_context, fail closed)
+  W->>W: Guard (length, injection, rate, risk signals)
+  opt guard signals
+    W->>W: SecurityAssessment child workflow (pl-light)
+  end
+  W->>DB: Retrieve snippets (authorization filter, then pgvector ranking)
+  W->>DB: Load recent turns (permission-filtered)
+  W->>W: MintToken (scope from live permissions)
+  W->>G: list tools (job token)
+  loop agent loop on pl-coordinator
+    W->>L: ModelCall (streams text into progress buffer)
+    L-->>W: reply or tool calls
+    alt delegate_subagent
+      W->>W: SubagentTask child workflow (tier, or pl-web if needs_web)
+      W->>L: ModelCall for the subagent
+      W->>G: tool calls (fresh job token each call)
+      G->>S: tools/call with token
+      W->>W: review_delegation, escalate_from if failed
+    else read tool
+      W->>G: tool call (fresh job token)
+      G->>S: tools/call with token
+    else propose_change
+      W->>W: validate arguments against the operation's MCP input schema
+      W->>G: read the target (captures version)
+      W->>DB: store proposal with structured diff
+      Note over W: WaitForExternalEvent, 24 h timeout
+      C->>A: approve or reject
+      A->>W: RaiseEvent
+      W->>P: re-check requester and approver permissions
+      W->>G: re-read target, compare version
+      W->>G: apply the write (fresh job token)
+    end
+  end
+  W->>P: Deliver gate (every participant's live permissions, shared channels)
+  W->>DB: complete turn, store embeddings
+  C->>A: poll job (progress text, then result)
+  A-->>C: reply or withheld notice
+```
+
+The order inside the workflow is fixed: identity, guard, optional security
+assessment, retrieval, history, then the agent loop (`internal/workflow/turn.go`
+and `agent.go`). A delegation is a child workflow at the chosen tier; a failed
+or empty result is recorded as a failed review and the coordinator can retry
+with `escalate_from` on a stronger tier. Model text is streamed into a per-turn
+progress buffer in Postgres, which the drawer polls alongside the job status.
+Stop terminates the workflow and its children.
+
+### Security
+
+No step trusts the model to say who it is acting for. Identity is resolved
+outside the model, narrowed to a scope, and checked again by every service the
+tools reach.
+
+```mermaid
+flowchart TB
+  User["User session<br/>oauth2-proxy + Authentik"] --> BE["Express backend"]
+  Discord["Discord sender"] --> Bot["pl-coach-discord"]
+  BE -->|"mesh headers:<br/>person, athlete, SPIFFE source principal"| API["pl-assistant HTTP<br/>caller must be an allowed ServiceAccount"]
+  Bot -->|"mesh headers"| API
+  API --> Access["Profile access_context<br/>no permissions = deny, error = fail closed"]
+  Access --> Scope["Scope = operations the live<br/>permissions allow"]
+  Scope --> Mint["Per-call ES256 job token<br/>person, athlete, conversation, workflow, scope<br/>aud pl-domain-mcp, 5 min exp, jti"]
+  Mint --> Key["LiteLLM virtual key<br/>models + object_permission.mcp_servers"]
+  Key --> Gateway["LiteLLM MCP gateway<br/>forwards the token header per server"]
+  Gateway --> Verify["Domain service verifies<br/>signature, issuer, audience, expiry,<br/>operation in scope"]
+  Verify --> Reject["Bearer plus identity headers = rejected"]
+  Verify --> Same["Then the same access_context and<br/>argument scoping as a human caller"]
+  Same --> Audit[("Append-only audit<br/>+ orchestration_events<br/>+ LiteLLM metadata and tags")]
+```
+
+- **Default deny.** No permissions, no scope, an unmapped operation or an
+  unverifiable token all end in a denial. A mutating operation is never callable
+  from the agent loop; it only runs through an approved proposal.
+- **The model never chooses identity or scope.** Person, athlete and scope come
+  from Profile; the model only picks among tools already in scope.
+- **The security subagent can only tighten.** Its verdict is merged with the
+  existing floor (allow, require approval, block) and never grants access.
+- **Shared channels.** A result is delivered to a shared Discord conversation
+  only if every participant's live permissions cover everything it used;
+  otherwise a withheld notice is posted and the event is audited.
+- **Approval is re-checked.** Commit re-validates both requester and approver
+  permissions, re-reads the target, and refuses a stale version.
+- **Audit.** Access decisions, token scope, tool calls, proposals, commits and
+  visibility decisions go to the append-only audit table; delegation, review,
+  escalation and security decisions go to `orchestration_events`; LiteLLM
+  carries per-request metadata and tags. The mesh-header path for non-AI
+  callers is unchanged.
+
+### High availability and durability
+
+The service keeps no state of its own. Replicas can be killed, rescheduled or
+rolled without losing a turn.
+
+```mermaid
+flowchart LR
+  Client["Client polls the job"] --> Svc["pl-assistant Service"]
+  Svc --> R1["replica 1"] & R2["replica 2"] & R3["replica 3"]
+  R1 & R2 & R3 <--> Dapr["Dapr 1.18 control plane<br/>scheduler + placement"]
+  R1 & R2 & R3 -->|"workflow history,<br/>one row per completed activity"| PG[("assistant-postgres<br/>CNPG + pgvector")]
+  PG --- Data["conversations, turns, proposals,<br/>audit, orchestration_events, embeddings"]
+```
+
+- **Three stateless replicas**, no PVC and no node pinning (2 GiB limit each,
+  with a Dapr sidecar).
+- **Checkpointed activities.** Each activity result is written to the workflow
+  history in Postgres. If a replica is killed or OOMs mid-turn, another replica
+  picks the workflow up and replays it to the last completed activity; a model
+  call in flight is repeated. This was verified by killing a replica during a
+  model call.
+- **Durable approvals.** A pending proposal is a `WaitForExternalEvent` with a
+  24 hour timeout, so waiting survives restarts and deploys. On timeout the
+  proposal expires and nothing is changed.
+- **Dapr control plane.** The scheduler and placement services coordinate where
+  workflows run. If they are unhealthy, workflows sit in PENDING.
+- **One database.** Workflow state and the assistant's own tables share the
+  CNPG cluster, so a conversation, its proposals and its audit trail survive
+  pod loss together.
+- **Tokens are never stored.** A job token is minted inside the activity that
+  uses it and lives for five minutes; workflow history holds only the subject
+  (person, athlete, scope), not the token.
 
 ## AI execution model
 
