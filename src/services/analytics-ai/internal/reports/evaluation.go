@@ -14,6 +14,8 @@ const insufficientEvaluation = "At least 4 completed weeks are required for a us
 
 var evaluationLists = []string{"what_is_working", "what_is_not_working", "competition_alignment", "goal_status", "competition_strategy", "small_changes", "external_factors", "monitoring_focus"}
 
+var blockEvaluationLists = []string{"what_is_working", "what_is_not_working", "key_takeaways"}
+
 func ProgramEvaluation(ctx context.Context, env Env) (map[string]any, error) {
 	return evaluate(ctx, env, "current")
 }
@@ -58,6 +60,20 @@ func evaluate(ctx context.Context, env Env, blockKey string) (map[string]any, er
 	user, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return nil, err
+	}
+	if !entry.Current {
+		answer, err := ask(ctx, env.Infer, prompts.BlockEvaluationSystem(), string(user), prompts.Tool("report_block_evaluation"))
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range blockEvaluationLists {
+			report[key] = pick(answer, key, []any{})
+		}
+		report["summary"] = pick(answer, "summary", "")
+		report["conclusion"] = pick(answer, "conclusion", "")
+		report["insufficient_data"] = pick(answer, "insufficient_data", false)
+		report["insufficient_data_reason"] = pick(answer, "insufficient_data_reason", "")
+		return report, nil
 	}
 	answer, err := ask(ctx, env.Infer, prompts.ProgramEvaluationSystem(), string(user), prompts.Tool("report_program_evaluation"))
 	if err != nil {
@@ -132,18 +148,36 @@ func evaluationPayload(entry BlockEntry, weeks []int, sessions []map[string]any,
 			competitions, goals = asMap(row)["competitions"], asMap(row)["goals"]
 		}
 	}
-	return map[string]any{
-		"task": "Evaluate the current powerlifting block and judge how well it is directing the athlete toward the competition goals.",
-		"instructions": map[string]any{
-			"tone":              "objective sports scientist",
-			"stance_preference": "conservative",
-			"do_not":            []string{"recommend wholesale redesigns unless a serious issue exists", "overreact to a single metric without context"},
-			"focus": []string{
-				"overall trajectory", "what is going right", "what is going wrong", "goal alignment for each competition",
-				"federation eligibility and weight-class fit for each linked goal", "small useful adjustments only",
-				"whether to continue as-is, monitor, or make limited changes",
-			},
+	task := "Evaluate the current powerlifting block and judge how well it is directing the athlete toward the competition goals."
+	instructions := map[string]any{
+		"tone":              "objective sports scientist",
+		"stance_preference": "conservative",
+		"do_not":            []string{"recommend wholesale redesigns unless a serious issue exists", "overreact to a single metric without context"},
+		"focus": []string{
+			"overall trajectory", "what is going right", "what is going wrong", "goal alignment for each competition",
+			"federation eligibility and weight-class fit for each linked goal", "small useful adjustments only",
+			"whether to continue as-is, monitor, or make limited changes",
 		},
+	}
+	if !entry.Current {
+		task = "Describe, in retrospect, how this already-completed powerlifting block actually went. This is a historical record, not a planning exercise."
+		instructions = map[string]any{
+			"tone":              "objective sports scientist",
+			"stance_preference": "descriptive, not prescriptive",
+			"do_not": []string{
+				"recommend future training changes, strategy, or things to monitor - the block is over",
+				"treat the absence of a linked competition as a negative outcome - many blocks are training-only by design",
+				"overreact to a single metric without context",
+			},
+			"focus": []string{
+				"what actually happened compared to what was planned", "what the data shows worked", "what the data shows did not work",
+				"how any linked competition outcome compares to the block's trajectory, only if a competition is linked",
+			},
+		}
+	}
+	return map[string]any{
+		"task":                 task,
+		"instructions":         instructions,
 		"block":                map[string]any{"block_key": entry.Key, "label": entry.Label, "is_current": entry.Current, "start_date": entry.Start, "end_date": entry.End, "week_count": entry.WeekCount, "phases": entry.Raw["phases"], "data_quality_flags": entry.Raw["dataQualityFlags"]},
 		"program_meta":         meta,
 		"phases":               program["phases"],

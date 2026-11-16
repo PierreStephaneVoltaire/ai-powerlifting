@@ -16,6 +16,15 @@ var reserved = []string{"_person_pk", "_access", "_if_job_id"}
 
 type Bundles interface {
 	BlockBundle(ctx context.Context, caller auth.Caller, blockKey string) (map[string]any, error)
+	Sessions(ctx context.Context, caller auth.Caller) ([]map[string]any, error)
+}
+
+// AIReports fetches cached-only AI analysis for a finished block. It is
+// optional: a nil AIReports leaves the exported "Program Analysis" and
+// "Exercise ROI Correlation" sections showing their not-generated placeholder.
+type AIReports interface {
+	BlockEvaluation(ctx context.Context, blockKey string, caller auth.Caller) (map[string]any, error)
+	BlockCorrelation(ctx context.Context, blockKey string, caller auth.Caller) (map[string]any, error)
 }
 
 type handler func(ctx context.Context, arguments map[string]any, caller auth.Caller) (map[string]any, error)
@@ -24,13 +33,14 @@ type Service struct {
 	Registry *contract.Registry
 	access   *auth.Access
 	bundles  Bundles
+	ai       AIReports
 	store    store.Store
 	now      func() time.Time
 	handlers map[string]handler
 }
 
-func New(registry *contract.Registry, access *auth.Access, bundles Bundles, objects store.Store, now func() time.Time) (*Service, error) {
-	s := &Service{Registry: registry, access: access, bundles: bundles, store: objects, now: now}
+func New(registry *contract.Registry, access *auth.Access, bundles Bundles, ai AIReports, objects store.Store, now func() time.Time) (*Service, error) {
+	s := &Service{Registry: registry, access: access, bundles: bundles, ai: ai, store: objects, now: now}
 	s.handlers = map[string]handler{
 		"analytics.export":          s.blockExport,
 		"analytics.lifetime_export": s.lifetimeExport,

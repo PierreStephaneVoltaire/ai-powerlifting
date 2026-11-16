@@ -80,6 +80,7 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 		profile, _ = tools.LookupProfile("")
 	}
 	state := newRunState()
+	state.Budget = w.Config.DelegationBudget
 	if security.GuardTriggers(guard.Signals) {
 		assessment := w.assess(ctx, "pre", activities.SecurityReviewInput{
 			Person: input.Person, ConversationID: input.ConversationID, WorkflowID: ctx.ID(),
@@ -152,6 +153,7 @@ func (w *Workflows) SubagentTask(ctx *workflow.WorkflowContext) (any, error) {
 		return SubagentOutput{Error: "unknown subagent kind"}, nil
 	}
 	state := newRunState()
+	state.Budget = input.Budget
 	state.Floor = input.Floor
 	state.Assessment = input.Assessment
 	result, err := w.runAgent(ctx, run{
@@ -160,9 +162,9 @@ func (w *Workflows) SubagentTask(ctx *workflow.WorkflowContext) (any, error) {
 		Signals: input.Signals, HistoryGap: input.HistoryGap, HistoryReference: input.HistoryReference, State: state,
 	})
 	if err != nil {
-		return SubagentOutput{UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor, Error: err.Error()}, nil
+		return SubagentOutput{Budget: state.Budget, UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor, Error: err.Error()}, nil
 	}
-	return SubagentOutput{Reply: result.Reply, UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor}, nil
+	return SubagentOutput{Budget: state.Budget, Reply: result.Reply, UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor}, nil
 }
 
 func (w *Workflows) SecurityAssessment(ctx *workflow.WorkflowContext) (any, error) {

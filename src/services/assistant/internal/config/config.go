@@ -31,6 +31,7 @@ type Config struct {
 	MaxSteps         int
 	MaxTokens        int
 	MaxDepth         int
+	DelegationBudget int
 	ApprovalTimeout  time.Duration
 	RatePerMinute    int
 	CoordinatorModel string
@@ -101,6 +102,7 @@ func Load() Config {
 		MaxSteps:         number("AGENT_MAX_STEPS", 12),
 		MaxTokens:        number("AGENT_MAX_TOKENS", 60000),
 		MaxDepth:         number("AGENT_MAX_DEPTH", 3),
+		DelegationBudget: number("PL_DELEGATION_BUDGET", 6),
 		ApprovalTimeout:  time.Duration(number("APPROVAL_TIMEOUT_HOURS", 24)) * time.Hour,
 		RatePerMinute:    number("TURNS_PER_MINUTE", 12),
 		CoordinatorModel: coordinator,

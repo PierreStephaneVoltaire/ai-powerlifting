@@ -1,0 +1,53 @@
+{
+  "type": "function",
+  "function": {
+    "name": "report_block_evaluation",
+    "description": "Report a retrospective, descriptive evaluation of an already-completed powerlifting block",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "2-4 sentence overall summary of how the block actually went"
+        },
+        "what_is_working": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "what_is_not_working": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "key_takeaways": {
+          "type": "array",
+          "description": "What, in hindsight, made a difference in this block - stated as an observation about the block's data, never as advice for the future.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conclusion": {
+          "type": "string",
+          "description": "Short closing statement on the block's outcome"
+        },
+        "insufficient_data": {
+          "type": "boolean"
+        },
+        "insufficient_data_reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "summary",
+        "what_is_working",
+        "what_is_not_working",
+        "key_takeaways",
+        "conclusion",
+        "insufficient_data"
+      ]
+    }
+  }
+}

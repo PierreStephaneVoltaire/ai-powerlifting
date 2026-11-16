@@ -51,6 +51,11 @@ resource "kubernetes_deployment_v1" "analytics_export" {
           }
 
           env {
+            name  = "ANALYTICS_AI_URL"
+            value = "http://pl-analytics-ai.${var.namespace}.svc.cluster.local:8000"
+          }
+
+          env {
             name  = "EXPORT_GRPC_ALLOWED_CALLERS"
             value = "pl-analytics-ai"
           }

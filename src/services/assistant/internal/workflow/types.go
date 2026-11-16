@@ -45,6 +45,7 @@ type SubagentInput struct {
 	Identity         access.Identity      `json:"identity"`
 	ConversationID   string               `json:"conversation_id"`
 	Depth            int                  `json:"depth"`
+	Budget           int                  `json:"budget"`
 	Context          RequestContext       `json:"context"`
 	Signals          []string             `json:"signals"`
 	HistoryGap       bool                 `json:"history_gap"`
@@ -54,6 +55,7 @@ type SubagentInput struct {
 }
 
 type SubagentOutput struct {
+	Budget         int              `json:"budget"`
 	Reply          string           `json:"reply"`
 	UsedOperations []string         `json:"used_operations"`
 	Proposals      []string         `json:"proposals"`

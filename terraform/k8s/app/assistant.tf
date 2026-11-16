@@ -86,6 +86,11 @@ resource "kubernetes_deployment_v1" "assistant" {
             value = "1792MiB"
           }
 
+          env {
+            name  = "PL_DELEGATION_BUDGET"
+            value = "6"
+          }
+
           dynamic "env" {
             for_each = local.assistant_postgres_keys
             content {

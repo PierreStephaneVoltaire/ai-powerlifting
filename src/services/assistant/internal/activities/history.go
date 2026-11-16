@@ -15,6 +15,7 @@ import (
 const (
 	historyTurnLimit   = 20
 	historyMessageCap  = 1500
+	historyLatestCap   = 6000
 	historyTotalCap    = 24000
 	historyFailedReply = "[This attempt failed and produced no reply.]"
 )
@@ -34,7 +35,7 @@ func requestUserText(request json.RawMessage) string {
 	return ""
 }
 
-func historyMessages(turn store.HistoryTurn) []llm.Message {
+func historyMessages(turn store.HistoryTurn, replyCap int) []llm.Message {
 	request := strings.TrimSpace(requestUserText(turn.Request))
 	if request == "" {
 		return nil
@@ -50,7 +51,7 @@ func historyMessages(turn store.HistoryTurn) []llm.Message {
 		if reply == "" {
 			return nil
 		}
-		return []llm.Message{user, {Role: "assistant", Content: agent.Truncate(reply, historyMessageCap)}}
+		return []llm.Message{user, {Role: "assistant", Content: agent.Truncate(reply, replyCap)}}
 	case "failed":
 		return []llm.Message{user, {Role: "assistant", Content: historyFailedReply}}
 	}
@@ -69,9 +70,10 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 	var permissions []string
 	size := 0
 	shared := false
+	replyCap := historyLatestCap
 	for _, turn := range turns {
 		shared = shared || turn.Shared
-		pair := historyMessages(turn)
+		pair := historyMessages(turn, replyCap)
 		if len(pair) == 0 {
 			continue
 		}
@@ -81,6 +83,7 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 		}
 		size += cost
 		kept = append(kept, pair)
+		replyCap = historyMessageCap
 		permissions = visibility.Union(permissions, turn.RequiredPermissions)
 	}
 	slices.Reverse(kept)

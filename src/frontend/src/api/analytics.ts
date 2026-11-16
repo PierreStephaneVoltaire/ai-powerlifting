@@ -905,6 +905,7 @@ export interface ProgramEvaluationReport {
   small_changes: ProgramEvaluationSmallChange[]
   external_factors: ProgramEvaluationExternalFactor[]
   monitoring_focus: string[]
+  key_takeaways: string[]
   conclusion: string
   insufficient_data?: boolean
   insufficient_data_reason?: string
@@ -940,6 +941,7 @@ function normalizeProgramEvaluation(data: unknown): ProgramEvaluationReport {
     small_changes: Array.isArray(report.small_changes) ? report.small_changes : [],
     external_factors: Array.isArray(report.external_factors) ? report.external_factors : [],
     monitoring_focus: Array.isArray(report.monitoring_focus) ? report.monitoring_focus : [],
+    key_takeaways: Array.isArray(report.key_takeaways) ? report.key_takeaways : [],
     conclusion: typeof report.conclusion === 'string' ? report.conclusion : '',
     insufficient_data: Boolean(report.insufficient_data),
     insufficient_data_reason: typeof report.insufficient_data_reason === 'string' ? report.insufficient_data_reason : '',

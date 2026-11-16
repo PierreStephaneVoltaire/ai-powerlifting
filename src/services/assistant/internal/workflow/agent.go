@@ -55,6 +55,8 @@ func (w *Workflows) models() orchestration.Models {
 	return orchestration.Models{Fast: w.Config.FastModel, Standard: w.Config.CoordinatorModel, Strong: w.Config.StrongModel}
 }
 
+const childBudgetShare = 2
+
 type delegationRecord struct {
 	Tier orchestration.Tier
 }
@@ -63,6 +65,7 @@ type runState struct {
 	Floor       security.Verdict
 	Assessment  *security.Assessment
 	Delegations map[int]delegationRecord
+	Budget      int
 }
 
 func newRunState() *runState {
@@ -284,6 +287,9 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 	if params.Depth >= w.Config.MaxDepth {
 		return "error: subagent depth limit reached"
 	}
+	if params.State.Budget <= 0 {
+		return "error: no delegation budget remains. Answer with what you have or tell the Person what could not be done."
+	}
 	kind := delegation.Kind
 	if kind == "" {
 		kind = params.Profile.DefaultDelegate
@@ -319,16 +325,21 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 		"delegation_id": sequence, "kind": kind, "tier": tier.String(), "complexity": delegation.Complexity, "escalate_from": delegation.EscalateFrom, "needs_web": delegation.NeedsWeb, "web": usedWeb, "model": model, "depth": params.Depth + 1,
 	})
 	params.State.Delegations[sequence] = delegationRecord{Tier: tier}
+	params.State.Budget--
+	share := min(childBudgetShare, params.State.Budget)
+	params.State.Budget -= share
 	var output SubagentOutput
 	err = ctx.CallChildWorkflow(NameSubagentTask,
 		workflow.WithChildWorkflowInstanceID(fmt.Sprintf("%s:sub:%d", ctx.ID(), sequence)),
 		workflow.WithChildWorkflowInput(SubagentInput{
-			Kind: kind, Model: model, Task: delegation.Task, Message: params.Message, Identity: params.Identity, ConversationID: params.ConversationID, Depth: params.Depth + 1, Context: params.Context,
+			Kind: kind, Model: model, Task: delegation.Task, Message: params.Message, Identity: params.Identity, ConversationID: params.ConversationID, Depth: params.Depth + 1, Budget: share, Context: params.Context,
 			Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryReference: params.HistoryReference, Floor: params.State.Floor, Assessment: params.State.Assessment,
 		}),
 	).Await(&output)
 	if err != nil {
 		output = SubagentOutput{Error: "subagent failed: " + err.Error()}
+	} else {
+		params.State.Budget += max(0, min(output.Budget, share))
 	}
 	result.Used = append(result.Used, output.UsedOperations...)
 	result.Proposals = append(result.Proposals, output.Proposals...)

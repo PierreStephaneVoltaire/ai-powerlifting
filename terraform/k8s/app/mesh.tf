@@ -6,7 +6,7 @@ locals {
 
   native_callers = {
     "pl-analytics"        = concat(["powerlifting-app-backend", "pl-coach", "pl-analytics-ai", "pl-analytics-export"], local.analysis_domain_callers)
-    "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics"]
+    "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics", "pl-analytics-export"]
     "pl-analytics-export" = ["powerlifting-app-backend", "pl-analytics-ai"]
     "pl-rankings"         = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
     "litellm"             = ["pl-coach", "pl-assistant", "pl-litellm-keys"]
