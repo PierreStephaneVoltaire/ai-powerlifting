@@ -61,7 +61,7 @@ type HistoryQuery struct {
 }
 
 func BuildHistory(query HistoryQuery) (string, []any) {
-	sql := `SELECT t.id, t.person_pk, t.status, t.request, t.reply, t.summary, t.error, t.created_at
+	sql := `SELECT t.id, t.person_pk, t.status, t.request, t.reply, t.summary, t.error, t.created_at, t.required_permissions
 FROM turns t
 JOIN conversations c ON c.id = t.conversation_id
 WHERE ` + visibleConversation + `

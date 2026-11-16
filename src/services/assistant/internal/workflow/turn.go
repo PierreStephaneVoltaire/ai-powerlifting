@@ -93,27 +93,39 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 	retrieved, retrieveErr := call[activities.RetrieveOutput](ctx, activities.NameRetrieve, activities.RetrieveInput{
 		Identity: resolved.Identity, Query: message, ConversationID: input.ConversationID, WorkflowID: ctx.ID(),
 	}, quickRetry)
+	history, historyErr := call[activities.HistoryOutput](ctx, activities.NameHistory, activities.HistoryInput{
+		Identity: resolved.Identity, ConversationID: input.ConversationID, TurnID: input.TurnID,
+	}, quickRetry)
 	var snippets []store.Snippet
 	if retrieveErr == nil {
-		snippets = retrieved.Snippets
+		for _, snippet := range retrieved.Snippets {
+			if historyErr == nil && snippet.ConversationID == input.ConversationID && history.Turns > 0 {
+				continue
+			}
+			snippets = append(snippets, snippet)
+		}
 	}
-	historyGap := retrieveErr != nil || (len(snippets) == 0 && guard.HistoryReference)
+	historyLoaded := historyErr == nil && history.Turns > 0
+	historyGap := historyErr != nil || (!historyLoaded && len(snippets) == 0 && guard.HistoryReference)
 	for _, snippet := range snippets {
 		extraPermissions = visibility.Union(extraPermissions, snippet.Permissions)
 	}
+	if historyErr == nil {
+		extraPermissions = visibility.Union(extraPermissions, history.Permissions)
+	}
 	if historyGap {
 		outcome := "empty"
-		if retrieveErr != nil {
+		if historyErr != nil {
 			outcome = "failed"
 		}
 		w.record(ctx, input.Person, input.ConversationID, "history_unavailable", "", outcome, map[string]any{"history_reference": guard.HistoryReference})
 	}
 	w.record(ctx, input.Person, input.ConversationID, "orchestrate", w.Config.CoordinatorModel, "start", map[string]any{
-		"profile": profile.Name, "signals": guard.Signals, "history_gap": historyGap, "snippets": len(snippets), "security_floor": string(state.Floor),
+		"profile": profile.Name, "signals": guard.Signals, "history_gap": historyGap, "history_turns": history.Turns, "snippets": len(snippets), "security_floor": string(state.Floor),
 	})
 	result, err := w.runAgent(ctx, run{
 		Profile: profile, Orchestrator: true, Model: w.Config.CoordinatorModel, Identity: resolved.Identity, ConversationID: input.ConversationID,
-		Context: input.Context, Message: message, Messages: input.Messages, Snippets: snippets,
+		Context: input.Context, Message: message, Messages: append(slices.Clone(history.Messages), input.Messages...), Snippets: snippets,
 		Signals: guard.Signals, HistoryGap: historyGap, HistoryReference: guard.HistoryReference, State: state,
 	})
 	if err != nil {

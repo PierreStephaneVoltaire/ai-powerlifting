@@ -67,6 +67,7 @@ func Register(registry *workflow.Registry, d *Deps) error {
 		NameSecurityReview:  wrap(d.SecurityReview),
 		NameRecord:          wrap(d.Record),
 		NameRetrieve:        wrap(d.Retrieve),
+		NameHistory:         wrap(d.History),
 		NameListTools:       wrap(d.ListTools),
 		NameModelCall:       wrap(d.ModelCall),
 		NameToolCall:        wrap(d.ToolCall),

@@ -178,6 +178,8 @@ type HistoryTurn struct {
 	Summary   string          `json:"summary"`
 	Error     string          `json:"error"`
 	CreatedAt time.Time       `json:"created_at"`
+
+	RequiredPermissions []string `json:"required_permissions"`
 }
 
 func (s *Store) History(ctx context.Context, query HistoryQuery) ([]HistoryTurn, error) {
@@ -190,7 +192,7 @@ func (s *Store) History(ctx context.Context, query HistoryQuery) ([]HistoryTurn,
 	var turns []HistoryTurn
 	for rows.Next() {
 		var turn HistoryTurn
-		if err := rows.Scan(&turn.ID, &turn.PersonPK, &turn.Status, &turn.Request, &turn.Reply, &turn.Summary, &turn.Error, &turn.CreatedAt); err != nil {
+		if err := rows.Scan(&turn.ID, &turn.PersonPK, &turn.Status, &turn.Request, &turn.Reply, &turn.Summary, &turn.Error, &turn.CreatedAt, &turn.RequiredPermissions); err != nil {
 			return nil, err
 		}
 		turns = append(turns, turn)

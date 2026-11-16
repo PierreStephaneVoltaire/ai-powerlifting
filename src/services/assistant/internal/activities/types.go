@@ -19,6 +19,7 @@ const (
 	NameSecurityReview  = "SecurityReview"
 	NameRecord          = "RecordOrchestration"
 	NameRetrieve        = "Retrieve"
+	NameHistory         = "History"
 	NameListTools       = "ListTools"
 	NameModelCall       = "ModelCall"
 	NameToolCall        = "ToolCall"
@@ -84,6 +85,18 @@ type RetrieveInput struct {
 
 type RetrieveOutput struct {
 	Snippets []store.Snippet `json:"snippets"`
+}
+
+type HistoryInput struct {
+	Identity       access.Identity `json:"identity"`
+	ConversationID string          `json:"conversation_id"`
+	TurnID         string          `json:"turn_id"`
+}
+
+type HistoryOutput struct {
+	Messages    []llm.Message `json:"messages"`
+	Turns       int           `json:"turns"`
+	Permissions []string      `json:"permissions"`
 }
 
 type ListToolsInput struct {
