@@ -1,0 +1,192 @@
+[
+  {
+    "name": "goals_list",
+    "domain": "goals",
+    "description": "List all athlete goals for a user. Returns the full array of goal objects.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        }
+      }
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "goal_type",
+          "priority"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "goal_type": {
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "primary",
+              "secondary",
+              "optional"
+            ]
+          },
+          "target_date": {
+            "type": "string"
+          },
+          "target_competition_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_total_kg": {
+            "type": "number"
+          },
+          "target_dots": {
+            "type": "number"
+          },
+          "target_ipf_gl": {
+            "type": "number"
+          },
+          "target_federation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_weight_class_kg": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "age_class": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "goals_replace",
+    "domain": "goals",
+    "description": "Full replace of a user athlete goals. Upserts incoming goals by id and deletes any goals not in the incoming array. Send the complete goals array.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "goals": {
+          "type": "array",
+          "description": "Full array of goal objects to write.",
+          "items": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "goal_type": {
+                "enum": [
+                  "competition_exposure",
+                  "conservative_pr",
+                  "custom",
+                  "hit_total",
+                  "improve_dots",
+                  "improve_ipf_gl",
+                  "peak_for_meet",
+                  "qualify_for_federation"
+                ]
+              },
+              "priority": {
+                "enum": [
+                  "primary",
+                  "secondary",
+                  "optional"
+                ]
+              },
+              "target_date": {
+                "type": "string"
+              },
+              "target_competition_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "target_total_kg": {
+                "type": "number"
+              },
+              "target_dots": {
+                "type": "number"
+              },
+              "target_ipf_gl": {
+                "type": "number"
+              },
+              "target_federation_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "target_weight_class_kg": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "age_class": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "goals"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

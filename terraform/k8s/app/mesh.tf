@@ -16,7 +16,8 @@ locals {
 
   mesh_callers = merge(
     { for name in local.mesh_domains : "pl-${name}" => concat(
-      name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export", "pl-sessions", "pl-program", "pl-competition", "pl-glossary", "pl-assistant"]) : local.domain_callers,
+      name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export", "pl-sessions", "pl-program", "pl-competition", "pl-glossary", "pl-assistant", "pl-calculations", "pl-federation", "pl-goals", "pl-weight-log", "pl-performance"]) : local.domain_callers,
+      name == "performance" ? ["pl-export"] : [],
       contains(local.litellm_mcp_domains, name) ? ["litellm"] : [],
     ) },
     local.native_callers,

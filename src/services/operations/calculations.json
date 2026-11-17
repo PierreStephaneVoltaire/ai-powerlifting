@@ -3,7 +3,6 @@
     "name": "lb_to_kg",
     "domain": "calculations",
     "description": "Convert pounds to kilograms. Returns the input lb value and the rounded kg equivalent.",
-    "handler": "services.calculations.lb_to_kg.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -40,7 +39,6 @@
     "name": "kg_to_lb",
     "domain": "calculations",
     "description": "Convert kilograms to pounds. Returns the input kg value and the rounded lb equivalent.",
-    "handler": "services.calculations.kg_to_lb.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -77,7 +75,6 @@
     "name": "pct_of_max",
     "domain": "calculations",
     "description": "Calculate a percentage of a max weight. Returns the raw kg value, the value rounded to the nearest 2.5 kg plate, and the lb equivalent.",
-    "handler": "services.calculations.pct_of_max.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -133,7 +130,6 @@
     "name": "ipf_weight_classes",
     "domain": "calculations",
     "description": "Get IPF weight classes for a given sex. Returns the sex, class cutoffs in kg, and the operator's configured weight class if available.",
-    "handler": "services.calculations.ipf_weight_classes.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -189,7 +185,6 @@
     "name": "calculate_dots",
     "domain": "calculations",
     "description": "Calculate the DOTS score from a competition total, bodyweight, and sex. Returns the raw dots value.",
-    "handler": "services.calculations.calculate_dots.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -236,8 +231,7 @@
   {
     "name": "estimate_1rm",
     "domain": "calculations",
-    "description": "Estimate E1RM using the shared RPE table for 1–6 reps, or conservative percentages without RPE for 1–5 reps. Unsupported ranges return null; legacy epley/brzycki fields remain null.",
-    "handler": "services.calculations.estimate_1rm.handler",
+    "description": "Estimate one-rep max using the RPE table for 1\u201310 reps. When RPE is omitted, assume RPE 10.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -270,8 +264,6 @@
         "e1rm",
         "method",
         "input_weight_kg",
-        "epley",
-        "brzycki",
         "rpe_based"
       ],
       "properties": {
@@ -290,18 +282,6 @@
         "input_weight_kg": {
           "type": "number"
         },
-        "epley": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "brzycki": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
         "rpe_based": {
           "type": [
             "number",
@@ -318,7 +298,6 @@
     "name": "days_until",
     "domain": "calculations",
     "description": "Calculate days until a target date. Returns the label, target date, today's date, days remaining, weeks remaining, and whether the date is in the past.",
-    "handler": "services.calculations.days_until.handler",
     "input_schema": {
       "type": "object",
       "properties": {

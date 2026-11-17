@@ -13,6 +13,14 @@ locals {
 
   small = { limits = { cpu = "500m", memory = "256Mi" }, requests = { cpu = "25m", memory = "64Mi" } }
 
+  native_service_images = {
+    "pl-calculations" = local.images.calculations
+    "pl-federation"   = local.images.federation
+    "pl-goals"        = local.images.goals
+    "pl-performance"  = local.images.performance
+    "pl-weight-log"   = local.images.weight_log
+  }
+
   services = {
     "pl-calculations"  = merge(local.small, { domain = "calculations" })
     "pl-export"        = { domain = "export", limits = { cpu = "1", memory = "512Mi" }, requests = { cpu = "50m", memory = "128Mi" } }
@@ -62,7 +70,7 @@ resource "kubernetes_deployment_v1" "service" {
 
         container {
           name              = each.value.domain
-          image             = local.images.services
+          image             = lookup(local.native_service_images, each.key, local.images.services)
           image_pull_policy = "IfNotPresent"
 
           env {

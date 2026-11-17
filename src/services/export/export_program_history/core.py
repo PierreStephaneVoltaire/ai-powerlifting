@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from importlib import import_module
 
 from services.runtime import analytics_client
 from services.runtime.performed_sets import expand_session_sets
@@ -209,7 +208,7 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
 
     try:
         if version_token:
-            max_history_item = _run_async(import_module("services.performance.max_history_get.core").max_history_get({"pk": active_pk, "version": version_token, "_access": getattr(store, "export_access", None) or {}}))
+            max_history_item = analytics_client.call("max_history_get", {"pk": active_pk, "version": version_token}, domain="performance")
             bundle["max_history"] = (max_history_item or {}).get("entries", [])
         else:
             bundle["max_history"] = []

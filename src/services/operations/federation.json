@@ -3,7 +3,6 @@
     "name": "federation_master_list",
     "domain": "federation",
     "description": "List the global master federation directory.",
-    "handler": "services.federation.federation_master_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -112,7 +111,6 @@
     "name": "federation_master_update",
     "domain": "federation",
     "description": "Update one master federation definition.",
-    "handler": "services.federation.federation_master_update.handler",
     "input_schema": {
       "type": "object",
       "required": [
@@ -153,7 +151,6 @@
     "name": "federation_user_library_get",
     "domain": "federation",
     "description": "Get the authenticated athlete's federation library.",
-    "handler": "services.federation.federation_user_library_get.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -204,7 +201,6 @@
     "name": "federation_user_library_set",
     "domain": "federation",
     "description": "Replace the authenticated athlete's federation library.",
-    "handler": "services.federation.federation_user_library_set.handler",
     "input_schema": {
       "type": "object",
       "required": [

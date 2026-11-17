@@ -3,7 +3,6 @@
     "name": "goals_list",
     "domain": "goals",
     "description": "List all athlete goals for a user. Returns the full array of goal objects.",
-    "handler": "services.goals.goals_list.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -88,7 +87,6 @@
     "name": "goals_replace",
     "domain": "goals",
     "description": "Full replace of a user athlete goals. Upserts incoming goals by id and deletes any goals not in the incoming array. Send the complete goals array.",
-    "handler": "services.goals.goals_replace.handler",
     "input_schema": {
       "type": "object",
       "properties": {
