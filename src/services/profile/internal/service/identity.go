@@ -129,6 +129,18 @@ func (s *Service) identityResolve(ctx context.Context, req *Request) (any, error
 		return nil, err
 	}
 	pk := value.Str(resolved["settings"].(map[string]any)["pk"])
+	if allowed, present := args["ai_access"].(bool); present && provider == "authentik" {
+		person, err := s.people.Get(ctx, pk)
+		if err != nil {
+			return nil, err
+		}
+		expires := value.IntOf(args["ai_access_expires"], 0)
+		if person["ai_access"] != allowed || value.IntOf(person["ai_access_expires"], 0) != expires {
+			if err := s.people.Update(ctx, pk, store.Update{Expression: "SET ai_access = :access, ai_access_expires = :expires", Condition: "attribute_exists(pk)", Values: map[string]any{":access": allowed, ":expires": expires}}); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if err := s.linkDiscordSubjects(ctx, pk, discordSubjects); err != nil {
 		return nil, err
 	}

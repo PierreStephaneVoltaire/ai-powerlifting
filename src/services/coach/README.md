@@ -23,6 +23,16 @@ challenge it asks the model, checks the answer against the challenge schema, the
 resumes the execution. `template_evaluate` also gets the athlete's lifetime report
 from S3 (`POWERLIFTING_S3_BUCKET`) as a file in the model workspace.
 
+Prompts at 85% of Codex's input character limit are stored temporarily in the
+job workspace and exposed through a read-only, job-scoped input tool. The file
+is removed when the model call finishes. The general shell remains disabled.
+
+AI jobs and assistant turns require the Authentik `pro` group. The operator
+has access automatically. Group membership is synchronized from the verified
+login token, so changes take effect when the user's token refreshes and their
+next portal request reaches the gateway. Cached reports remain readable under
+the existing data permissions.
+
 ## State
 
 Job records live in `coach.sqlite3` (table `jobs`) in `COACH_STATE_DIR`. Codex login

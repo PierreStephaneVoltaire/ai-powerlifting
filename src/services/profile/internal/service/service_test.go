@@ -32,6 +32,36 @@ func TestIdentityResolveIsIdempotentAndCreatesPersonHexIDs(t *testing.T) {
 	}
 }
 
+func TestIdentityResolveSyncsProAccess(t *testing.T) {
+	h := newHarness(t, options{IDs: ids("0123456789abcdef0123456789abcdef")})
+	backend := caller("", "")
+	backend.Source = "spiffe://cluster.local/ns/powerlifting/sa/powerlifting-app-backend"
+	args := map[string]any{"issuer": "https://issuer", "provider": "authentik", "sub": "s1", "ai_access": true, "ai_access_expires": 4102444800}
+	result, err := h.call("identity_resolve", args, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk := result.(map[string]any)["settings"].(map[string]any)["pk"].(string)
+	for _, allowed := range []bool{true, false} {
+		args["ai_access"] = allowed
+		if _, err := h.call("identity_resolve", args, backend); err != nil {
+			t.Fatal(err)
+		}
+		context, err := h.call("access_context", map[string]any{}, caller(pk, pk))
+		if err != nil {
+			t.Fatal(err)
+		}
+		permissions := context.(map[string]any)["permissions"].([]any)
+		found := false
+		for _, permission := range permissions {
+			found = found || permission == "ai:use"
+		}
+		if found != allowed {
+			t.Fatalf("ai access = %v, want %v", found, allowed)
+		}
+	}
+}
+
 func asTyped(err error, target **apperr.Error) bool {
 	typed, ok := err.(*apperr.Error)
 	*target = typed

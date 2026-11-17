@@ -96,6 +96,8 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         if internal_fields - ({"_report_source"} if caller(x_pl_source_principal).endswith('/sa/pl-' + operation.domain) else set()):
             raise HTTPException(403, "Internal operation fields cannot be supplied")
         context = await access(owner, athlete, operation.name, arguments)
+        if operation.uses_inference and "ai:use" not in context.get("permissions", []):
+            raise HTTPException(403, "AI access requires the pro group")
         payload["access_requirements"] = {
             "permissions": sorted(p for p in context.get("permissions", []) if p.endswith(":read") and p.split(":")[0] not in {"settings", "grants", "operator"}),
             "competition_ids": context.get("competition_scope", {}).get("read", []),

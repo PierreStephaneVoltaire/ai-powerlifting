@@ -1,6 +1,8 @@
 import hashlib
 import json
 import os
+import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Protocol
@@ -13,6 +15,7 @@ from .config import AISettings, Provider
 SECRET_ENV = ("DISCORD_TOKEN", "CODEX_API_KEY", "COACH_PROVIDER_KEYS")
 PROVIDER_KEY_ENV = "CODEX_PROVIDER_API_KEY"
 SECRET_PREFIXES = ("AWS_", "OPENAI_", "OPENROUTER_")
+MAX_INLINE_PROMPT = 1048576 * 85 // 100
 LOCKED_FEATURES = (
     "features.shell_tool=false",
     "features.apps=false",
@@ -77,12 +80,12 @@ class CodexModel:
         if getattr(kind, "value", kind) != "chatgpt":
             raise ModelError("subscription_required", "Coach requires ChatGPT subscription login")
 
-    async def _run(self, ai: AISettings, cwd: Path, instructions: str, prompt: str) -> str:
+    async def _run(self, ai: AISettings, cwd: Path, instructions: str, prompt: str, overrides: tuple[str, ...] = ()) -> str:
         from openai_codex import ApprovalMode, AsyncCodex, Sandbox
 
         provider = self.providers[ai.provider]
         started = time.monotonic()
-        async with AsyncCodex(self._config(cwd, (), ai.provider)) as codex:
+        async with AsyncCodex(self._config(cwd, overrides, ai.provider)) as codex:
             if provider.subscription:
                 await self._check_subscription(codex)
             options = dict(model=ai.model, model_provider=None if provider.subscription else ai.provider, cwd=str(cwd), sandbox=Sandbox.read_only, approval_mode=ApprovalMode.deny_all, developer_instructions=instructions)
@@ -111,5 +114,14 @@ class CodexModel:
     async def complete(self, ai: AISettings, instructions: str, prompt: str, workspace: Path | None = None) -> str:
         cwd = workspace or self.scratch
         cwd.mkdir(parents=True, exist_ok=True)
-        return await self._run(ai, cwd, instructions, prompt)
+        if len(prompt) < MAX_INLINE_PROMPT:
+            return await self._run(ai, cwd, instructions, prompt)
+        with tempfile.TemporaryDirectory(prefix="input-", dir=cwd) as directory:
+            path = Path(directory) / "input.txt"
+            path.write_text(prompt, encoding="utf-8")
+            overrides = (
+                'mcp_servers.job_input.command=' + json.dumps(sys.executable),
+                'mcp_servers.job_input.args=' + json.dumps(["-m", "services.coach.input_reader", str(path)]),
+            )
+            return await self._run(ai, cwd, instructions, "Read the complete input using the job_input tool, then complete the requested task.", overrides)
 

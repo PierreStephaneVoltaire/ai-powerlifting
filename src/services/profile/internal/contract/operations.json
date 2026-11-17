@@ -2191,6 +2191,12 @@
             "null"
           ]
         },
+        "ai_access": {
+          "type": "boolean"
+        },
+        "ai_access_expires": {
+          "type": "integer"
+        },
         "discord_subjects": {
           "type": "array",
           "maxItems": 10,

@@ -9,6 +9,7 @@ export interface AuthIdentity {
   display_name: string
   avatar: string | null
   groups: string[]
+  expires_at?: number
   roles: string[]
   active_role?: AppRole | null
   email?: string | null
