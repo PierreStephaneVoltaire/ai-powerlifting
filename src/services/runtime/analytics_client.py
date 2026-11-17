@@ -13,9 +13,9 @@ DOMAIN = "analytics"
 TIMEOUT_SECONDS = 60
 
 
-def _service_url() -> str:
+def _service_url(domain: str = DOMAIN) -> str:
     template = os.getenv("PL_SERVICE_URL_TEMPLATE", "http://pl-{domain}:8000")
-    return template.format(domain=DOMAIN).rstrip("/")
+    return template.format(domain=domain).rstrip("/")
 
 
 def _json_default(value: Any) -> Any:
@@ -35,26 +35,26 @@ def _headers(person: str, athlete: str) -> dict[str, str]:
     return headers
 
 
-def _failure(response: httpx.Response) -> OperationError:
+def _failure(response: httpx.Response, domain: str = DOMAIN) -> OperationError:
     try:
         detail = response.json().get("detail", response.text)
     except (ValueError, AttributeError):
         detail = response.text
-    return OperationError(response.status_code, "analytics_unavailable", f"Analytics service returned {response.status_code}: {detail}")
+    return OperationError(response.status_code, f"{domain}_unavailable", f"{domain} service returned {response.status_code}: {detail}")
 
 
-def call(operation: str, arguments: dict[str, Any], *, athlete: str | None = None, person: str | None = None) -> Any:
+def call(operation: str, arguments: dict[str, Any], *, athlete: str | None = None, person: str | None = None, domain: str = DOMAIN) -> Any:
     athlete = athlete or current_athlete.get()
     person = person or current_person.get() or athlete
     if not athlete or not person:
         raise OperationError(403, "forbidden", "Athlete and Person scope required for analytics")
     body = json.dumps({key: value for key, value in arguments.items() if value is not None}, default=_json_default)
     try:
-        response = httpx.post(f"{_service_url()}/operations/{operation}", content=body, headers=_headers(person, athlete), timeout=TIMEOUT_SECONDS)
+        response = httpx.post(f"{_service_url(domain)}/operations/{operation}", content=body, headers=_headers(person, athlete), timeout=TIMEOUT_SECONDS)
     except httpx.HTTPError as error:
-        raise OperationError(503, "analytics_unavailable", f"Analytics service unreachable: {error}") from error
+        raise OperationError(503, f"{domain}_unavailable", f"{domain} service unreachable: {error}") from error
     if response.is_error:
-        raise _failure(response)
+        raise _failure(response, domain)
     return response.json()
 
 

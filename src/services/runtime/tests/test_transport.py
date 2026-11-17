@@ -9,6 +9,7 @@ def test_http_mcp_calculation_parity_and_context(monkeypatch):
     module = importlib.reload(importlib.import_module('services.runtime.app'))
     monkeypatch.setattr(module, 'OPERATIONS', load_operations('calculations'))
     monkeypatch.setattr(module, 'current_context', lambda person, athlete: {'permissions': []})
+    monkeypatch.setattr(module, 'dispatch', lambda operation, arguments: {'kg': arguments['kg'], 'lb': round(arguments['kg'] * 2.20462, 1)})
     with TestClient(module.app) as client:
         headers = {'X-Person-Pk': '', 'X-Athlete-Pk': ''}
         http = client.post('/operations/kg_to_lb', headers=headers, json={'kg': 100})

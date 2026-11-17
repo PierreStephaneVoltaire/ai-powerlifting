@@ -172,6 +172,16 @@ jobs:
             repository: powerlifting-sessions
           - image: powerlifting-program
             repository: powerlifting-program
+          - image: powerlifting-performance
+            repository: powerlifting-performance
+          - image: powerlifting-federation
+            repository: powerlifting-federation
+          - image: powerlifting-goals
+            repository: powerlifting-goals
+          - image: powerlifting-weight-log
+            repository: powerlifting-weight-log
+          - image: powerlifting-calculations
+            repository: powerlifting-calculations
           - image: powerlifting-competition
             repository: powerlifting-competition
           - image: powerlifting-profile

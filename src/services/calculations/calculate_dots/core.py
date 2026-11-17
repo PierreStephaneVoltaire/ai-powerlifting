@@ -1,1 +1,0 @@
-from services.runtime.lift_calculations import calculate_dots as calculate_dots

@@ -1,0 +1,266 @@
+[
+  {
+    "name": "federation_master_list",
+    "domain": "federation",
+    "description": "List the global master federation directory.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "pk",
+          "sk",
+          "name",
+          "status",
+          "has_standards",
+          "standards",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "pk": {
+            "type": "string"
+          },
+          "sk": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "abbreviation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "region": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "website_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "source_slug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_standards": {
+            "type": "boolean"
+          },
+          "standard_unit": {
+            "enum": [
+              "kg",
+              "dots",
+              null
+            ]
+          },
+          "standards": {
+            "type": "object"
+          },
+          "display_options": {
+            "type": "object"
+          },
+          "parent_federation_abbr": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "membership_group": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "public"
+  },
+  {
+    "name": "federation_master_update",
+    "domain": "federation",
+    "description": "Update one master federation definition.",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "master_id",
+        "updates"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "master_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updates": {
+          "type": "object",
+          "minProperties": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "operator"
+  },
+  {
+    "name": "federation_user_library_get",
+    "domain": "federation",
+    "description": "Get the authenticated athlete's federation library.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "updated_at",
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federations#v1"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "federation_user_library_set",
+    "domain": "federation",
+    "description": "Replace the authenticated athlete's federation library.",
+    "input_schema": {
+      "type": "object",
+      "required": [
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "pk",
+        "sk",
+        "updated_at",
+        "federations",
+        "qualification_standards"
+      ],
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "const": "federations#v1"
+        },
+        "updated_at": {
+          "type": "string"
+        },
+        "federations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "qualification_standards": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

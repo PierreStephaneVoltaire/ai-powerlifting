@@ -64,6 +64,9 @@ function federationStatusColor(status: MasterFederation['status']): string {
 }
 
 function federationId(fed: MasterFederation): string {
+  if (typeof fed.pk === 'string' && fed.pk.startsWith('FED#')) {
+    return fed.pk.slice(4)
+  }
   if (typeof fed.sk === 'string' && fed.sk.length > 0) {
     const suffix = fed.sk.replace(/^FED#/, '')
     if (suffix) return suffix
