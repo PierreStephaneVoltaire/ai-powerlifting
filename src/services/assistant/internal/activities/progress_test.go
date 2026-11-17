@@ -80,6 +80,7 @@ func TestProgressSurvivesModelCallsAndCompletion(t *testing.T) {
 				}
 			}
 			assertProgress()
+			var err error
 			if status == "cancelled" {
 				err = s.CancelTurn(ctx, status)
 			} else {
