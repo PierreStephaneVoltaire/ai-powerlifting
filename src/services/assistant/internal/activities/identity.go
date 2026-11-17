@@ -18,6 +18,9 @@ func (d *Deps) ResolveIdentity(ctx context.Context, in ResolveInput) (ResolveOut
 	case err != nil:
 		return ResolveOutput{}, err
 	}
+	if !identity.Has("ai:use") {
+		return ResolveOutput{Reason: "AI access requires the pro group"}, nil
+	}
 	if err := d.Audit.Access(ctx, in.Person, in.Athlete, in.ConversationID, in.WorkflowID, "allow", ""); err != nil {
 		return ResolveOutput{}, err
 	}

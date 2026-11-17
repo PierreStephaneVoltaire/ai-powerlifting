@@ -38,6 +38,9 @@ resource "authentik_group" "handlers" {
   name  = "handlers"
   roles = [authentik_rbac_role.handlers.id]
 }
+resource "authentik_group" "pro" {
+  name = "pro"
+}
 
 data "authentik_property_mapping_provider_scope" "openid" {
   name = "authentik default OAuth Mapping: OpenID 'openid'"

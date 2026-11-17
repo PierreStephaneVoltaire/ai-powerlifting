@@ -155,6 +155,10 @@ Where the AI shows up:
 - The **Assistant**: chat in the web drawer and in Discord, with proposed
   changes you approve
 
+### AI access
+
+AI features are gated by the Authentik **`pro`** group.
+
 ### The Assistant
 
 Each conversation turn is a Dapr workflow. Model calls, tool calls and

@@ -17,7 +17,7 @@ test('gateway reads the proxy identity, resolves the Person and rejects forged i
   process.env.AUTHENTIK_ISSUER_URL = 'https://auth.example/application/o/nolift/'
   process.env.AUTHENTIK_CLIENT_ID = 'nolift'
   process.env.FRONTEND_URL = 'https://app.example'
-  const verified = token({ iss: process.env.AUTHENTIK_ISSUER_URL, aud: 'nolift', sub: 'verified-subject', preferred_username: 'Person', discord_subjects: ['123', 'bad'] })
+  const verified = token({ iss: process.env.AUTHENTIK_ISSUER_URL, aud: 'nolift', sub: 'verified-subject', preferred_username: 'Person', groups: ['pro'], exp: 4102444800, discord_subjects: ['123', 'bad'] })
   const originalFetch = globalThis.fetch
   const calls: Request[] = []
   globalThis.fetch = (async (input, init) => {
@@ -42,7 +42,7 @@ test('gateway reads the proxy identity, resolves the Person and rejects forged i
     assert.deepEqual(await signedIn.json(), { person: 'person', athlete: 'selected-athlete', identity: 'verified-subject', scope: 'person' })
     assert.equal(calls[0].url, 'http://pl-profile:8000/operations/identity_resolve')
     assert.equal(calls[0].headers.get('X-Person-Pk'), '')
-    assert.deepEqual(await calls[0].json(), { issuer: process.env.AUTHENTIK_ISSUER_URL, provider: 'authentik', sub: 'verified-subject', display_name: 'Person', avatar_url: null, discord_subjects: ['123'] })
+    assert.deepEqual(await calls[0].json(), { issuer: process.env.AUTHENTIK_ISSUER_URL, provider: 'authentik', sub: 'verified-subject', display_name: 'Person', avatar_url: null, discord_subjects: ['123'], ai_access: true, ai_access_expires: 4102444800 })
     assert.equal((await originalFetch(url, { headers: { Authorization: `Bearer ${token({ iss: 'https://evil.example/', aud: 'nolift', sub: 'x' })}` } })).status, 401)
     assert.equal((await originalFetch(url, { headers: { Authorization: 'Bearer forged' } })).status, 401)
     assert.equal((await originalFetch(url, { method: 'POST', headers: { Origin: 'https://evil.example' } })).status, 403)

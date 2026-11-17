@@ -22,7 +22,7 @@ export function configureMeshAuthentication(app: Express): void {
       const match = /^Bearer ([^\s]+)$/.exec(authorization)
       if (!match) throw new AppError('Invalid login token', 401, 'AUTH_REQUIRED')
       const identity = identityFromToken(match[1])
-      const result = await callOperationAs('identity_resolve', { issuer: identity.issuer, provider: identity.provider, sub: identity.sub, display_name: identity.display_name, avatar_url: identity.avatar, discord_subjects: identity.discord_subjects }, { athlete: '', person: '' }) as { settings?: Record<string, unknown> }
+      const result = await callOperationAs('identity_resolve', { issuer: identity.issuer, provider: identity.provider, sub: identity.sub, display_name: identity.display_name, avatar_url: identity.avatar, discord_subjects: identity.discord_subjects, ai_access: identity.groups.includes('pro'), ai_access_expires: identity.expires_at || 0 }, { athlete: '', person: '' }) as { settings?: Record<string, unknown> }
       if (typeof result?.settings?.pk !== 'string' || !result.settings.pk) throw new AppError('Identity resolution failed', 503, 'AUTH_CONTEXT_FAILED')
       req.settings = normalizeSettings(result.settings)
       req.user = { identity, discord_id: '', username: req.settings.username, avatar: identity.avatar, actor_mapped_pk: req.settings.pk }

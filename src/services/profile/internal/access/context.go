@@ -186,6 +186,9 @@ func Evaluate(person, athlete string, owner, actor value.Item, grants []Grant, d
 	if len(actor) > 0 && ownAthlete == "operator" {
 		permissions["operator:read"], permissions["operator:write"] = true, true
 	}
+	if len(actor) > 0 && (actor["ai_access"] == true && int64(value.IntOf(actor["ai_access_expires"], 0)) > now.Unix() || ownAthlete == "operator") {
+		permissions["ai:use"] = true
+	}
 	ctx.Permissions = sortedKeys(permissions)
 	ctx.GrantedPermissions = sortedKeys(granted)
 	return ctx

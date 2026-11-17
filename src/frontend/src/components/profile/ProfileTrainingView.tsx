@@ -202,9 +202,10 @@ function ReadOnlyAnalysis({ athlete, program, unit, sex, authenticated }: { athl
           sex={program.meta?.sex ?? sex}
           version="current"
           viewAthlete={athlete}
+          publicView={!authenticated}
         />
       )}
-      {section === 'blocks' && <PastBlocksPanel unit={unit} readOnly viewAthlete={athlete} viewProgram={program} viewSex={program.meta?.sex ?? sex} />}
+      {section === 'blocks' && <PastBlocksPanel unit={unit} readOnly viewAthlete={athlete} viewProgram={program} viewSex={program.meta?.sex ?? sex} publicView={!authenticated} />}
       {section === 'compare' && authenticated && <LifetimeComparePanel unit={unit} readOnly viewAthlete={athlete} />}
       {section === 'maxes' && <MaxesPage viewProgram={program} />}
     </Stack>

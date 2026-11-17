@@ -107,6 +107,7 @@ export function BlockWeeklySurface({
   version,
   viewAthlete,
   readOnlyAthlete,
+  publicView = false,
 }: {
   program: Program | null
   bundle: BlockAnalysisBundle
@@ -115,6 +116,7 @@ export function BlockWeeklySurface({
   version: string
   viewAthlete?: string
   readOnlyAthlete?: string
+  publicView?: boolean
 }) {
   const dataAthlete = viewAthlete ?? readOnlyAthlete
   const [viewMode, setViewMode] = useState<'raw' | 'graph'>('raw')
@@ -379,7 +381,7 @@ export function BlockWeeklySurface({
 
       {viewAthlete && <AnalysisFlags flags={bundle.weekly.flags ?? []} />}
 
-      <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
+      <SimpleGrid cols={{ base: 1, sm: 2, xl: publicView ? 3 : 4 }} spacing="md">
         <Paper withBorder p="md">
           <Group gap="xs" mb="xs"><Dumbbell size={18} /><Text fw={500}>Estimated 1 Rep Maxes</Text></Group>
           {highestMaxes ? (
@@ -426,10 +428,10 @@ export function BlockWeeklySurface({
         </Paper>
 
         <Paper withBorder p="md">
-          <Group gap="xs" mb="xs"><Activity size={18} /><Text fw={500}>Current Fatigue State</Text></Group>
+          <Group gap="xs" mb="xs"><Activity size={18} /><Text fw={500}>{publicView && !bundle.block.isCurrent ? 'End Fatigue State' : 'Current Fatigue State'}</Text></Group>
           <Stack gap={2}>
             <Text fz="2rem" fw={700} c={fatigueBadgeColor(bundle.weekly.fatigue_index)}>{bundle.weekly.fatigue_index !== null ? (bundle.weekly.fatigue_index * 100).toFixed(0) + '%' : 'N/A'}</Text>
-            <Text fz="sm" c="dimmed">{fatigueLabel(bundle.weekly.fatigue_index)} current state</Text>
+            <Text fz="sm" c="dimmed">{fatigueLabel(bundle.weekly.fatigue_index)} {publicView && !bundle.block.isCurrent ? 'end state' : 'current state'}</Text>
             <Group gap="xs" wrap="wrap">
               {typeof bundle.weekly.fatigue_components?.window_mean_fi === 'number' && <Badge variant="light" color="blue">Window mean {(bundle.weekly.fatigue_components.window_mean_fi * 100).toFixed(0)}%</Badge>}
               {typeof bundle.weekly.fatigue_components?.window_peak_fi === 'number' && <Badge variant="light" color="orange">Window peak {(bundle.weekly.fatigue_components.window_peak_fi * 100).toFixed(0)}%</Badge>}

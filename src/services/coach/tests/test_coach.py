@@ -27,7 +27,10 @@ class FakeServices:
         if request.url.path == "/operations/access_context":
             if request.headers["x-person-pk"] == "outsider":
                 return httpx.Response(403, json={"detail": {"code": "forbidden", "message": "Not permitted"}})
-            return httpx.Response(200, json={"permissions": ["program:read", "glossary:write"], "competition_scope": {"read": []}})
+            permissions = ["program:read", "glossary:write"]
+            if request.headers["x-person-pk"] != "unpaid":
+                permissions.append("ai:use")
+            return httpx.Response(200, json={"permissions": permissions, "competition_scope": {"read": []}})
         if request.url.path == "/operations/glossary_estimate_batch":
             assert request.headers["x-if-turn-id"]
             return httpx.Response(200, json={"status": "needs_inference", "execution_id": "exec-1", "challenge_id": "ch-1", "messages": [{"role": "system", "content": "Estimate."}, {"role": "user", "content": "Squat"}], "tools": [{"type": "function", "function": {"name": "report", "parameters": {"type": "object", "properties": {"e1rm_kg": {"type": "number"}}, "required": ["e1rm_kg"]}}}]})
@@ -91,6 +94,7 @@ def test_domain_job_rejects_unauthorized_person_and_scope(harness):
     client, _, _ = harness
     payload = {"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"ids": ["squat"], "aspects": ["e1rm"]}, "athlete": "operator"}}
     assert client.post("/v1/jobs", json=payload, headers=headers(person="outsider")).status_code == 403
+    assert client.post("/v1/jobs", json=payload, headers=headers(person="unpaid")).status_code == 403
     scoped = {"kind": "domain", "payload": {**payload["payload"], "arguments": {"ids": ["squat"], "aspects": ["e1rm"], "pk": "someone-else"}}}
     assert client.post("/v1/jobs", json=scoped, headers=headers()).status_code == 403
     assert client.post("/v1/jobs", json=payload, headers={"X-Athlete-Pk": "operator"}).status_code == 403
@@ -120,6 +124,34 @@ def test_api_key_provider_runs_codex_as_the_harness_with_its_own_key(harness, tm
     assert 'model_provider="openrouter"' in routed.config_overrides
     assert not any(item.startswith("forced_login_method") for item in routed.config_overrides)
     assert 'forced_login_method="chatgpt"' in model._config(tmp_path, (), "chatgpt").config_overrides
+
+
+def test_large_prompt_uses_private_input_tool_and_cleans_up(tmp_path):
+    import asyncio
+    from services.coach.model import CodexModel, MAX_INLINE_PROMPT
+    from services.coach.input_reader import CHUNK_SIZE, handle
+
+    class InspectModel(CodexModel):
+        async def _run(self, ai, cwd, instructions, prompt, overrides=()):
+            assert "job_input" in prompt and len(overrides) == 2
+            path = Path(json.loads(overrides[1].split("=", 1)[1])[-1])
+            data = path.read_text()
+            assert len(data) == MAX_INLINE_PROMPT
+            first = handle({"id": 1, "method": "tools/call", "params": {"name": "read_input", "arguments": {"offset": 0}}}, data)
+            chunk = json.loads(first["result"]["content"][0]["text"])
+            assert len(chunk["text"]) == CHUNK_SIZE and chunk["next_offset"] == CHUNK_SIZE
+            parts = [chunk["text"]]
+            offset = chunk["next_offset"]
+            while offset is not None:
+                result = handle({"id": 1, "method": "tools/call", "params": {"name": "read_input", "arguments": {"offset": offset}}}, data)
+                chunk = json.loads(result["result"]["content"][0]["text"])
+                parts.append(chunk["text"])
+                offset = chunk["next_offset"]
+            assert "".join(parts) == data
+            return "ok"
+
+    assert asyncio.run(InspectModel(tmp_path, {}).complete(None, "instructions", "x" * MAX_INLINE_PROMPT)) == "ok"
+    assert not list(tmp_path.glob("input-*"))
 
 
 class StubBody:

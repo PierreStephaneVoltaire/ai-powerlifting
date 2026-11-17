@@ -34,6 +34,7 @@ export function identityFromToken(token: string): AuthIdentity {
     avatar: typeof claims.picture === 'string' ? claims.picture : null,
     email: typeof claims.email === 'string' ? claims.email : null,
     groups: strings(claims.groups),
+    expires_at: typeof claims.exp === 'number' && Number.isSafeInteger(claims.exp) ? claims.exp : 0,
     roles: strings(claims.roles),
     discord_subjects: strings(claims.discord_subjects).filter(value => DISCORD_SUBJECT.test(value)),
   }

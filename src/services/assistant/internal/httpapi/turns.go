@@ -87,8 +87,13 @@ func (s *Server) createTurn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "conversation belongs to another Person")
 		return
 	}
-	if _, err := s.Access.Resolve(r.Context(), caller.Person, ref.Athlete); err != nil {
+	identity, err := s.Access.Resolve(r.Context(), caller.Person, ref.Athlete)
+	if err != nil {
 		writeError(w, accessStatus(err), "no active access to this Athlete")
+		return
+	}
+	if !identity.Has("ai:use") {
+		writeError(w, http.StatusForbidden, "AI access requires the pro group")
 		return
 	}
 	jobID, err := newJobID()

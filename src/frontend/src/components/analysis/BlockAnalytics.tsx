@@ -149,6 +149,7 @@ function ProgramEvaluationSection({
   onRefresh,
   readOnly = false,
   viewAthlete,
+  publicView = false,
 }: {
   report: ProgramEvaluationReport | null
   loading: boolean
@@ -156,6 +157,7 @@ function ProgramEvaluationSection({
   onRefresh: () => void
   readOnly?: boolean
   viewAthlete?: string
+  publicView?: boolean
 }) {
   return (
     <Paper withBorder p="md">
@@ -176,6 +178,28 @@ function ProgramEvaluationSection({
       {error && <Text c="red" fz="sm">{error}</Text>}
       {loading && !report ? (
         <Center mih={80}><Loader size="sm" /></Center>
+      ) : report && publicView ? (
+        <Stack gap="md">
+          <Text size="sm" c="dimmed" p="sm" fs="italic" style={{ background: 'var(--mantine-color-default-hover)', borderRadius: 'var(--mantine-radius-sm)' }}>{report.summary || report.insufficient_data_reason || 'No program analysis summary returned.'}</Text>
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+            {([['Working', report.what_is_working, 'green', '✓'], ['Not Working', report.what_is_not_working, 'red', '✗']] as const).map(([label, items, color, symbol]) => (
+              <Stack gap="xs" key={label}>
+                <Text size="sm" fw={500} c={color}>{label}</Text>
+                {items?.length ? items.map((item, index) => (
+                  <Group key={index} gap="xs" align="flex-start" wrap="nowrap">
+                    <Badge variant="light" color={color} size="sm">{symbol}</Badge>
+                    <Text size="xs">{compactText(item)}</Text>
+                  </Group>
+                )) : <Text fz="sm" c="dimmed">No findings yet.</Text>}
+              </Stack>
+            ))}
+          </SimpleGrid>
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>Key Takeaways</Text>
+            <TextList items={report.key_takeaways} empty="No standout takeaways." />
+          </Stack>
+          {report.conclusion && <Text size="sm" fw={500} pt="sm" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>{report.conclusion}</Text>}
+        </Stack>
       ) : report ? (
         <Stack gap="sm">
           <Text fz="sm">{report.summary || report.insufficient_data_reason || 'No program analysis summary returned.'}</Text>
@@ -211,6 +235,7 @@ function BlockAnalysisDetails({
   onBundleUpdated,
   readOnly = false,
   viewAthlete,
+  publicView = false,
 }: {
   bundle: BlockAnalysisBundle
   unit: WeightUnit
@@ -220,6 +245,7 @@ function BlockAnalysisDetails({
   onBundleUpdated: (bundle: BlockAnalysisBundle) => void
   readOnly?: boolean
   viewAthlete?: string
+  publicView?: boolean
 }) {
   const outcome = bundle.historical.competitionOutcome
   const summary = bundle.historical.analyticsSummary
@@ -498,6 +524,7 @@ function BlockAnalysisDetails({
         onRefresh={() => loadProgramEvaluation(true)}
         readOnly={readOnly}
         viewAthlete={viewAthlete}
+        publicView={publicView}
       />
 
       <BlockWeeklySurface
@@ -507,12 +534,13 @@ function BlockAnalysisDetails({
         sex={sex}
         version={version}
         readOnlyAthlete={viewAthlete}
+        publicView={publicView}
       />
     </Stack>
   )
 }
 
-export function PastBlocksPanel({ unit, readOnly = false, viewAthlete, viewProgram, viewSex }: { unit: WeightUnit; readOnly?: boolean; viewAthlete?: string; viewProgram?: Program | null; viewSex?: 'male' | 'female' | null }) {
+export function PastBlocksPanel({ unit, readOnly = false, viewAthlete, viewProgram, viewSex, publicView = false }: { unit: WeightUnit; readOnly?: boolean; viewAthlete?: string; viewProgram?: Program | null; viewSex?: 'male' | 'female' | null; publicView?: boolean }) {
   const { program: ownProgram, version } = useProgramStore()
   const { sex: ownSex } = useSettingsStore()
   const program = viewAthlete ? viewProgram ?? null : ownProgram
@@ -667,6 +695,7 @@ export function PastBlocksPanel({ unit, readOnly = false, viewAthlete, viewProgr
           onBundleUpdated={setBundle}
           readOnly={readOnly}
           viewAthlete={viewAthlete}
+          publicView={publicView}
         />
       )}
     </Stack>
