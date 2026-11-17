@@ -69,7 +69,7 @@ func (c *Client) ChatStream(ctx context.Context, request ChatRequest, onDelta fu
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(response.Body, 2048))
-		return ChatResponse{}, fmt.Errorf("litellm /v1/chat/completions returned %d: %.300s", response.StatusCode, raw)
+		return ChatResponse{}, responseError(response.StatusCode, raw)
 	}
 	var result ChatResponse
 	var content strings.Builder
@@ -85,6 +85,10 @@ func (c *Client) ChatStream(ctx context.Context, request ChatRequest, onDelta fu
 		data = strings.TrimSpace(data)
 		if data == "" || data == "[DONE]" {
 			continue
+		}
+		var envelope map[string]json.RawMessage
+		if json.Unmarshal([]byte(data), &envelope) == nil && envelope["error"] != nil {
+			return ChatResponse{}, responseError(http.StatusOK, []byte(data))
 		}
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {

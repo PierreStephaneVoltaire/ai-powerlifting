@@ -144,7 +144,7 @@ func (c *Client) post(ctx context.Context, path string, payload any, meta Metada
 		return fmt.Errorf("litellm %s response exceeds %d bytes; response was not processed", path, maxBodyBytes)
 	}
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("litellm %s returned %d: %.300s", path, response.StatusCode, raw)
+		return responseError(response.StatusCode, raw)
 	}
 	return json.Unmarshal(raw, out)
 }

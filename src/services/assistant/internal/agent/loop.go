@@ -21,18 +21,16 @@ const (
 var ErrBudget = errors.New("agent budget exhausted")
 
 type Limits struct {
-	MaxSteps  int
-	MaxTokens int
+	MaxSteps int
 }
 
 type State struct {
 	Messages []llm.Message `json:"messages"`
 	Steps    int           `json:"steps"`
-	Tokens   int           `json:"tokens"`
 }
 
 func (s *State) Exhausted(limits Limits) error {
-	if s.Steps >= limits.MaxSteps || s.Tokens >= limits.MaxTokens {
+	if s.Steps >= limits.MaxSteps {
 		return ErrBudget
 	}
 	return nil
@@ -40,7 +38,6 @@ func (s *State) Exhausted(limits Limits) error {
 
 func (s *State) Record(response llm.ChatResponse) {
 	s.Steps++
-	s.Tokens += response.PromptTokens + response.CompletionTokens
 	s.Messages = append(s.Messages, llm.Message{Role: "assistant", Content: response.Content, ToolCalls: response.ToolCalls})
 }
 

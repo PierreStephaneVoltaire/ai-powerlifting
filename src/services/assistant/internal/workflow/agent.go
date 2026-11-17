@@ -24,7 +24,7 @@ import (
 
 const (
 	approvalExpiredText = "The proposal expired without a decision."
-	budgetText          = "I could not finish within my step limit. Ask again with a narrower request."
+	budgetText          = "I could not finish within my step limit. No final answer was produced. Please retry with a narrower request."
 )
 
 type Workflows struct {
@@ -155,7 +155,7 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 		Orchestrator: params.Orchestrator, Profile: params.Profile, SessionDate: params.Context.SessionDate, SessionIndex: params.Context.SessionIndex, ExerciseIndex: params.Context.ExerciseIndex,
 		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryBefore: params.HistoryBefore, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets,
 	})}}, params.Messages...)}
-	limits := agent.Limits{MaxSteps: w.Config.MaxSteps, MaxTokens: w.Config.MaxTokens}
+	limits := agent.Limits{MaxSteps: w.Config.MaxSteps}
 	meta := llm.Metadata{UserID: params.Identity.Person, ConversationID: params.ConversationID, WorkflowID: ctx.ID(), TurnID: turnIDOf(ctx.ID()), Role: params.role()}
 	sequence := 0
 	for {
@@ -163,7 +163,14 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 			result.Reply = withCommitFailure(lastAssistantText(state.Messages, budgetText), result.CommitFailure)
 			return result, nil
 		}
-		response, err := call[llm.ChatResponse](ctx, activities.NameModelCall, activities.ModelCallInput{Model: params.Model, Meta: meta, Messages: state.Messages, Tools: defs}, modelRetry)
+		response, err := modelWithLimitRetry(params.Model, w.Config.StrongModel, func(model string, retry bool) (activities.ModelCallOutput, error) {
+			policy := modelRetry
+			if retry {
+				policy = &workflow.RetryPolicy{MaxAttempts: 1}
+				params.Model = model
+			}
+			return call[activities.ModelCallOutput](ctx, activities.NameModelCall, activities.ModelCallInput{Model: model, Meta: meta, Messages: state.Messages, Tools: defs}, policy)
+		})
 		if err != nil {
 			return result, err
 		}
@@ -201,8 +208,11 @@ func withCommitFailure(reply, failure string) string {
 
 func lastAssistantText(messages []llm.Message, fallback string) string {
 	for index := len(messages) - 1; index >= 0; index-- {
+		if messages[index].Role == "user" {
+			break
+		}
 		if messages[index].Role == "assistant" && messages[index].Content != "" {
-			return messages[index].Content
+			return messages[index].Content + "\n\n" + fallback
 		}
 	}
 	return fallback

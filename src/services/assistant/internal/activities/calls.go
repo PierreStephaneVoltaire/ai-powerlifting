@@ -9,7 +9,24 @@ import (
 	"powerlifting/assistant/internal/tools"
 )
 
-func (d *Deps) ModelCall(ctx context.Context, in ModelCallInput) (llm.ChatResponse, error) {
+type ModelCallOutput struct {
+	llm.ChatResponse
+	Limit string `json:"limit,omitempty"`
+}
+
+func (d *Deps) ModelCall(ctx context.Context, in ModelCallInput) (ModelCallOutput, error) {
+	response, err := d.modelCall(ctx, in)
+	var limit *llm.LimitError
+	if errors.As(err, &limit) {
+		return ModelCallOutput{Limit: limit.Error()}, nil
+	}
+	if err == nil && (response.FinishReason == "length" || response.FinishReason == "max_tokens") {
+		return ModelCallOutput{Limit: "Model output token limit reached; incomplete response discarded."}, nil
+	}
+	return ModelCallOutput{ChatResponse: response}, err
+}
+
+func (d *Deps) modelCall(ctx context.Context, in ModelCallInput) (llm.ChatResponse, error) {
 	release, err := d.acquire(ctx)
 	if err != nil {
 		return llm.ChatResponse{}, err

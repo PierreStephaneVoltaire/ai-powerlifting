@@ -3,7 +3,17 @@ package agent
 import (
 	"strings"
 	"testing"
+
+	"powerlifting/assistant/internal/llm"
 )
+
+func TestLargeModelUsageDoesNotExhaustSteps(t *testing.T) {
+	var state State
+	state.Record(llm.ChatResponse{PromptTokens: 1000000, CompletionTokens: 1000000})
+	if err := state.Exhausted(Limits{MaxSteps: 12}); err != nil {
+		t.Fatal("token usage exhausted the workflow before its step limit")
+	}
+}
 
 func TestToolResultPreservesCompleteResearch(t *testing.T) {
 	content := strings.Repeat("compound findings\n", 2000) + "FINAL INGREDIENT"

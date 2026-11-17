@@ -29,7 +29,6 @@ type Config struct {
 	EmbedDim         int
 	MaxConcurrency   int
 	MaxSteps         int
-	MaxTokens        int
 	MaxDepth         int
 	DelegationBudget int
 	ApprovalTimeout  time.Duration
@@ -100,7 +99,6 @@ func Load() Config {
 		EmbedDim:         number("EMBED_DIM", 1536),
 		MaxConcurrency:   number("ASSISTANT_MAX_CONCURRENCY", 4),
 		MaxSteps:         number("AGENT_MAX_STEPS", 12),
-		MaxTokens:        number("AGENT_MAX_TOKENS", 60000),
 		MaxDepth:         number("AGENT_MAX_DEPTH", 3),
 		DelegationBudget: number("PL_DELEGATION_BUDGET", 6),
 		ApprovalTimeout:  time.Duration(number("APPROVAL_TIMEOUT_HOURS", 24)) * time.Hour,
