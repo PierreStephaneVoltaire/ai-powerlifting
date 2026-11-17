@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
-
-	"powerlifting/assistant/internal/agent"
 )
 
 const schemaResource = "operation.json"
@@ -36,7 +34,7 @@ func validateArguments(schema json.RawMessage, arguments map[string]any) string 
 		return err.Error()
 	}
 	if err := compiled.Validate(instance); err != nil {
-		return agent.Truncate(strings.Join(strings.Fields(err.Error()), " "), 1200)
+		return strings.Join(strings.Fields(err.Error()), " ")
 	}
 	return ""
 }

@@ -10,11 +10,10 @@ import { useAuth } from '@/auth/AuthProvider'
 import { useAssistant } from '@/components/assistant/useAssistant'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 import { currentBlockId, recordBlock } from '@/utils/blockScope'
-import { invalidateDomain } from '@/api/cache'
 
 export default function SupplementsPage() {
   const { readOnly: accessReadOnly } = useAuth()
-  const { program, version, loadProgram, updateSupplementPhases } = useProgramStore()
+  const { program, updateSupplementPhases } = useProgramStore()
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
   const [hasChanges, setHasChanges] = useState(false)
@@ -22,10 +21,7 @@ export default function SupplementsPage() {
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
   const [block, setBlock] = useState(() => currentBlockId(program))
   const readOnly = accessReadOnly || block !== currentBlockId(program)
-  const assistant = useAssistant('supplements', {}, readOnly || hasChanges, async () => {
-    await invalidateDomain(`program:${version}`)
-    await loadProgram(version)
-  })
+  const assistant = useAssistant('supplements', {}, readOnly || hasChanges)
 
   const availableBlocks = useMemo(() => {
     const ids = (program?.meta?.blocks ?? []).map((item) => item.id).filter(Boolean)
@@ -327,7 +323,7 @@ export default function SupplementsPage() {
                     <div className="if-supp-table-header">
                       <span className="if-supp-table-label">Compound</span>
                       <span className="if-supp-table-label">Daily total</span>
-                      <span className="if-supp-table-label">Sources / notes</span>
+                      <span className="if-supp-table-label">Notes</span>
                       <Button
                         variant="default"
                         size="compact-xs"
@@ -366,7 +362,7 @@ export default function SupplementsPage() {
                           onChange={(e) =>
                             updateItem(originalIndex, itemIndex, { notes: e.currentTarget.value })
                           }
-                          placeholder="Notes or observations..."
+                          placeholder="Purpose and effective-dose notes"
                           size="xs"
                           disabled={readOnly}
                           classNames={{ input: 'if-supp-note-input' }}

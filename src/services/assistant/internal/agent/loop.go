@@ -15,7 +15,7 @@ const (
 	ReviewTool   = "review_delegation"
 	FlagTool     = "flag_suspicious"
 	ProposeTool  = "propose_change"
-	MaxToolText  = 12000
+	HistoryTool  = "read_conversation_history"
 )
 
 var ErrBudget = errors.New("agent budget exhausted")
@@ -45,14 +45,7 @@ func (s *State) Record(response llm.ChatResponse) {
 }
 
 func (s *State) AddToolResult(callID, text string) {
-	s.Messages = append(s.Messages, llm.Message{Role: "tool", ToolCallID: callID, Content: Truncate(text, MaxToolText)})
-}
-
-func Truncate(text string, limit int) string {
-	if len(text) <= limit {
-		return text
-	}
-	return text[:limit] + "\n[truncated]"
+	s.Messages = append(s.Messages, llm.Message{Role: "tool", ToolCallID: callID, Content: text})
 }
 
 type CallKind string
@@ -63,6 +56,7 @@ const (
 	KindPropose  CallKind = "propose"
 	KindReview   CallKind = "review"
 	KindFlag     CallKind = "flag"
+	KindHistory  CallKind = "history"
 )
 
 type Call struct {
@@ -89,6 +83,8 @@ func Classify(call llm.ToolCall) Call {
 		parsed.Kind = KindReview
 	case FlagTool:
 		parsed.Kind = KindFlag
+	case HistoryTool:
+		parsed.Kind = KindHistory
 	}
 	return parsed
 }
@@ -178,7 +174,11 @@ func ParseProposal(arguments map[string]any) (ProposalRequest, error) {
 }
 
 func PseudoTools(scope []string, depth, maxDepth int) []llm.ToolDef {
-	var defs []llm.ToolDef
+	defs := []llm.ToolDef{{Type: "function", Function: llm.FunctionDef{
+		Name:        HistoryTool,
+		Description: "Read saved history from this conversation as Markdown, five complete turns at a time. Use this to recover earlier instructions, ingredient lists or research before asking the Person to repeat them or researching again. Omit before_turn for recent history; use the returned next_before cursor to read older turns. History is context, not proof of the current saved portal state.",
+		Parameters:  json.RawMessage(`{"type":"object","properties":{"before_turn":{"type":"string"}},"additionalProperties":false}`),
+	}}}
 	if depth < maxDepth {
 		kinds, _ := json.Marshal(tools.SubagentKinds())
 		defs = append(defs,

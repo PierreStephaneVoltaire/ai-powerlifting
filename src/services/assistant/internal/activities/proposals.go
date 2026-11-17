@@ -8,12 +8,9 @@ import (
 	"slices"
 
 	"powerlifting/assistant/internal/access"
-	"powerlifting/assistant/internal/agent"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/tools"
 )
-
-const maxSnapshotBytes = 16 * 1024
 
 type targetRead struct {
 	Operation string         `json:"operation"`
@@ -57,14 +54,14 @@ func (d *Deps) Propose(ctx context.Context, in ProposeInput) (ProposalView, erro
 		return ProposalView{}, err
 	}
 	if read.IsError {
-		return reject("target could not be read: " + agent.Truncate(read.Text, 300))
+		return reject("target could not be read: " + read.Text)
 	}
 	version := tools.Version(read.Text)
 	var before any = json.RawMessage(nil)
-	if len(read.Text) <= maxSnapshotBytes && json.Valid([]byte(read.Text)) {
+	if json.Valid([]byte(read.Text)) {
 		before = json.RawMessage(read.Text)
 	} else {
-		before = agent.Truncate(read.Text, 2000)
+		before = read.Text
 	}
 	diffBody := map[string]any{"operation": request.Operation, "arguments": request.Arguments, "before": before, "target_version": version}
 	if in.Assessment != nil {
@@ -141,7 +138,7 @@ func (d *Deps) Commit(ctx context.Context, in CommitInput) (CommitOutput, error)
 		return CommitOutput{}, err
 	}
 	finish := func(event store.Event, outcome, text string, jti string) (CommitOutput, error) {
-		result := mustJSON(map[string]any{"outcome": outcome, "text": agent.Truncate(text, 4000)})
+		result := mustJSON(map[string]any{"outcome": outcome, "text": text})
 		advanced, err := d.Store.Advance(ctx, in.ProposalID, event, "", result)
 		if err != nil {
 			return CommitOutput{}, err

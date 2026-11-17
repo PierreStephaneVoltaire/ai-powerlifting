@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"powerlifting/assistant/internal/access"
-	"powerlifting/assistant/internal/agent"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/tools"
@@ -115,7 +114,7 @@ func (d *Deps) Deliver(ctx context.Context, in DeliverInput) (DeliverOutput, err
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
-		embedding, err := d.LLM.Embed(ctx, d.Config.EmbedModel, agent.Truncate(content, MaxChars), meta)
+		embedding, err := d.LLM.Embed(ctx, d.Config.EmbedModel, content, meta)
 		if err != nil || len(embedding) != d.Config.EmbedDim {
 			d.Log.Warn("embedding skipped", "turn_id", in.TurnID, "kind", kind, "error", err)
 			continue

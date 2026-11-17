@@ -17,6 +17,8 @@ import {
   type AssistantScope,
 } from '@/api/assistant'
 import AssistantProgress from './AssistantProgress'
+import { refreshAssistantData } from './refreshAssistantData'
+import { requestPartition } from '@/api/context'
 
 interface AssistantDrawerProps {
   opened: boolean
@@ -134,6 +136,9 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const applied = useRef(new Set<string>())
+  const refreshing = useRef(Promise.resolve())
+  const onAppliedRef = useRef(onApplied)
+  onAppliedRef.current = onApplied
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
 
@@ -176,21 +181,28 @@ export default function AssistantDrawer({ opened, onClose, scope, context, readO
   }, [opened, loadHistory])
 
   useEffect(() => {
-    if (!opened || !job || isTerminal(job.status)) return
+    if (!job || isTerminal(job.status)) return
     let cancelled = false
     void pollTurn(job.job_id, (next) => { if (!cancelled) setJob(next) }, () => cancelled)
       .then(async () => { if (!cancelled) await loadHistory(job.job_id) })
       .catch((err) => { if (!cancelled) setError(errorMessage(err)) })
     return () => { cancelled = true }
-  }, [opened, job?.job_id, loadHistory])
+  }, [job?.job_id, loadHistory])
 
   useEffect(() => {
-    if (!onApplied) return
     const committed = job?.proposals.filter((proposal) => ['committed', 'applied'].includes(proposal.state) && !applied.current.has(proposal.id)) || []
     if (!committed.length) return
     committed.forEach((proposal) => applied.current.add(proposal.id))
-    void onApplied().catch((err) => setError(`Change applied, but refreshing the page failed: ${errorMessage(err)}`))
-  }, [job, onApplied])
+    const partition = requestPartition()
+    refreshing.current = refreshing.current.then(async () => {
+      if (partition !== requestPartition()) return
+      await refreshAssistantData()
+      if (partition === requestPartition()) await onAppliedRef.current?.()
+    }).catch((err) => {
+      committed.forEach((proposal) => applied.current.delete(proposal.id))
+      setError(`Change applied, but refreshing the page failed: ${errorMessage(err)}`)
+    })
+  }, [job])
 
   const toggleTurn = async (turn: AssistantHistoryTurn) => {
     const next = new Set(expanded)

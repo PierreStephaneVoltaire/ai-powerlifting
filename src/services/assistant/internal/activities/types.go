@@ -98,6 +98,7 @@ type HistoryOutput struct {
 	Turns       int           `json:"turns"`
 	Permissions []string      `json:"permissions"`
 	Shared      bool          `json:"shared"`
+	NextBefore  string        `json:"next_before,omitempty"`
 }
 
 type ListToolsInput struct {

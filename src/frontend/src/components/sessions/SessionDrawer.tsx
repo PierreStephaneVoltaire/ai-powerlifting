@@ -539,6 +539,25 @@ function SortableExerciseItem({
     </Paper>
   )
 }
+function editableSession(session: Session): Session {
+  const clone = JSON.parse(JSON.stringify(session)) as Session
+  if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
+    clone.exercises = clone.planned_exercises!.map(pe => ({
+      name: pe.name,
+      sets: pe.sets,
+      reps: pe.reps,
+      kg: pe.kg,
+      notes: '',
+      set_statuses: Array(pe.sets).fill('pending'),
+      failed_set_reasons: Array.from({ length: pe.sets }, () => []),
+    }))
+  }
+  clone.exercises = clone.exercises.map((ex) => ({
+    ...withSetStatusFields(ex, clone.completed),
+    id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  }))
+  return clone
+}
 
 export default function SessionDrawer({
   isOpen,
@@ -595,7 +614,7 @@ export default function SessionDrawer({
   const [videoUploadPreset, setVideoUploadPreset] = useState<{ exerciseName: string; setNumber: number } | null>(null)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
-  const programAssistant = useAssistant('general', { area: 'program' }, readOnly)
+  const programAssistant = useAssistant('general', { area: 'program' }, readOnly || hasChanges || isSaving, refreshSession)
   const [assistantExerciseIndex, setAssistantExerciseIndex] = useState<number | null>(null)
   const [failedReasonTarget, setFailedReasonTarget] = useState<{ exerciseIndex: number; setIndex: number } | null>(null)
   const [failedReasonDraft, setFailedReasonDraft] = useState<FailedSetReason[]>([])
@@ -656,6 +675,22 @@ export default function SessionDrawer({
       .catch(() => {})
   }, [])
 
+  async function refreshSession() {
+    if (hasChanges || isSaving) return
+    const previous = savedSessionRef.current
+    const sessions = useProgramStore.getState().program?.sessions ?? []
+    const session = previous?.id ? sessions.find((item) => item.id === previous.id) : sessions[sessionArrayIndex]
+    if (!session) {
+      onClose()
+      return
+    }
+    savedSessionRef.current = session
+    savedDateRef.current = session.date
+    setBaseline(session)
+    setLocalSession(editableSession(session))
+    setOriginalDate(session.date)
+  }
+
   const glossaryNames = useMemo(() => Array.from(new Set(glossary.map((e) => e.name))).sort(), [glossary])
   const glossaryLookup = useMemo(() => {
     const lookup = new Map<string, GlossaryExercise>()
@@ -675,23 +710,7 @@ export default function SessionDrawer({
       const sessionId = session.id || ''
       setLocalSession(null)
       setBaseline(session)
-      const clone = JSON.parse(JSON.stringify(session)) as Session
-      // Pre-populate exercises from planned_exercises for incomplete sessions
-      if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
-        clone.exercises = clone.planned_exercises!.map(pe => ({
-          name: pe.name,
-          sets: pe.sets,
-          reps: pe.reps,
-          kg: pe.kg,
-          notes: '',
-          set_statuses: Array(pe.sets).fill('pending'),
-          failed_set_reasons: Array.from({ length: pe.sets }, () => []),
-        }))
-      }
-      clone.exercises = clone.exercises.map((ex) => ({
-        ...withSetStatusFields(ex, clone.completed),
-        id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      }))
+      const clone = editableSession(session)
       const draftKey = sessionId ? sessionDraftKey(version, sessionId) : ''
       draftKeyRef.current = draftKey
       draftPartitionRef.current = partition
@@ -1750,7 +1769,8 @@ export default function SessionDrawer({
         onClose={() => setAssistantExerciseIndex(null)}
         scope="session-design"
         context={{ session_date: localSession?.date, session_index: sessionArrayIndex, exercise_index: assistantExerciseIndex ?? undefined }}
-        readOnly={readOnly}
+        readOnly={readOnly || hasChanges || isSaving}
+        onApplied={refreshSession}
       />
 
       <Modal

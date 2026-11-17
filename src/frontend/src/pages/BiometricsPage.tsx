@@ -14,18 +14,16 @@ import { recordsInBlock } from '@/utils/blockScope'
 
 export default function BiometricsPage() {
   const { readOnly } = useAuth()
-  const assistant = useAssistant('biometrics', {}, readOnly)
   const { program, updateDietNotes } = useProgramStore()
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<DietNote[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  const assistant = useAssistant('biometrics', {}, readOnly || hasChanges)
 
   useEffect(() => {
-    if (program?.diet_notes) {
-      const sorted = recordsInBlock(program.diet_notes, program).sort((a, b) => b.date.localeCompare(a.date))
-      setNotes(sorted)
-    }
-  }, [program])
+    if (hasChanges) return
+    setNotes(recordsInBlock(program?.diet_notes ?? [], program).sort((a, b) => b.date.localeCompare(a.date)))
+  }, [program, hasChanges])
 
   function updateNote(date: string, updates: Partial<DietNote>) {
     setNotes((prev) =>

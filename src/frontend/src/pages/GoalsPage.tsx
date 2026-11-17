@@ -145,17 +145,18 @@ function findFederationStandardsForClasses(
 
 export default function GoalsPage() {
   const { readOnly, age_class: authAgeClass, ranking_country, ranking_region } = useAuth()
-  const assistant = useAssistant('goals', {}, readOnly)
-  const { updateGoals } = useProgramStore()
+  const { program, updateGoals } = useProgramStore()
   const { pushToast } = useUiStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const [goals, setGoals] = useState<AthleteGoal[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  const assistant = useAssistant('goals', {}, readOnly || hasChanges)
   const [federations, setFederations] = useState<MasterFederation[]>([])
 
   const effectiveAgeClass: AgeCategory = authAgeClass || 'open'
 
   useEffect(() => {
+    if (hasChanges) return
     let cancelled = false
     api.fetchGoals()
       .then((rows) => {
@@ -169,7 +170,7 @@ export default function GoalsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [program, hasChanges])
 
   useEffect(() => {
     loadCompetitions({ country: ranking_country ?? undefined, state: ranking_region ?? undefined })

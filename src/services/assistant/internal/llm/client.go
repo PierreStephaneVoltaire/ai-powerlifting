@@ -136,9 +136,12 @@ func (c *Client) post(ctx context.Context, path string, payload any, meta Metada
 		return err
 	}
 	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maxBodyBytes))
+	raw, err := io.ReadAll(io.LimitReader(response.Body, maxBodyBytes+1))
 	if err != nil {
 		return err
+	}
+	if len(raw) > maxBodyBytes {
+		return fmt.Errorf("litellm %s response exceeds %d bytes; response was not processed", path, maxBodyBytes)
 	}
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("litellm %s returned %d: %.300s", path, response.StatusCode, raw)

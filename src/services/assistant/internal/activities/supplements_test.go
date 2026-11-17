@@ -25,3 +25,26 @@ func TestSupplementProposalsRequireCompoundAmountsInsteadOfCapsules(t *testing.T
 		t.Fatal(reason)
 	}
 }
+
+func TestSupplementNotesRejectReportingFiller(t *testing.T) {
+	for _, note := range []string{"As reported by the user.", "User-reported intake.", "Self reported dose", "Per user."} {
+		for _, phaseNote := range []bool{false, true} {
+			item := map[string]any{"name": "Compound A", "dose": "100 mg/day", "notes": "Purpose and dose effectiveness."}
+			phase := map[string]any{"items": []any{item}}
+			if phaseNote {
+				phase["notes"] = note
+			} else {
+				item["notes"] = note
+			}
+			if reason := validateSupplementCompounds(map[string]any{"phases": []any{phase}}); reason == "" {
+				t.Errorf("accepted reporting filler: %s", note)
+			}
+		}
+	}
+	args := map[string]any{"phases": []any{map[string]any{"items": []any{map[string]any{
+		"name": "Compound A", "dose": "100 mg/day", "notes": "Intended for recovery; an effective dose for this purpose is not established.",
+	}}}}}
+	if reason := validateSupplementCompounds(args); reason != "" {
+		t.Fatal(reason)
+	}
+}

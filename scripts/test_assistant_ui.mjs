@@ -5,13 +5,14 @@ import { fileURLToPath } from 'node:url'
 const require = createRequire(new URL('../src/package.json', import.meta.url))
 const { chromium } = require('@playwright/test')
 const { createServer } = await import(new URL('../src/node_modules/vite/dist/node/index.js', import.meta.url))
+const testPage = process.env.ASSISTANT_TEST_PAGE || 'supplements'
 const program = {
   meta: { current_block_id: 'active', blocks: [{ id: 'past', name: 'Past block', status: 'completed' }, { id: 'active', status: 'active' }] },
   sessions: [], phases: [],
   supplement_phases: [{ phase: 1, phase_name: 'Past protocol', block_id: 'past', items: [] }],
 }
 const phase = { phase: 5, phase_name: 'Off season', block_id: 'active', start_week: 1, end_week: 5, items: [{ name: 'Recorded item', dose: 'Recorded dose' }] }
-const proposal = { id: 'proposal', operation: 'supplement_phases_update', summary: 'Create current phase', target_id: 'active', state: 'pending', destructive: false, diff: { phases: [phase] } }
+const proposal = { id: 'proposal', operation: testPage === 'biometrics' ? 'diet_notes_update' : 'supplement_phases_update', summary: 'Create current phase', target_id: 'active', state: 'pending', destructive: false, diff: { phases: [phase] } }
 const progress = { stage: 'Checking', text: 'First reasoning.\n' + 'Readable reasoning line.\n'.repeat(80), updated_at: new Date().toISOString() }
 const turns = []
 let job
@@ -28,8 +29,10 @@ import '@mantine/core/styles.css'
 import { AuthProvider } from '/src/auth/AuthProvider'
 import { useProgramStore } from '/src/store/programStore'
 import SupplementsPage from '/src/pages/SupplementsPage'
+import BiometricsPage from '/src/pages/BiometricsPage'
 useProgramStore.setState({ program: ${JSON.stringify(program)} })
-createRoot(document.getElementById('root')).render(<MantineProvider><MemoryRouter initialEntries={['/supplements']}><AuthProvider><SupplementsPage /></AuthProvider></MemoryRouter></MantineProvider>)
+const Page = ${testPage === 'biometrics' ? 'BiometricsPage' : 'SupplementsPage'}
+createRoot(document.getElementById('root')).render(<MantineProvider><MemoryRouter initialEntries={['/${testPage}']}><AuthProvider><Page /></AuthProvider></MemoryRouter></MantineProvider>)
 `
 const server = await createServer({
   root: fileURLToPath(new URL('../src/frontend', import.meta.url)),
@@ -51,7 +54,7 @@ try {
   await page.route('http://127.0.0.1:5184/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     let result
-    if (path === '/api/auth/me') result = { person_pk: 'p', mapped_pk: 'a', own_athlete_pk: 'a', user: { roles: ['athlete'], active_role: 'athlete', display_name: 'Test' }, access: { permissions: ['program:read', 'program:write'] }, onboarding: { is_onboarded: true } }
+    if (path === '/api/auth/me') result = { person_pk: 'p', mapped_pk: 'a', own_athlete_pk: 'a', user: { roles: ['athlete'], active_role: 'athlete', display_name: 'Test' }, access: { permissions: ['program:read', 'program:write', 'weight-log:read', 'weight-log:write', 'goals:read', 'goals:write'] }, onboarding: { is_onboarded: true } }
     else if (path.endsWith('/history')) {
       const expand = new URL(route.request().url()).searchParams.get('expand')
       result = { turns: turns.map((turn) => ({ ...turn, content: expand === turn.id ? turn.content : undefined })), conversation_id: 'conversation' }
@@ -63,11 +66,15 @@ try {
       turns.unshift({ id: job.id, status: 'running', created_at: new Date().toISOString(), summary: 'Request', content: { request: 'Create current phase', reply: '', progress: job.progress, proposals: job.proposals } })
       result = job
     } else if (path.endsWith('/approve')) {
-      proposal.state = 'committed'
-      program.supplement_phases.push(phase)
-      job = { ...job, status: 'succeeded', result: { content: 'Phase created.' } }
-      jobs.set(job.id, job)
-      Object.assign(turns.find((turn) => turn.id === job.id), { status: 'succeeded', summary: 'Created phase', content: { request: 'Create current phase', reply: 'Phase created.', progress, proposals: [proposal] } })
+      proposal.state = 'approved'
+      setTimeout(() => {
+        proposal.state = 'committed'
+        program.supplement_phases.push(phase)
+        program.diet_notes = [{ date: '2026-11-16', notes: 'Refreshed nutrition note', block_id: 'active' }]
+        job = { ...job, status: 'succeeded', result: { content: 'Phase created.' } }
+        jobs.set(job.id, job)
+        Object.assign(turns.find((turn) => turn.id === job.id), { status: 'succeeded', summary: 'Created phase', content: { request: 'Create current phase', reply: 'Phase created.', progress, proposals: [proposal] } })
+      }, 300)
       result = proposal
     } else if (path.endsWith('/cancel')) {
       job = { ...job, status: 'cancelled' }
@@ -94,6 +101,12 @@ try {
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Assistant', exact: true }).click()
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  await page.keyboard.press('Escape')
+  if (testPage === 'biometrics') {
+    await page.getByPlaceholder('Notes, observations, how you felt...').waitFor()
+    assert.equal(await page.getByPlaceholder('Notes, observations, how you felt...').inputValue(), 'Refreshed nutrition note')
+  } else await page.getByText('Off season', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click()
   await page.getByText('Thinking', { exact: true }).waitFor()
   assert.ok(programReads > 0, 'committed change must reload the program')
   await page.getByPlaceholder('Write your request.').fill('Next message')
@@ -101,15 +114,19 @@ try {
   assert.ok(await page.getByText('First reasoning.', { exact: false }).count() >= 1, 'previous thinking must survive a new message')
   await page.getByRole('button', { name: 'Stop', exact: true }).click()
   await page.keyboard.press('Escape')
-  await page.getByText('Off season', { exact: true }).waitFor()
+  if (testPage === 'biometrics') {
+    assert.equal(await page.getByPlaceholder('Notes, observations, how you felt...').inputValue(), 'Refreshed nutrition note')
+  } else await page.getByText('Off season', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Assistant', exact: true }).click()
   await page.getByText('Thinking', { exact: true }).first().waitFor()
   await page.getByRole('button', { name: /Created phase/ }).click()
   await page.getByText('Applied', { exact: true }).waitFor()
   await page.keyboard.press('Escape')
-  await page.getByRole('combobox', { name: 'Training block' }).click()
-  await page.getByRole('option', { name: 'Past block', exact: true }).click()
-  assert.equal(await page.getByRole('button', { name: 'New phase', exact: true }).isDisabled(), true, 'past block must be read-only')
+  if (testPage === 'supplements') {
+    await page.getByRole('combobox', { name: 'Training block' }).click()
+    await page.getByRole('option', { name: 'Past block', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'New phase', exact: true }).isDisabled(), true, 'past block must be read-only')
+  }
   assert.deepEqual(browserErrors, [])
   console.log('PASS: approval refresh, retained thinking, scroll position, reopened history, and past-block write protection')
 } catch (error) {

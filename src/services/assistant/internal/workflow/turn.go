@@ -91,9 +91,13 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 			return finish(TurnOutput{Status: statusSucceeded, Reply: blockedReply}, nil)
 		}
 	}
-	retrieved, retrieveErr := call[activities.RetrieveOutput](ctx, activities.NameRetrieve, activities.RetrieveInput{
-		Identity: resolved.Identity, Query: message, ConversationID: input.ConversationID, WorkflowID: ctx.ID(),
-	}, quickRetry)
+	var retrieved activities.RetrieveOutput
+	var retrieveErr error
+	if !ctx.IsPatched("five-turn-history") {
+		retrieved, retrieveErr = call[activities.RetrieveOutput](ctx, activities.NameRetrieve, activities.RetrieveInput{
+			Identity: resolved.Identity, Query: message, ConversationID: input.ConversationID, WorkflowID: ctx.ID(),
+		}, quickRetry)
+	}
 	history, historyErr := call[activities.HistoryOutput](ctx, activities.NameHistory, activities.HistoryInput{
 		Identity: resolved.Identity, ConversationID: input.ConversationID, TurnID: input.TurnID,
 	}, quickRetry)
@@ -130,9 +134,10 @@ func (w *Workflows) ConversationTurn(ctx *workflow.WorkflowContext) (any, error)
 	}
 	result, err := w.runAgent(ctx, run{
 		Profile: profile, Orchestrator: true, Model: w.Config.CoordinatorModel, Identity: resolved.Identity, ConversationID: input.ConversationID,
-		Context: input.Context, Message: message, Messages: append(slices.Clone(history.Messages), input.Messages...), Snippets: snippets,
+		Context: input.Context, Message: message, Messages: append(slices.Clone(history.Messages), input.Messages...), Snippets: snippets, HistoryBefore: history.NextBefore,
 		Signals: guard.Signals, HistoryGap: historyGap, HistoryReference: guard.HistoryReference, SharedWith: sharedWith, State: state,
 	})
+	extraPermissions = visibility.Union(extraPermissions, result.Permissions)
 	if err != nil {
 		return finish(TurnOutput{Status: statusFailed, Error: "assistant failed: " + err.Error(), Proposals: result.Proposals}, result.Used)
 	}
@@ -162,9 +167,9 @@ func (w *Workflows) SubagentTask(ctx *workflow.WorkflowContext) (any, error) {
 		Signals: input.Signals, HistoryGap: input.HistoryGap, HistoryReference: input.HistoryReference, State: state,
 	})
 	if err != nil {
-		return SubagentOutput{Budget: state.Budget, UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor, Error: err.Error()}, nil
+		return SubagentOutput{Budget: state.Budget, UsedOperations: result.Used, Permissions: result.Permissions, Proposals: result.Proposals, Floor: state.Floor, Error: err.Error()}, nil
 	}
-	return SubagentOutput{Budget: state.Budget, Reply: result.Reply, UsedOperations: result.Used, Proposals: result.Proposals, Floor: state.Floor}, nil
+	return SubagentOutput{Budget: state.Budget, Reply: result.Reply, UsedOperations: result.Used, Permissions: result.Permissions, Proposals: result.Proposals, Floor: state.Floor}, nil
 }
 
 func (w *Workflows) SecurityAssessment(ctx *workflow.WorkflowContext) (any, error) {

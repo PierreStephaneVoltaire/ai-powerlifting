@@ -12,6 +12,8 @@ interface Props {
   onChange: (phases: TemplatePhase[]) => void
   disabled?: boolean
   templateSk?: string
+  onApplied?: () => Promise<void>
+  hasChanges?: boolean
 }
 
 const EMPTY_FORM: Partial<TemplatePhase> = {
@@ -23,8 +25,8 @@ const EMPTY_FORM: Partial<TemplatePhase> = {
   intent: '',
 }
 
-export function TemplatePhasesEditor({ phases, onChange, disabled, templateSk }: Props) {
-  const assistant = useAssistant('template-phase', { template_sk: templateSk }, disabled)
+export function TemplatePhasesEditor({ phases, onChange, disabled, templateSk, onApplied, hasChanges }: Props) {
+  const assistant = useAssistant('template-phase', { template_sk: templateSk }, disabled || hasChanges, onApplied)
   const [phaseForm, setPhaseForm] = useState<Partial<TemplatePhase>>(EMPTY_FORM)
   const [editingIndex, setEditingIndex] = useState<number>(-1)
   const [isNew, setIsNew] = useState(false)

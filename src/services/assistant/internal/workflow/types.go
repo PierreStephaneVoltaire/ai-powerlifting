@@ -58,6 +58,7 @@ type SubagentOutput struct {
 	Budget         int              `json:"budget"`
 	Reply          string           `json:"reply"`
 	UsedOperations []string         `json:"used_operations"`
+	Permissions    []string         `json:"permissions,omitempty"`
 	Proposals      []string         `json:"proposals"`
 	Floor          security.Verdict `json:"floor"`
 	Error          string           `json:"error,omitempty"`

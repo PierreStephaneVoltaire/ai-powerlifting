@@ -67,8 +67,8 @@ JOIN conversations c ON c.id = t.conversation_id
 WHERE ` + visibleConversation + `
 	AND c.id = $6
 	AND t.required_permissions <@ $3::text[]
-	AND ($4 = '' OR t.created_at < (SELECT created_at FROM turns WHERE id = $4))
-ORDER BY t.created_at DESC
+	AND ($4 = '' OR (t.created_at, t.id) < (SELECT created_at, id FROM turns WHERE id = $4 AND conversation_id = $6))
+ORDER BY t.created_at DESC, t.id DESC
 LIMIT $5`
 	limit := query.Limit
 	if limit <= 0 || limit > 100 {

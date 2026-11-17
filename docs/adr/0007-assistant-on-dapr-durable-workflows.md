@@ -44,3 +44,13 @@ conditional security subagent can only tighten. Decisions are recorded in
 `pl-responder-fast`, `pl-strong`, `pl-web`, `pl-embed`, `pl-light`); concrete
 models are tfvars configuration. Retrieval applies the authorization filter
 before pgvector similarity ranking. Dapr control plane is 1.18.
+
+Only the last five conversation turns are included automatically, with complete
+messages and permitted proposal arguments. Older context is read on demand with
+`read_conversation_history`, which renders the PostgreSQL history as Markdown in
+pages of five complete turns. There are no separate session-history `.md` files.
+The assistant reads older history before repeating research or asking the Person
+to restate saved details. Other conversations are not injected automatically.
+Tool results, history, retrieved content and proposal snapshots are not clipped
+by character count. History reads preserve conversation access and permission
+filters, including the permissions passed through subagent results.

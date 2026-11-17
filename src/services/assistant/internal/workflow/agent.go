@@ -19,6 +19,7 @@ import (
 	"powerlifting/assistant/internal/security"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/tools"
+	"powerlifting/assistant/internal/visibility"
 )
 
 const (
@@ -92,6 +93,7 @@ type run struct {
 	Snippets         []store.Snippet
 	Signals          []string
 	HistoryGap       bool
+	HistoryBefore    string
 	HistoryReference bool
 	SharedWith       string
 	State            *runState
@@ -103,6 +105,7 @@ type outcome struct {
 	Proposals     []string
 	Blocked       bool
 	CommitFailure string
+	Permissions   []string
 }
 
 func (p run) role() string {
@@ -150,7 +153,7 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 	defs := append(agent.ToolDefs(listed.Tools, subject.Scope), agent.PseudoTools(subject.Scope, params.Depth, w.Config.MaxDepth)...)
 	state := agent.State{Messages: append([]llm.Message{{Role: "system", Content: agent.SystemPrompt(agent.PromptContext{
 		Orchestrator: params.Orchestrator, Profile: params.Profile, SessionDate: params.Context.SessionDate, SessionIndex: params.Context.SessionIndex, ExerciseIndex: params.Context.ExerciseIndex,
-		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets,
+		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryBefore: params.HistoryBefore, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets,
 	})}}, params.Messages...)}
 	limits := agent.Limits{MaxSteps: w.Config.MaxSteps, MaxTokens: w.Config.MaxTokens}
 	meta := llm.Metadata{UserID: params.Identity.Person, ConversationID: params.ConversationID, WorkflowID: ctx.ID(), TurnID: turnIDOf(ctx.ID()), Role: params.role()}
@@ -189,7 +192,7 @@ func withCommitFailure(reply, failure string) string {
 	if failure == "" {
 		return reply
 	}
-	notice := "The change was approved, but the write failed and nothing was changed: " + agent.Truncate(failure, 600)
+	notice := "The change was approved, but the write failed and nothing was changed: " + failure
 	if strings.TrimSpace(reply) == "" {
 		return notice
 	}
@@ -210,6 +213,8 @@ func (w *Workflows) dispatch(ctx *workflow.WorkflowContext, params run, subject 
 		return "error: " + call.Malformed, false
 	}
 	switch call.Kind {
+	case agent.KindHistory:
+		return w.readHistory(ctx, params, call, result), false
 	case agent.KindDelegate:
 		return w.delegate(ctx, params, call, sequence, result), false
 	case agent.KindReview:
@@ -342,6 +347,7 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 		params.State.Budget += max(0, min(output.Budget, share))
 	}
 	result.Used = append(result.Used, output.UsedOperations...)
+	result.Permissions = visibility.Union(result.Permissions, output.Permissions)
 	result.Proposals = append(result.Proposals, output.Proposals...)
 	params.State.Floor = security.Tighten(params.State.Floor, output.Floor)
 	if output.Error != "" || strings.TrimSpace(output.Reply) == "" {

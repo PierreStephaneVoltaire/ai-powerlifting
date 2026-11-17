@@ -6,20 +6,14 @@ import (
 	"slices"
 	"strings"
 
-	"powerlifting/assistant/internal/agent"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/tools"
 	"powerlifting/assistant/internal/visibility"
 )
 
-const (
-	historyTurnLimit   = 20
-	historyMessageCap  = 1500
-	historyLatestCap   = 6000
-	historyTotalCap    = 24000
-	historyFailedReply = "[This attempt failed and produced no reply.]"
-)
+const historyFailedReply = "[This attempt failed and produced no reply.]"
+const historyTurnLimit = 5
 
 func requestUserText(request json.RawMessage) string {
 	var parsed struct {
@@ -36,12 +30,12 @@ func requestUserText(request json.RawMessage) string {
 	return ""
 }
 
-func historyMessages(turn store.HistoryTurn, replyCap int) []llm.Message {
+func historyMessages(turn store.HistoryTurn) []llm.Message {
 	request := strings.TrimSpace(requestUserText(turn.Request))
 	if request == "" {
 		return nil
 	}
-	content := agent.Truncate(request, historyMessageCap)
+	content := request
 	if turn.Shared {
 		content = "[from " + turn.PersonPK + "] " + content
 	}
@@ -52,7 +46,7 @@ func historyMessages(turn store.HistoryTurn, replyCap int) []llm.Message {
 		if reply == "" {
 			return nil
 		}
-		return []llm.Message{user, {Role: "assistant", Content: agent.Truncate(reply, replyCap)}}
+		return []llm.Message{user, {Role: "assistant", Content: reply}}
 	case "failed":
 		return []llm.Message{user, {Role: "assistant", Content: historyFailedReply}}
 	case "queued", "running":
@@ -66,19 +60,22 @@ func historyMessages(turn store.HistoryTurn, replyCap int) []llm.Message {
 func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, error) {
 	turns, err := d.Store.History(ctx, store.HistoryQuery{
 		ConversationID: in.ConversationID, Athlete: in.Identity.Athlete, Person: in.Identity.Person,
-		Permissions: in.Identity.Permissions, Before: in.TurnID, Limit: historyTurnLimit,
+		Permissions: in.Identity.Permissions, Before: in.TurnID, Limit: historyTurnLimit + 1,
 	})
 	if err != nil {
 		return HistoryOutput{}, err
 	}
+	nextBefore := ""
+	if len(turns) > historyTurnLimit {
+		turns = turns[:historyTurnLimit]
+		nextBefore = turns[len(turns)-1].ID
+	}
 	var kept [][]llm.Message
 	var permissions []string
-	size := 0
 	shared := false
-	replyCap := historyLatestCap
 	for _, turn := range turns {
 		shared = shared || turn.Shared
-		pair := historyMessages(turn, replyCap)
+		pair := historyMessages(turn)
 		if len(pair) == 0 {
 			continue
 		}
@@ -93,13 +90,7 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 			pair[1].Content += "\n\nEarlier proposal (context only; read the current state before retrying): " + proposal.Operation + ", state=" + string(proposal.State) + ", arguments=" + string(proposal.Arguments)
 			permissions = visibility.Union(permissions, []string{tools.Permission(proposal.Operation)})
 		}
-		cost := len(pair[0].Content) + len(pair[1].Content)
-		if size+cost > historyTotalCap && len(kept) > 0 {
-			break
-		}
-		size += cost
 		kept = append(kept, pair)
-		replyCap = historyMessageCap
 		permissions = visibility.Union(permissions, turn.RequiredPermissions)
 	}
 	slices.Reverse(kept)
@@ -107,5 +98,5 @@ func (d *Deps) History(ctx context.Context, in HistoryInput) (HistoryOutput, err
 	for _, pair := range kept {
 		messages = append(messages, pair...)
 	}
-	return HistoryOutput{Messages: messages, Turns: len(kept), Permissions: permissions, Shared: shared}, nil
+	return HistoryOutput{Messages: messages, Turns: len(kept), Permissions: permissions, Shared: shared, NextBefore: nextBefore}, nil
 }

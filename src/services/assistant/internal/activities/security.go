@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"powerlifting/assistant/internal/agent"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/security"
 	"powerlifting/assistant/internal/store"
@@ -26,13 +25,13 @@ func securityPrompt(in SecurityReviewInput) string {
 		builder.WriteString("Earlier conversation history was unavailable.\n")
 	}
 	if in.Message != "" {
-		builder.WriteString("Request:\n" + agent.Truncate(in.Message, MaxChars) + "\n")
+		builder.WriteString("Request:\n" + in.Message + "\n")
 	}
 	if in.Reason != "" {
-		builder.WriteString("Orchestrator concern:\n" + agent.Truncate(in.Reason, 600) + "\n")
+		builder.WriteString("Orchestrator concern:\n" + in.Reason + "\n")
 	}
 	if in.Operation != "" {
-		builder.WriteString(fmt.Sprintf("Proposed operation: %s\nSummary: %s\nArguments: %s\n", in.Operation, agent.Truncate(in.Summary, 600), agent.Truncate(in.Arguments, 2000)))
+		builder.WriteString(fmt.Sprintf("Proposed operation: %s\nSummary: %s\nArguments: %s\n", in.Operation, in.Summary, in.Arguments))
 	}
 	return builder.String()
 }

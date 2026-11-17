@@ -464,7 +464,7 @@
                     },
                     "notes": {
                       "type": "string",
-                      "description": "Source products and each contribution to the total, chemical forms, timing and other notes. The total itself belongs in dose."
+                      "description": "Explain what the compound does and flag whether the daily total is below, within or above an evidence-supported effective range for that purpose. State uncertainty where effectiveness is not established; never invent thresholds. No \"as reported\", provenance disclaimers, brand/serving arithmetic or filler."
                     }
                   },
                   "required": [
