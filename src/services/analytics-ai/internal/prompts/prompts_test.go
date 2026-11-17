@@ -118,7 +118,7 @@ func TestSystemPromptsMatchJinjaLoader(t *testing.T) {
 }
 
 func TestToolSchemasAreDefined(t *testing.T) {
-	for _, name := range []string{"report_correlation_findings", "report_program_evaluation", "submit_multi_block_comparison"} {
+	for _, name := range []string{"report_correlation_findings", "report_program_evaluation", "report_block_evaluation", "submit_multi_block_comparison"} {
 		tool := Tool(name)
 		function, _ := tool["function"].(map[string]any)
 		if tool["type"] != "function" || function["name"] != name {

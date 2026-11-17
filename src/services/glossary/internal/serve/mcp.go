@@ -34,7 +34,7 @@ func (a *API) tools() []any {
 	return tools
 }
 
-func (a *API) mcp(ctx context.Context, raw []byte, caller auth.Caller) (int, any) {
+func (a *API) mcp(ctx context.Context, raw []byte, presented auth.Presented, verifier *auth.JobVerifier) (int, any) {
 	var body map[string]any
 	if err := json.Unmarshal(raw, &body); err != nil || body == nil {
 		return http.StatusOK, rpcError(nil, -32700, "Parse error")
@@ -42,6 +42,12 @@ func (a *API) mcp(ctx context.Context, raw []byte, caller auth.Caller) (int, any
 	id, hasID := body["id"]
 	if !hasID || id == nil {
 		return http.StatusAccepted, map[string]any{}
+	}
+	method, _ := body["method"].(string)
+	params, _ := json.Marshal(body["params"])
+	caller, _, err := verifier.Resolve(presented, method, params)
+	if err != nil {
+		return http.StatusUnauthorized, rpcError(id, -32001, "Job token rejected")
 	}
 	var result map[string]any
 	switch body["method"] {

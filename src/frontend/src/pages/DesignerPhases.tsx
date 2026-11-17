@@ -9,6 +9,7 @@ import {
   Paper, Text, Group, Stack, SimpleGrid, Button, ActionIcon,
   TextInput, Textarea, Modal, Box, Select,
 } from '@mantine/core'
+import { useAssistant } from '@/components/assistant/useAssistant'
 import type { Phase } from '@powerlifting/types'
 
 const DEFAULT_BLOCK = 'current'
@@ -17,6 +18,7 @@ export default function DesignerPhases() {
   const { readOnly } = useAuth()
   const { program, updatePhases } = useProgramStore()
   const { pushToast } = useUiStore()
+  const assistant = useAssistant('template-phase', {}, readOnly)
 
   const allPhases = program?.phases || []
   const [selectedBlock, setSelectedBlock] = useState<string>(DEFAULT_BLOCK)
@@ -125,6 +127,7 @@ export default function DesignerPhases() {
 
   return (
     <Stack gap="md" className="if-mock-page">
+      {assistant.drawer}
       <Group justify="space-between" className="if-mock-header">
         <Group gap="xs">
           <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
@@ -143,6 +146,7 @@ export default function DesignerPhases() {
             style={{ width: 160 }}
             aria-label="Block"
           />
+          {assistant.button}
           <Button
             size="sm"
             leftSection={<Plus size={16} />}

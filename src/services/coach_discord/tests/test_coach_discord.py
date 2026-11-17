@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 
 from services.coach_discord.app import create_app
+from services.coach_discord.assistant_client import Answer, proposal_message
 from services.coach_discord.gateway import NOT_LINKED, Relay, chunks, conversation_for
 from services.coach_discord.store import Registration, RegistrationStore
 
@@ -66,17 +67,20 @@ class FakeGateway:
 
 
 class FakeCoach:
-    def __init__(self, reply="ok"):
+    def __init__(self, reply="ok", proposals=None, outcome="done"):
         self.reply = reply
+        self.proposals = proposals or []
+        self.outcome = outcome
         self.asked = []
-        self.resets = []
+        self.decisions = []
 
     async def ask(self, person, athlete, conversation_id, text):
         self.asked.append((person, athlete, conversation_id, text))
-        return self.reply
+        return Answer(self.reply, self.proposals)
 
-    async def reset(self, person, athlete, conversation_id):
-        self.resets.append((person, conversation_id))
+    async def decide(self, person, athlete, proposal_id, approve, target=None):
+        self.decisions.append((person, athlete, proposal_id, approve, target))
+        return self.outcome
 
 
 class FakeChannel:
@@ -133,7 +137,7 @@ def test_store_ignores_other_partitions_activity_rows_and_inactive_on_startup_li
 
 
 def client_with(store, gateway):
-    return TestClient(create_app(store=store, coach=FakeCoach(), directory=Directory({}), gateway=gateway))
+    return TestClient(create_app(store=store, assistant=FakeCoach(), directory=Directory({}), gateway=gateway))
 
 
 def test_startup_opens_sockets_for_active_registrations_only():
@@ -180,10 +184,46 @@ def test_unlinked_author_is_told_and_coach_is_not_called():
     assert message.replies == [NOT_LINKED] and coach.asked == []
 
 
-def test_reset_clears_the_channel_conversation():
+def test_shared_channel_conversation_uses_each_senders_identity():
     coach = FakeCoach()
-    text = asyncio.run(Relay(coach, Directory({"7": "person_a"})).reset(7, 42))
-    assert coach.resets == [("person_a", conversation_for("person_a", "42"))] and "fresh" in text
+    relay = Relay(coach, Directory({"7": "person_a", "8": "person_a"}))
+    channel = FakeChannel(42)
+    asyncio.run(relay.answer(FakeMessage(7, channel), "one"))
+    asyncio.run(relay.answer(FakeMessage(8, channel), "two"))
+    assert {ask[2] for ask in coach.asked} == {conversation_for("person_a", "42")}
+
+
+def test_pending_proposals_are_posted_with_diff_and_instructions():
+    plain = {"id": "p1", "summary": "Bump squat to 140", "diff": {"weight": [135, 140]}, "destructive": False}
+    destructive = {"id": "p2", "summary": "Delete session", "diff": {"deleted": True}, "destructive": True, "target_id": "s9"}
+    coach = FakeCoach(reply="Proposed.", proposals=[plain, destructive])
+    channel = FakeChannel(42)
+    message = FakeMessage(7, channel)
+    asyncio.run(Relay(coach, Directory({"7": "person_a"})).answer(message, "change it"))
+    assert message.replies == ["Proposed."]
+    assert channel.sent == [proposal_message(plain), proposal_message(destructive)]
+    assert channel.sent[0] == 'Proposed change `p1`: Bump squat to 140\n```json\n{"weight":[135,140]}\n```\nReply `approve p1` or `reject p1`.'
+    assert "Reply `approve p2 s9` to confirm it or `reject p2`." in channel.sent[1] and "Target: `s9`" in channel.sent[1]
+
+
+def test_approve_and_reject_replies_call_the_assistant_with_the_sender_identity():
+    coach = FakeCoach(outcome="Proposal `p2` is now approved.")
+    relay = Relay(coach, Directory({"7": "person_a"}))
+    message = FakeMessage(7, FakeChannel(42))
+    asyncio.run(relay.answer(message, "approve p2 s9"))
+    asyncio.run(relay.answer(message, "reject `p3`"))
+    assert coach.decisions == [("person_a", "person_a", "p2", True, "s9"), ("person_a", "person_a", "p3", False, None)]
+    assert coach.asked == [] and message.replies[0] == "Proposal `p2` is now approved."
+
+
+def test_unknown_proposal_reply_falls_through_to_chat_and_unlinked_cannot_decide():
+    coach = FakeCoach(outcome=None)
+    relay = Relay(coach, Directory({"7": "person_a"}))
+    asyncio.run(relay.answer(FakeMessage(7, FakeChannel(42)), "reject this"))
+    assert len(coach.asked) == 1
+    message = FakeMessage(9, FakeChannel(42))
+    asyncio.run(relay.answer(message, "approve p1"))
+    assert message.replies == [NOT_LINKED] and len(coach.decisions) == 1
 
 
 def test_chunks_respect_discord_limit():
@@ -278,8 +318,6 @@ def test_user_table_mapping_preserves_person_and_athlete():
     asyncio.run(relay.answer(FakeMessage(7, channel), 'again'))
     assert [ask[:3] for ask in coach.asked] == [('sir_simpalot', 'operator', conversation_for('operator', '42'))] * 2
     assert table.reads == 2
-    asyncio.run(relay.reset(7, 42))
-    assert coach.resets == [('sir_simpalot', conversation_for('operator', '42'))]
 
 
 def test_unverified_or_dangling_pointer_does_not_select_a_person():

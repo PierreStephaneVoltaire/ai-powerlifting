@@ -79,7 +79,6 @@ func run() error {
 		Coach:      coach.HTTP{URL: cfg.CoachURL, Client: httpClient},
 		Source:     data.Analytics{Client: analyticsv1.NewAnalyticsDataClient(analyticsConn)},
 		Exporter:   data.Export{Client: exportv1.NewExportsClient(exportConn)},
-		KV:         kv,
 		Backend:    generation.Reports{Pointers: generation.Valkey{Client: kv.Client}, Objects: generation.S3{Client: s3.NewFromConfig(awsCfg), Bucket: cfg.Bucket}, Prefix: cfg.ReportsPrefix},
 		Executions: execution.New(cache.Prompts{KV: kv, URL: cfg.PromptCacheURL, HTTP: httpClient}),
 		Now:        time.Now,

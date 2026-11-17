@@ -11,7 +11,7 @@ import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
 import { readDraft, removeDraftIfMatch, saveDraft, sessionDraftKey, type Draft } from '@/api/drafts'
 import { requestPartition } from '@/api/context'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, Wand2, MoreHorizontal, AlertTriangle } from 'lucide-react'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, MoreHorizontal, AlertTriangle } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -34,8 +34,8 @@ import VideoGrid from './VideoGrid'
 import DraftNumberInput from './DraftNumberInput'
 import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
-import SessionNotesHelperModal from './SessionNotesHelperModal'
-import AutoRegulationModal from './AutoRegulationModal'
+import AssistantDrawer from '../assistant/AssistantDrawer'
+import { useAssistant } from '../assistant/useAssistant'
 import RestTimerHeaderButton from './RestTimerHeaderButton'
 import { normalizeExerciseName } from '@/utils/volume'
 import { lastPerformance } from '@/utils/lastPerformance'
@@ -539,6 +539,25 @@ function SortableExerciseItem({
     </Paper>
   )
 }
+function editableSession(session: Session): Session {
+  const clone = JSON.parse(JSON.stringify(session)) as Session
+  if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
+    clone.exercises = clone.planned_exercises!.map(pe => ({
+      name: pe.name,
+      sets: pe.sets,
+      reps: pe.reps,
+      kg: pe.kg,
+      notes: '',
+      set_statuses: Array(pe.sets).fill('pending'),
+      failed_set_reasons: Array.from({ length: pe.sets }, () => []),
+    }))
+  }
+  clone.exercises = clone.exercises.map((ex) => ({
+    ...withSetStatusFields(ex, clone.completed),
+    id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  }))
+  return clone
+}
 
 export default function SessionDrawer({
   isOpen,
@@ -595,8 +614,8 @@ export default function SessionDrawer({
   const [videoUploadPreset, setVideoUploadPreset] = useState<{ exerciseName: string; setNumber: number } | null>(null)
   const [discardIntent, setDiscardIntent] = useState<'reset' | 'close' | null>(null)
   const [glossary, setGlossary] = useState<GlossaryExercise[]>([])
-  const [showNotesHelper, setShowNotesHelper] = useState(false)
-  const [autoRegExerciseIndex, setAutoRegExerciseIndex] = useState<number | null>(null)
+  const programAssistant = useAssistant('general', { area: 'program' }, readOnly || hasChanges || isSaving, refreshSession)
+  const [assistantExerciseIndex, setAssistantExerciseIndex] = useState<number | null>(null)
   const [failedReasonTarget, setFailedReasonTarget] = useState<{ exerciseIndex: number; setIndex: number } | null>(null)
   const [failedReasonDraft, setFailedReasonDraft] = useState<FailedSetReason[]>([])
   const [toolkitExercise, setToolkitExercise] = useState<{
@@ -656,6 +675,22 @@ export default function SessionDrawer({
       .catch(() => {})
   }, [])
 
+  async function refreshSession() {
+    if (hasChanges || isSaving) return
+    const previous = savedSessionRef.current
+    const sessions = useProgramStore.getState().program?.sessions ?? []
+    const session = previous?.id ? sessions.find((item) => item.id === previous.id) : sessions[sessionArrayIndex]
+    if (!session) {
+      onClose()
+      return
+    }
+    savedSessionRef.current = session
+    savedDateRef.current = session.date
+    setBaseline(session)
+    setLocalSession(editableSession(session))
+    setOriginalDate(session.date)
+  }
+
   const glossaryNames = useMemo(() => Array.from(new Set(glossary.map((e) => e.name))).sort(), [glossary])
   const glossaryLookup = useMemo(() => {
     const lookup = new Map<string, GlossaryExercise>()
@@ -675,23 +710,7 @@ export default function SessionDrawer({
       const sessionId = session.id || ''
       setLocalSession(null)
       setBaseline(session)
-      const clone = JSON.parse(JSON.stringify(session)) as Session
-      // Pre-populate exercises from planned_exercises for incomplete sessions
-      if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
-        clone.exercises = clone.planned_exercises!.map(pe => ({
-          name: pe.name,
-          sets: pe.sets,
-          reps: pe.reps,
-          kg: pe.kg,
-          notes: '',
-          set_statuses: Array(pe.sets).fill('pending'),
-          failed_set_reasons: Array.from({ length: pe.sets }, () => []),
-        }))
-      }
-      clone.exercises = clone.exercises.map((ex) => ({
-        ...withSetStatusFields(ex, clone.completed),
-        id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      }))
+      const clone = editableSession(session)
       const draftKey = sessionId ? sessionDraftKey(version, sessionId) : ''
       draftKeyRef.current = draftKey
       draftPartitionRef.current = partition
@@ -1182,10 +1201,10 @@ export default function SessionDrawer({
         {/* Safe actions grouped at top — BUG-1.1 */}
         <Menu.Item
           leftSection={<Bot size={16} />}
-          onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
+          onClick={() => setAssistantExerciseIndex(exerciseIndex)}
           styles={{ item: { minHeight: 44, paddingInline: 12 } }}
         >
-          Auto-regulation
+          Assistant
         </Menu.Item>
         <Menu.Item
           leftSection={<Calculator size={16} />}
@@ -1218,13 +1237,13 @@ export default function SessionDrawer({
       <ActionIcon
         visibleFrom="sm"
         variant="subtle"
-        color="grape"
+        color="violet"
         size="md"
         style={{ minHeight: 44, minWidth: 44 }}
-        onClick={() => setAutoRegExerciseIndex(exerciseIndex)}
-        title="Auto-regulation"
+        onClick={() => setAssistantExerciseIndex(exerciseIndex)}
+        title="Assistant"
         disabled={readOnly}
-        data-testid={`exercise-autoreg-${exerciseIndex}`}
+        data-testid={`exercise-assistant-${exerciseIndex}`}
       >
         <Bot size={iconSize} />
       </ActionIcon>
@@ -1331,101 +1350,6 @@ export default function SessionDrawer({
     )
   }
 
-  const appendReasoningNote = (notes: string | undefined, reasoningNote: string) => {
-    const note = reasoningNote.trim()
-    if (!note) return notes || ''
-    const prefix = `Auto-regulation ${new Date().toISOString().slice(0, 10)}: ${note}`
-    return [notes || '', prefix].filter(Boolean).join('\n')
-  }
-
-  const exercisePrescriptionChanged = (before: Exercise, after: Exercise) => (
-    before.name !== after.name ||
-    before.kg !== after.kg ||
-    before.reps !== after.reps
-  )
-
-  const buildAutoRegulatedSession = (
-    baseSession: Session,
-    proposedExercises: Exercise[],
-    reasoningNote: string,
-    exerciseIndex: number
-  ): Session => {
-    const currentExercise = baseSession.exercises[exerciseIndex]
-    const proposedExercise = proposedExercises[exerciseIndex]
-    if (!currentExercise || !proposedExercise) return baseSession
-
-    const nextExercises = proposedExercises.map((exercise) =>
-      withSetStatusFields({ ...exercise, notes: exercise.notes || '' }, baseSession.completed)
-    )
-    const currentStatuses = normalizeSetStatuses(currentExercise, baseSession.completed)
-    const currentReasons = normalizeFailedSetReasons(currentExercise, currentStatuses)
-    const lockedSets = currentStatuses
-      .map((status, index) => ({ status, reasons: currentReasons[index] || [] }))
-      .filter((entry) => entry.status === 'completed' || entry.status === 'failed')
-    const lockedStatuses = lockedSets.map((entry) => entry.status)
-    const lockedReasons = lockedSets.map((entry) => entry.status === 'failed' ? entry.reasons : [])
-    const changedLockedWork = lockedStatuses.length > 0 && exercisePrescriptionChanged(currentExercise, proposedExercise)
-
-    if (changedLockedWork) {
-      const lockedExercise = withSetStatusFields({
-        ...currentExercise,
-        sets: lockedStatuses.length,
-        set_statuses: lockedStatuses,
-        failed_set_reasons: lockedReasons,
-        notes: appendReasoningNote(currentExercise.notes, reasoningNote),
-      }, baseSession.completed)
-      const remainingSets = Math.max(0, Number(proposedExercise.sets || 0) - lockedStatuses.length)
-      const proposedStatuses = normalizeSetStatuses(proposedExercise)
-      const proposedReasons = normalizeFailedSetReasons(proposedExercise, proposedStatuses)
-      const remainingStatuses = proposedStatuses.slice(lockedStatuses.length, lockedStatuses.length + remainingSets)
-      const remainingReasons = proposedReasons.slice(lockedStatuses.length, lockedStatuses.length + remainingSets)
-      while (remainingStatuses.length < remainingSets) remainingStatuses.push('pending')
-      while (remainingReasons.length < remainingSets) remainingReasons.push([])
-      const replacement = [lockedExercise]
-      if (remainingSets > 0) {
-        replacement.push(withSetStatusFields({
-          ...proposedExercise,
-          sets: remainingSets,
-          set_statuses: remainingStatuses,
-          failed_set_reasons: remainingReasons,
-          notes: appendReasoningNote(proposedExercise.notes, reasoningNote),
-        }, baseSession.completed))
-      }
-      nextExercises.splice(exerciseIndex, 1, ...replacement)
-    } else {
-      nextExercises[exerciseIndex] = withSetStatusFields({
-        ...nextExercises[exerciseIndex],
-        notes: appendReasoningNote(nextExercises[exerciseIndex].notes, reasoningNote),
-      }, baseSession.completed)
-    }
-
-    return { ...baseSession, exercises: nextExercises }
-  }
-
-  const applyAutoRegulation = async (proposedExercises: Exercise[], reasoningNote: string) => {
-    if (autoRegExerciseIndex === null) return
-    const nextSession = finalizeSessionForSave(buildAutoRegulatedSession(
-      localSession,
-      proposedExercises,
-      reasoningNote,
-      autoRegExerciseIndex
-    ))
-    changeVersionRef.current += 1
-    setHasChanges(true)
-    setLocalSession(nextSession)
-    latestSaveRef.current = {
-      session: nextSession,
-      version: changeVersionRef.current,
-      notify: false,
-      close: false,
-      draftKey: draftKeyRef.current,
-      partition: draftPartitionRef.current,
-      lookupDate: savedDateRef.current || originalDate || nextSession.date,
-    }
-    await flushLatestSave()
-    pushToast({ message: 'Auto-regulation applied', type: 'success' })
-  }
-
   const editorContent = (
     <Stack
       gap={10}
@@ -1485,7 +1409,10 @@ export default function SessionDrawer({
             )}
           </Group>
         </Box>
-        <RestTimerHeaderButton />
+        <Box style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {programAssistant.button}
+          <RestTimerHeaderButton />
+        </Box>
       </Box>
 
       <Paper withBorder p={0} radius={10} className="if-card">
@@ -1658,16 +1585,6 @@ export default function SessionDrawer({
           <Stack gap="sm">
             <Group justify="space-between">
               <Text size="sm" fw={500}>Session summary</Text>
-              <Button
-                size="xs"
-                variant="light"
-                leftSection={<Wand2 size={14} />}
-                onClick={() => setShowNotesHelper(true)}
-                disabled={readOnly}
-                data-testid="session-notes-helper"
-              >
-                Help write notes
-              </Button>
             </Group>
           <SimpleGrid cols={2} spacing="sm">
             <Box>
@@ -1845,23 +1762,15 @@ export default function SessionDrawer({
         onClose={() => { setShowVideoUpload(false); setVideoUploadPreset(null) }}
       />
 
-      <SessionNotesHelperModal
-        opened={showNotesHelper}
-        onClose={() => setShowNotesHelper(false)}
-        version={version}
-        session={localSession}
-        sessionIndex={sessionArrayIndex}
-        onInsert={(notes) => updateNotes(notes)}
-      />
+      {programAssistant.drawer}
 
-      <AutoRegulationModal
-        opened={autoRegExerciseIndex !== null}
-        onClose={() => setAutoRegExerciseIndex(null)}
-        version={version}
-        session={localSession}
-        sessionIndex={sessionArrayIndex}
-        exerciseIndex={autoRegExerciseIndex}
-        onApply={applyAutoRegulation}
+      <AssistantDrawer
+        opened={assistantExerciseIndex !== null && localSession !== null}
+        onClose={() => setAssistantExerciseIndex(null)}
+        scope="session-design"
+        context={{ session_date: localSession?.date, session_index: sessionArrayIndex, exercise_index: assistantExerciseIndex ?? undefined }}
+        readOnly={readOnly || hasChanges || isSaving}
+        onApplied={refreshSession}
       />
 
       <Modal

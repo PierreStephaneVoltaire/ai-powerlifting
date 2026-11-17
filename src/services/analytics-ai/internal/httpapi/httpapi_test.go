@@ -55,7 +55,7 @@ func newServer(t *testing.T) (*httptest.Server, *access, *jobs) {
 	redisServer := miniredis.RunT(t)
 	kv := cache.Redis{Client: redis.NewClient(&redis.Options{Addr: redisServer.Addr()})}
 	a, j := &access{}, &jobs{}
-	svc := &service.Service{Registry: registry, Access: a, Coach: j, KV: kv, Backend: generation.NewMemory(), Executions: execution.New(cache.Prompts{KV: kv}), Now: time.Now}
+	svc := &service.Service{Registry: registry, Access: a, Coach: j, Backend: generation.NewMemory(), Executions: execution.New(cache.Prompts{KV: kv}), Now: time.Now}
 	server := httptest.NewServer(New(&API{Service: svc, Domain: contract.Domain}))
 	t.Cleanup(server.Close)
 	return server, a, j

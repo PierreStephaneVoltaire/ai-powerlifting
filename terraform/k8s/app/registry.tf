@@ -28,18 +28,17 @@ resource "kubernetes_cron_job_v1" "registry_refresher" {
 
             container {
               name    = "refresher"
-              image   = "alpine/k8s:1.34.5"
+              image   = "public.ecr.aws/aws-cli/aws-cli:2.37.0"
               command = ["/bin/sh", "-c"]
               args = [<<-EOT
                 set -eu
                 TOKEN=$(aws ecr get-login-password --region ${var.region})
-                kubectl create secret docker-registry ecr-registry \
-                  --namespace ${var.namespace} \
-                  --docker-server=${replace(data.aws_ecr_authorization_token.registry.proxy_endpoint, "https://", "")} \
-                  --docker-username=AWS \
-                  --docker-password="$TOKEN" \
-                  --dry-run=client -o json \
-                  | kubectl patch secret ecr-registry --namespace ${var.namespace} --type merge --patch-file /dev/stdin
+                AUTH=$(printf 'AWS:%s' "$TOKEN" | base64 -w0)
+                CONFIG=$(jq -nc --arg server "${replace(data.aws_ecr_authorization_token.registry.proxy_endpoint, "https://", "")}" --arg token "$TOKEN" --arg auth "$AUTH" '{auths: {($server): {username: "AWS", password: $token, auth: $auth}}}')
+                PATCH=$(jq -nc --arg config "$(printf '%s' "$CONFIG" | base64 -w0)" '{data: {".dockerconfigjson": $config}}')
+                SA=/var/run/secrets/kubernetes.io/serviceaccount
+                status=$(curl -s -o /tmp/response -w '%%{http_code}' -X PATCH --cacert "$SA/ca.crt" -H "Authorization: Bearer $(cat "$SA/token")" -H "Content-Type: application/merge-patch+json" -d "$PATCH" "https://kubernetes.default.svc/api/v1/namespaces/${var.namespace}/secrets/ecr-registry")
+                if [ "$status" != "200" ]; then cat /tmp/response >&2; exit 1; fi
               EOT
               ]
 

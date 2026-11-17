@@ -23,6 +23,7 @@ variable "repositories" {
     program          = optional(string, "if-powerlifting-program")
     competition      = optional(string, "if-powerlifting-competition")
     profile          = optional(string, "if-powerlifting-profile")
+    assistant        = optional(string, "if-powerlifting-assistant")
     backend          = string
     frontend         = string
   })

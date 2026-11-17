@@ -5,12 +5,13 @@ Software and technical deep-dive for the powerlifting portal. For the math, see
 
 ## Current request flow
 
-Powerlifting runs in the `powerlifting` namespace as eighteen domain
+Powerlifting runs in the `powerlifting` namespace as nineteen domain
 Services/Deployments, one per operation manifest in
 `src/services/operations/*.json`. Each manifest defines typed HTTP and MCP
 operations. The Express gateway calls them over the cluster network, and the
-Coach (`pl-coach`) answers their inference steps and exposes them as tools in
-chat. DynamoDB and S3 hold the data.
+Assistant (`pl-assistant`) runs conversational turns and calls them as tools.
+The Coach (`pl-coach`) remains the `/v1/jobs` broker and Codex inference
+answerer for analytics reports and imports. DynamoDB and S3 hold the data.
 
 The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
@@ -23,11 +24,13 @@ reports sidecar is built from `docker/powerlifting-analytics.pkr.hcl` into
 ```mermaid
 flowchart LR
   Browser["Browser"] --> Gateway["Express gateway"]
-  Gateway --> Service["18 typed HTTP/MCP services"]
+  Gateway --> Service["19 typed HTTP/MCP services"]
   Gateway --> Coach["pl-coach"]
+  Gateway --> Assistant["pl-assistant"]
   Service -->|"inference steps"| Coach
-  Coach -->|"tools"| Service
-  Bot["pl-coach-discord"] --> Coach
+  Assistant -->|"MCP tools via LiteLLM"| Service
+  Bot["pl-coach-discord"] --> Assistant
+  Assistant --> AssistantDB[("assistant-postgres")]
   Service --> Store[("DynamoDB and S3")]
   Gateway --> Profile["Profile permission evaluator"]
   Service --> Profile
@@ -68,7 +71,9 @@ flowchart TB
     Auth["authentik-server<br/>OIDC identity authority"]
     AuthWorker["authentik-worker<br/>background tasks"]
     Postgres[("CNPG Postgres<br/>Authentik data")]
-    Coach["pl-coach<br/>Codex worker"]
+    Coach["pl-coach<br/>Codex worker, jobs"]
+    Assistant["pl-assistant<br/>Dapr workflows"]
+    AssistantDB[("assistant-postgres<br/>CNPG + pgvector")]
     Bot["pl-coach-discord<br/>gateway bot"]
     LiteLLM["litellm<br/>model aliases"]
   end
@@ -86,8 +91,11 @@ flowchart TB
   BE -->|"application cache"| Valkey
   BE -->|"AI jobs and polling"| Coach
   DiscordApp <-->|"websocket"| Bot
-  Bot -->|"chat"| Coach
+  BE -->|"chat"| Assistant
+  Bot -->|"chat"| Assistant
+  Assistant --> AssistantDB
   Gateway -->|"llm hostname"| LiteLLM
+  Assistant -->|"model calls + MCP"| LiteLLM
   Coach -->|"model calls"| LiteLLM
 ```
 
@@ -99,13 +107,13 @@ Discord OAuth callback. Both public hostnames pass through NGINX.
 ### Every domain service
 
 Each box below is a separate service, with typed HTTP operations for the
-backend and MCP tools for the Coach. The four frames organize the inventory
+backend and MCP tools for the Assistant. The four frames organize the inventory
 by purpose; they are not shared processes or extra routing layers.
 
 ```mermaid
 flowchart TB
   BE["Express backend<br/>HTTP operations"]
-  Coach["pl-coach<br/>MCP tools"]
+  Coach["pl-assistant<br/>MCP tools"]
 
   subgraph Training["Training"]
     direction TB
@@ -149,7 +157,7 @@ flowchart TB
   Coach --> Training & MeetPrep & Analysis & Records
 ```
 
-The sixteen Python services share the `if-powerlifting-fns` image. Analytics
+The ten Python services share the `if-powerlifting-fns` image. Analytics
 and Rankings have their own Rust images; Analytics AI and Analytics Export
 have their own Go images. The old analytics reports sidecar has been replaced
 by these separate services.
@@ -163,7 +171,8 @@ records; it is not a central authorization hop for every operation.
 All model traffic goes through the **LiteLLM layer** at `llm.nolift.training`.
 LiteLLM holds the provider credentials (from SSM Parameter Store) and the
 ChatGPT subscription login, once. Apps only name **model aliases**
-(`pl-standard`, `pl-light`, `pl-documents`); each alias groups one or more
+(for example `pl-coordinator`, `pl-responder-fast`, `pl-strong`, `pl-web`,
+`pl-embed`, `pl-light`); each alias groups one or more
 provider deployments and can fall back to another alias. The admin UI signs in
 through Authentik, limited to the users in `litellm_admins`.
 
@@ -184,7 +193,7 @@ flowchart LR
 
   subgraph LLM["LiteLLM layer"]
     direction TB
-    Aliases["model aliases<br/>pl-standard · pl-light · pl-documents"]
+    Aliases["model aliases<br/>pl-coordinator · pl-responder-fast · pl-strong · pl-web · pl-embed · pl-light"]
     Router["router<br/>load balancing + alias fallbacks"]
     Creds["provider credentials<br/>SSM /powerlifting/litellm/*"]
     Token[("litellm-chatgpt-token PVC<br/>subscription login")]
@@ -230,9 +239,8 @@ Decisions API (`POST /v1/decisions`, model `gpt-6-luna`) so a small model
 judges whether a stored answer still holds. Valkey keeps the entries and the
 fast report pointers, Qdrant only holds the search index, and S3 holds
 finished AI reports. A cache service error never fails an operation; it is
-just a miss. Coach chat replies are separate: they keep their own exact and
-semantic reply cache in `src/services/coach/chat_cache.py`, and only domain AI
-operations go through `pl-prompt-cache-api`.
+just a miss. Assistant conversations are separate and do not use this cache;
+only domain AI operations go through `pl-prompt-cache-api`.
 
 ### Storage and media
 
@@ -401,9 +409,9 @@ erDiagram
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
 | `if-powerlifting-analysis-cache` | DynamoDB | Legacy and no longer used. It held AI generation records before they moved to S3 and Valkey. The operator deletes it; nothing may read or write it |
 | `analysis-reports/{athlete}/{generation_id}.json` | S3 (powerlifting bucket) | Finished AI reports (correlation / ROI, program evaluation, block comparison and any other generation), saved after the calculations. Valkey holds the pointer |
-| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles, markdown exports and ranking percentiles, keyed by source fingerprint, no TTL (LRU eviction). Also the report pointer and in-flight reservation (`pl:report:{athlete}:{generation_id}`), the per-Athlete `pl:analysis-version`, the `pl:analysis-build` marker, and prompt cache exact keys and entries (`pl:ai-cache:*`, 30-day TTL) |
+| `pl-valkey` | Valkey | Deterministic analysis sections, block bundles and markdown exports (30-day TTL), ranking percentiles (7-day TTL), and prompt cache keys and entries (`pl:ai-cache:*`, 30-day TTL). AI report pointers (`pl:report:{athlete}:{generation_id}`) have no TTL once complete; in-flight reservations expire after one hour. Also holds the per-Athlete `pl:analysis-version` and `pl:analysis-build` marker |
 | `pl-prompt-cache-api` | Go service | Owns the domain AI prompt cache: exact Valkey lookup, Qdrant candidates through the MCP service, one Decisions API call, store after inference |
-| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Semantic search index only. Domain AI prompts use one collection per Athlete and operation; Coach chat replies use separate collections named `chat_template_{version}` (`src/services/coach/chat_cache.py`). Each domain AI point carries an entry id and the entry itself lives in Valkey at `pl:ai-cache:entry:{entry_id}`. Losing it costs semantic hits, never answers |
+| `pl-prompt-cache` / `pl-prompt-cache-mcp` | Qdrant (emptyDir) + mcp-server-qdrant | Semantic search index only. Domain AI prompts use one collection per Athlete and operation. Each domain AI point carries an entry id and the entry itself lives in Valkey at `pl:ai-cache:entry:{entry_id}`. Losing it costs semantic hits, never answers |
 | `if-powerlifting-user-competitions` | DynamoDB | Independent Athlete-owned Competition Entries and Attempts |
 | `if-powerlifting-master-competitions` | DynamoDB | Master competition directory |
 | `if-powerlifting-master-federations` | DynamoDB | Federation library + qualification standards |
@@ -497,7 +505,7 @@ flowchart TB
   Manifest --> Need{Section cached?}
   Need -- yes --> Read[read from\npl-valkey]
   Need -- no --> Queue[queue analysis_section]
-  Queue --> Write[write pl-valkey, no TTL]
+  Queue --> Write[write pl-valkey, 30-day TTL]
   Read --> FE[frontend renders]
   Write --> FE
   Regen[POST analysis/regenerate\nor Regenerate button] --> Inv[invalidate + requeue\nselected window only]
@@ -508,15 +516,24 @@ flowchart TB
   tooling; the Weekly tab reads sections instead.
 - AI correlation, program-evaluation and block-comparison reports cache
   separately and only regenerate on explicit refresh (never via the main
-  regenerate endpoint). After the calculations, the finished report is saved to
+  regenerate endpoint). Their IDs are stable for the Athlete, report inputs,
+  block and access scope: training-data versions, today's date and prompt
+  revisions never invalidate a finished report. The current block's start date
+  distinguishes it from a later current block. Data changes can make a report
+  stale; the Analysis UI's explicit refresh replaces it. This is separate from
+  input-sensitive prompt caching for glossary and profile AI features.
+  After the calculations, the finished report is saved to
   S3 at `analysis-reports/{athlete}/{generation_id}.json`. Valkey holds a small
   pointer at `pl:report:{athlete}:{generation_id}` and the in-flight
-  reservation (`SET NX` with a TTL). If the pointer is gone, the read goes to
-  S3 at the known key and restores the pointer. DynamoDB is not involved.
+  reservation (`SET NX` with a one-hour TTL). Finished reports and their pointers
+  have no TTL. Explicit regeneration replaces the report at the same S3 key;
+  bucket versioning can retain previous object versions. If the pointer is gone,
+  the read goes to S3 at the known key and restores the pointer. DynamoDB is not
+  involved.
 - Section and block keys contain the per-Athlete analysis version (plus the
   as-of date for current-block windows). Unchanged data is always a hit; an
   analysis-input write bumps the version, so older entries become unreachable
-  and age out under LRU. A code change is different: when the build id changes,
+  and expire after 30 days or are evicted under LRU. When the build id changes,
   analytics sweeps `pl:analysis:*` once on startup.
 - Ranking percentiles key on the OpenPowerlifting file identity (name, size,
   mtime), the comparison year, the Athlete, their numbers and the filter.
@@ -538,9 +555,9 @@ flowchart TB
   bump a per-Athlete version in Valkey from `dispatch`. The bump targets the
   Athlete the call runs under, not the raw `pk` argument, because a
   person-scoped write such as settings would otherwise bump the Person and
-  leave the Athlete's analysis stale. Section, manifest,
-  block, markdown and report-generation lookups key on that version, so a
-  cache hit never reloads the program. Persisted requirements
+  leave the Athlete's analysis stale. Deterministic section, manifest,
+  block and markdown lookups key on that version. Saved AI reports do not:
+  only explicit regeneration replaces them. Persisted requirements
   record the source domains and Competition Entry scope; every reference/job
   read checks them against current permissions. Legacy results without source
   requirements are readable only by the Athlete until regenerated.
@@ -558,8 +575,12 @@ they are written down here.
 - Caches live only in Valkey or S3. Never DynamoDB. DynamoDB holds the data
   the caches are computed from, and a cache table there only adds cost and a
   second source of truth.
-- Caches invalidate outdated entries. They are never versioned by a hand-bumped
-  constant in a key or path, because someone forgets to bump it. Data changes
+- Saved Analysis AI reports persist until explicit regeneration, even when
+  inputs, dates, prompts or builds change. Reads return the saved report and
+  never start inference. A miss means no report exists for that report scope.
+  Glossary and profile AI features retain input-sensitive caching.
+- Deterministic and prompt caches invalidate outdated entries. They are never
+  versioned by a hand-bumped constant in a key or path. Data changes
   invalidate through the Athlete's `pl:analysis-version`, which is bumped on an
   analysis-input write for the Athlete the call runs under. Code changes
   invalidate by build: analytics reads `BUILD_ID` on startup, and when it
@@ -574,12 +595,178 @@ they are written down here.
 - Visitor (signed-out) views read cached results only and never start
   inference. A miss for a visitor stays a miss until the owner generates it.
 
+## Assistant
+
+`pl-assistant` (`src/services/assistant`) is a Go service on Dapr durable
+workflows (`durabletask-go`, Dapr 1.18 control plane). Each conversation turn
+is a `ConversationTurn` workflow. Every model call, tool call, proposal and
+delivery is a checkpointed activity, stored in the pgvector-enabled CNPG
+cluster `assistant-postgres`, next to the assistant's own schema
+(conversations, turns, participants, embeddings, proposals, audit,
+orchestration events). It replaces the old `pl-coach` chat path; `pl-coach`
+stays only as the `/v1/jobs` broker and Codex inference answerer for analytics
+reports and imports. See ADR-0007 and ADR-0008.
+
+Models are only ever named by LiteLLM alias, with providers registered once:
+`pl-coordinator` (ChatGPT subscription, OpenRouter fallback),
+`pl-responder-fast` and `pl-strong` (the low and higher delegation tiers),
+`pl-web` (OpenRouter web plugin, web research subagent only), `pl-embed` and
+`pl-light` (security). The concrete models are tfvars configuration.
+
+### Turn flow
+
+The client only sends the new message; history is held on the server. The
+workflow resolves who is asking, screens the message, builds context, then
+runs the coordinator model. The coordinator either answers or delegates to
+child workflows; there is no classifier gate in front of it. Writes can only
+be proposals, which wait for a person.
+
+```mermaid
+sequenceDiagram
+  participant C as Drawer or Discord
+  participant BE as Express backend
+  participant A as pl-assistant HTTP
+  participant W as ConversationTurn workflow
+  participant P as Profile
+  participant DB as assistant-postgres
+  participant L as LiteLLM
+  participant G as LiteLLM MCP gateway
+  participant S as Domain services
+
+  C->>BE: new message (surface + context)
+  BE->>A: POST /v1/conversations/{id}/turns
+  A->>DB: store turn, schedule workflow
+  A-->>C: job id
+  W->>P: ResolveIdentity (access_context, fail closed)
+  W->>W: Guard (length, injection, rate, risk signals)
+  opt guard signals
+    W->>W: SecurityAssessment child workflow (pl-light)
+  end
+  W->>DB: Retrieve snippets (authorization filter, then pgvector ranking)
+  W->>DB: Load recent turns (permission-filtered)
+  W->>W: MintToken (scope from live permissions)
+  W->>G: list tools (job token)
+  loop agent loop on pl-coordinator
+    W->>L: ModelCall (streams text into progress buffer)
+    L-->>W: reply or tool calls
+    alt delegate_subagent
+      W->>W: SubagentTask child workflow (tier, or pl-web if needs_web)
+      W->>L: ModelCall for the subagent
+      W->>G: tool calls (fresh job token each call)
+      G->>S: tools/call with token
+      W->>W: review_delegation, escalate_from if failed
+    else read tool
+      W->>G: tool call (fresh job token)
+      G->>S: tools/call with token
+    else propose_change
+      W->>W: validate arguments against the operation's MCP input schema
+      W->>G: read the target (captures version)
+      W->>DB: store proposal with structured diff
+      Note over W: WaitForExternalEvent, 24 h timeout
+      C->>A: approve or reject
+      A->>W: RaiseEvent
+      W->>P: re-check requester and approver permissions
+      W->>G: re-read target, compare version
+      W->>G: apply the write (fresh job token)
+    end
+  end
+  W->>P: Deliver gate (every participant's live permissions, shared channels)
+  W->>DB: complete turn, store embeddings
+  C->>A: poll job (progress text, then result)
+  A-->>C: reply or withheld notice
+```
+
+The order inside the workflow is fixed: identity, guard, optional security
+assessment, retrieval, history, then the agent loop (`internal/workflow/turn.go`
+and `agent.go`). A delegation is a child workflow at the chosen tier; a failed
+or empty result is recorded as a failed review and the coordinator can retry
+with `escalate_from` on a stronger tier. Model text is streamed into a per-turn
+progress buffer in Postgres, which the drawer polls alongside the job status.
+Stop terminates the workflow and its children.
+
+### Security
+
+No step trusts the model to say who it is acting for. Identity is resolved
+outside the model, narrowed to a scope, and checked again by every service the
+tools reach.
+
+```mermaid
+flowchart TB
+  User["User session<br/>oauth2-proxy + Authentik"] --> BE["Express backend"]
+  Discord["Discord sender"] --> Bot["pl-coach-discord"]
+  BE -->|"mesh headers:<br/>person, athlete, SPIFFE source principal"| API["pl-assistant HTTP<br/>caller must be an allowed ServiceAccount"]
+  Bot -->|"mesh headers"| API
+  API --> Access["Profile access_context<br/>no permissions = deny, error = fail closed"]
+  Access --> Scope["Scope = operations the live<br/>permissions allow"]
+  Scope --> Mint["Per-call ES256 job token<br/>person, athlete, conversation, workflow, scope<br/>aud pl-domain-mcp, 5 min exp, jti"]
+  Mint --> Key["LiteLLM virtual key<br/>models + object_permission.mcp_servers"]
+  Key --> Gateway["LiteLLM MCP gateway<br/>forwards the token header per server"]
+  Gateway --> Verify["Domain service verifies<br/>signature, issuer, audience, expiry,<br/>operation in scope"]
+  Verify --> Reject["Bearer plus identity headers = rejected"]
+  Verify --> Same["Then the same access_context and<br/>argument scoping as a human caller"]
+  Same --> Audit[("Append-only audit<br/>+ orchestration_events<br/>+ LiteLLM metadata and tags")]
+```
+
+- **Default deny.** No permissions, no scope, an unmapped operation or an
+  unverifiable token all end in a denial. A mutating operation is never callable
+  from the agent loop; it only runs through an approved proposal.
+- **The model never chooses identity or scope.** Person, athlete and scope come
+  from Profile; the model only picks among tools already in scope.
+- **The security subagent can only tighten.** Its verdict is merged with the
+  existing floor (allow, require approval, block) and never grants access.
+- **Shared channels.** A result is delivered to a shared Discord conversation
+  only if every participant's live permissions cover everything it used;
+  otherwise a withheld notice is posted and the event is audited.
+- **Approval is re-checked.** Commit re-validates both requester and approver
+  permissions, re-reads the target, and refuses a stale version.
+- **Audit.** Access decisions, token scope, tool calls, proposals, commits and
+  visibility decisions go to the append-only audit table; delegation, review,
+  escalation and security decisions go to `orchestration_events`; LiteLLM
+  carries per-request metadata and tags. The mesh-header path for non-AI
+  callers is unchanged.
+
+### High availability and durability
+
+The service keeps no state of its own. Replicas can be killed, rescheduled or
+rolled without losing a turn.
+
+```mermaid
+flowchart LR
+  Client["Client polls the job"] --> Svc["pl-assistant Service"]
+  Svc --> R1["replica 1"] & R2["replica 2"] & R3["replica 3"]
+  R1 & R2 & R3 <--> Dapr["Dapr 1.18 control plane<br/>scheduler + placement"]
+  R1 & R2 & R3 -->|"workflow history,<br/>one row per completed activity"| PG[("assistant-postgres<br/>CNPG + pgvector")]
+  PG --- Data["conversations, turns, proposals,<br/>audit, orchestration_events, embeddings"]
+```
+
+- **Three stateless replicas**, no PVC and no node pinning (2 GiB limit each,
+  with a Dapr sidecar).
+- **Checkpointed activities.** Each activity result is written to the workflow
+  history in Postgres. If a replica is killed or OOMs mid-turn, another replica
+  picks the workflow up and replays it to the last completed activity; a model
+  call in flight is repeated. This was verified by killing a replica during a
+  model call.
+- **Durable approvals.** A pending proposal is a `WaitForExternalEvent` with a
+  24 hour timeout, so waiting survives restarts and deploys. On timeout the
+  proposal expires and nothing is changed.
+- **Dapr control plane.** The scheduler and placement services coordinate where
+  workflows run. If they are unhealthy, workflows sit in PENDING.
+- **One database.** Workflow state and the assistant's own tables share the
+  CNPG cluster, so a conversation, its proposals and its audit trail survive
+  pod loss together.
+- **Tokens are never stored.** A job token is minted inside the activity that
+  uses it and lives for five minutes; workflow history holds only the subject
+  (person, athlete, scope), not the token.
+
 ## AI execution model
 
+This section covers domain AI jobs (analytics reports, imports); chat is the
+Assistant above.
+
 The gateway calls the typed domain operation. AI operations submit a domain job
-through the existing IF API and native Codex worker. A retained handler requests
+through the `pl-coach` `/v1/jobs` broker and native Codex worker. A retained handler requests
 inference through `services.ai`; its continuation yields a structured challenge.
-The existing native Specialist answers it, and `domain_resume` validates the
+The native Specialist answers it, and `domain_resume` validates the
 response before the handler continues. There is no separate model queue,
 OpenRouter fallback, Fission service or second Codex host.
 
@@ -626,8 +813,9 @@ their association and show submission feedback; a pill appears after approval.
 
 Ordinary Program reads fetch current domain state. They do not use the gateway's
 former seven-day GET cache, so native domain mutations appear at the same portal
-URL immediately. Derived report caches retain their source fingerprints, current
-permission checks and write invalidation; offline drafts remain in IndexedDB.
+URL immediately. Deterministic caches retain their source fingerprints and write
+invalidation. Saved Analysis AI reports retain current permission checks and
+change only on explicit regeneration; offline drafts remain in IndexedDB.
 
 ## Video pipeline
 

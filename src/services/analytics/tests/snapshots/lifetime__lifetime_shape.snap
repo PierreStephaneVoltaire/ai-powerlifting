@@ -264,8 +264,8 @@ expression: shape(&report)
       "end_date": "string",
       "data_quality_flags": [
         {
-          "code": "string",
           "label": "string",
+          "code": "string",
           "severity": "string"
         }
       ]

@@ -300,7 +300,7 @@
   {
     "name": "block_program_evaluation",
     "domain": "analytics-ai",
-    "description": "Generate an AI program evaluation report for a specific block. Assesses the overall program design, exercise selection, volume distribution, and progression. Uses AI to produce a structured evaluation with recommendations.",
+    "description": "Generate a retrospective AI evaluation for an already-completed block. Describes what the data shows worked and did not work over the block; makes no forward-looking recommendations.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -336,7 +336,6 @@
     "result_schema": {
       "type": "object",
       "required": [
-        "stance",
         "summary"
       ],
       "properties": {
@@ -356,6 +355,9 @@
           "type": "array"
         },
         "what_is_not_working": {
+          "type": "array"
+        },
+        "key_takeaways": {
           "type": "array"
         },
         "competition_alignment": {
@@ -539,6 +541,9 @@
             "what_is_not_working": {
               "type": "array"
             },
+            "key_takeaways": {
+              "type": "array"
+            },
             "competition_alignment": {
               "type": "array"
             },
@@ -584,7 +589,6 @@
             }
           },
           "required": [
-            "stance",
             "summary"
           ],
           "additionalProperties": true

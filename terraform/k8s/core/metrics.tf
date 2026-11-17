@@ -217,7 +217,7 @@ resource "kubernetes_deployment_v1" "prometheus" {
 
         container {
           name  = "prometheus"
-          image = "prom/prometheus:v2.53.0"
+          image = "quay.io/prometheus/prometheus:v2.53.0"
           args = [
             "--config.file=/etc/prometheus/prometheus.yml",
             "--storage.tsdb.path=/prometheus",
@@ -454,7 +454,7 @@ resource "kubernetes_daemon_set_v1" "node_exporter" {
 
         container {
           name  = "node-exporter"
-          image = "prom/node-exporter:v1.8.0"
+          image = "quay.io/prometheus/node-exporter:v1.8.0"
           args = [
             "--path.procfs=/host/proc",
             "--path.sysfs=/host/sys",

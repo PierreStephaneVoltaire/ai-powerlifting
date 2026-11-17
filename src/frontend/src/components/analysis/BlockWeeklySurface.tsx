@@ -401,6 +401,15 @@ export function BlockWeeklySurface({
               </SimpleGrid>
               {bundle.weekly.estimated_dots !== null && <Text fz="sm" c="dimmed">Est. DOTS: <Text span fw={500}>{bundle.weekly.estimated_dots.toFixed(2)}</Text></Text>}
             </Stack>
+          ) : (bundle.historical.endStrength.squat || bundle.historical.endStrength.bench || bundle.historical.endStrength.deadlift) ? (
+            <Stack gap="xs">
+              <SimpleGrid cols={3}>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Squat</Text><Text fz="lg" fw={700}>{bundle.historical.endStrength.squat ? formatDisplayWeight(bundle.historical.endStrength.squat, unit) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Bench</Text><Text fz="lg" fw={700}>{bundle.historical.endStrength.bench ? formatDisplayWeight(bundle.historical.endStrength.bench, unit) : '--'}</Text></Stack>
+                <Stack gap={2} ta="center"><Text fz="xs" c="dimmed">Deadlift</Text><Text fz="lg" fw={700}>{bundle.historical.endStrength.deadlift ? formatDisplayWeight(bundle.historical.endStrength.deadlift, unit) : '--'}</Text></Stack>
+              </SimpleGrid>
+              <Text fz="xs" c="dimmed">via block end strength</Text>
+            </Stack>
           ) : <Text fz="sm" c="dimmed">No max data available</Text>}
         </Paper>
 
@@ -489,31 +498,33 @@ export function BlockWeeklySurface({
         <FatigueDimensionsPanel dimensions={bundle.weekly.fatigue_dimensions} />
       )}
 
-      {bundle.weekly.projections.filter((p) => p && typeof p === 'object').length > 0 ? (
-        <Stack gap="sm">
-          <Group justify="space-between" align="center">
-            <Group gap="xs"><TrendingUp size={18} /><Text fw={500}>Projections</Text></Group>
-            {projectionCalibration?.calibrated && <Badge variant="light" color="teal">Calibrated from {projectionCalibration.meets} meet{projectionCalibration.meets === 1 ? '' : 's'}</Badge>}
-          </Group>
-          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
-            {bundle.weekly.projections.filter((p) => p && typeof p === 'object').map((proj, i) => (
-              <Paper key={i} withBorder p="md">
-                <Group gap="xs" mb="xs"><TrendingUp size={18} /><Text fw={500}>{proj.comp_name || 'Projected Total'}</Text></Group>
-                <Text fz="2rem" fw={700}>{formatDisplayWeight(proj.total || 0, unit)} {unit}</Text>
-                <Text fz="sm" c="dimmed" mt="xs">Confidence: {((proj.confidence || 0) * 100).toFixed(0)}%{typeof proj.weeks_to_comp === 'number' && ` (${proj.weeks_to_comp.toFixed(1)} wks out)`}</Text>
-                {proj.method && <Text fz="xs" c="dimmed">via {proj.method === 'session_estimated' ? 'session e1RM' : proj.method}</Text>}
-                {actualProjectedTotalKg !== null && proj.total !== null && (
-                  <Text fz="xs" c={actualProjectedTotalKg - proj.total >= 0 ? 'green' : 'red'} mt={4}>
-                    Actual: {formatDisplayWeight(actualProjectedTotalKg, unit)} {unit}
-                    {' '}• Delta: {formatSignedDeltaKg(actualProjectedTotalKg - proj.total, unit)}
-                  </Text>
-                )}
-              </Paper>
-            ))}
-          </SimpleGrid>
-        </Stack>
-      ) : (
-        <Paper withBorder p="md"><Group gap="xs" mb="xs"><TrendingUp size={18} /><Text fw={500}>Projected Total</Text></Group><Text fz="lg" c="dimmed">{bundle.weekly.projection_reason || 'No competition date set'}</Text></Paper>
+      {!bundle.block.trainingOnly && (
+        bundle.weekly.projections.filter((p) => p && typeof p === 'object').length > 0 ? (
+          <Stack gap="sm">
+            <Group justify="space-between" align="center">
+              <Group gap="xs"><TrendingUp size={18} /><Text fw={500}>Projections</Text></Group>
+              {projectionCalibration?.calibrated && <Badge variant="light" color="teal">Calibrated from {projectionCalibration.meets} meet{projectionCalibration.meets === 1 ? '' : 's'}</Badge>}
+            </Group>
+            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+              {bundle.weekly.projections.filter((p) => p && typeof p === 'object').map((proj, i) => (
+                <Paper key={i} withBorder p="md">
+                  <Group gap="xs" mb="xs"><TrendingUp size={18} /><Text fw={500}>{proj.comp_name || 'Projected Total'}</Text></Group>
+                  <Text fz="2rem" fw={700}>{formatDisplayWeight(proj.total || 0, unit)} {unit}</Text>
+                  <Text fz="sm" c="dimmed" mt="xs">Confidence: {((proj.confidence || 0) * 100).toFixed(0)}%{typeof proj.weeks_to_comp === 'number' && ` (${proj.weeks_to_comp.toFixed(1)} wks out)`}</Text>
+                  {proj.method && <Text fz="xs" c="dimmed">via {proj.method === 'session_estimated' ? 'session e1RM' : proj.method}</Text>}
+                  {actualProjectedTotalKg !== null && proj.total !== null && (
+                    <Text fz="xs" c={actualProjectedTotalKg - proj.total >= 0 ? 'green' : 'red'} mt={4}>
+                      Actual: {formatDisplayWeight(actualProjectedTotalKg, unit)} {unit}
+                      {' '}• Delta: {formatSignedDeltaKg(actualProjectedTotalKg - proj.total, unit)}
+                    </Text>
+                  )}
+                </Paper>
+              ))}
+            </SimpleGrid>
+          </Stack>
+        ) : (
+          <Paper withBorder p="md"><Group gap="xs" mb="xs"><TrendingUp size={18} /><Text fw={500}>Projected Total</Text></Group><Text fz="lg" c="dimmed">{bundle.weekly.projection_reason || 'Not enough data to project a total for the linked competition yet'}</Text></Paper>
+        )
       )}
 
       {dotsTrend && dotsTrend.rows.length >= 2 && (

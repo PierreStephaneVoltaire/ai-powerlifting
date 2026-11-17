@@ -36,6 +36,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import { LoadTypeBadge } from '@/components/shared/LoadTypeBadge'
 import DraftNumberInput from '@/components/sessions/DraftNumberInput'
 import { formatPlannedExercise, hasRepRange, plannedSets } from '@/utils/plannedPrescription'
+import { useAssistant } from '@/components/assistant/useAssistant'
 import type { Session, PlannedExercise, PlannedSet, GlossaryExercise } from '@powerlifting/types'
 
 const MUSCLE_LABELS: Record<string, string> = {
@@ -368,6 +369,7 @@ export default function DesignerPage() {
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
   const [searchParams, setSearchParams] = useSearchParams()
+  const assistant = useAssistant('session-design', {}, readOnly)
 
   const block = 'current'
   const weekStartDay = useMemo(() => weekStartForBlock(program, block), [program])
@@ -720,6 +722,7 @@ export default function DesignerPage() {
 
   return (
     <div className="if-designer-session-page">
+      {assistant.drawer}
       <div className="if-designer-breadcrumb">
         <Link to="/designer">Designer</Link> / <span>Session Design</span>
       </div>
@@ -727,6 +730,7 @@ export default function DesignerPage() {
       <div className="if-designer-top-bar">
         <div className="if-designer-page-title">Session Design</div>
         <div className="if-designer-top-right">
+          {assistant.button}
           <button
             type="button"
             className="if-designer-btn"

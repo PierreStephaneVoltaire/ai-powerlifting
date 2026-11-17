@@ -472,20 +472,19 @@ func TestBlockEvaluationBuildsItsPayloadFromTheBlockData(t *testing.T) {
 		t.Fatalf("unexpected payload %v", payload)
 	}
 	answer := map[string]any{
-		"stance": "continue", "summary": "Steady.", "what_is_working": []any{}, "what_is_not_working": []any{}, "competition_alignment": []any{},
-		"goal_status": []any{}, "competition_strategy": []any{}, "small_changes": []any{}, "external_factors": []any{}, "monitoring_focus": []any{},
-		"weight_class_strategy": map[string]any{"recommendation": "stay", "recommended_weight_class_kg": nil, "viable_options": []any{}}, "conclusion": "Carry on.",
+		"summary": "Steady.", "what_is_working": []any{}, "what_is_not_working": []any{}, "key_takeaways": []any{},
+		"conclusion": "Carry on.", "insufficient_data": false,
 	}
 	done, err := h.svc.Resume(context.Background(), challenge["execution_id"].(string), map[string]any{"challenge_id": challenge["challenge_id"], "content": answer}, inCoachJob(person(), generationID, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := asMap(t, asMap(t, done.Body)["result"])
-	if result["stance"] != "continue" || result["window_start"] != "2026-01-05" || fmt.Sprint(result["weeks"]) != "5" {
+	if result["summary"] != "Steady." || result["conclusion"] != "Carry on." || result["window_start"] != "2026-01-05" || fmt.Sprint(result["weeks"]) != "5" {
 		t.Fatalf("unexpected result %v", result)
 	}
 	cached, err := h.call(t, "analytics.block_evaluation", map[string]any{"pk": "athlete_1", "blockKey": "block_1", "cacheOnly": true}, person())
-	if err != nil || asMap(t, cached.Body)["stance"] != "continue" || cached.Status != http.StatusOK {
+	if err != nil || asMap(t, cached.Body)["summary"] != "Steady." || cached.Status != http.StatusOK {
 		t.Fatalf("the wrapper must serve the saved evaluation: %v %v", cached, err)
 	}
 }

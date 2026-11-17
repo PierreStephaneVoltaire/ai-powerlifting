@@ -90,7 +90,7 @@ the roadmap.
 ### The UI is just one interface
 
 The portal is one way in. The same training data is available through the
-**Discord bot**, which relays your messages to the Coach, and through **MCP**:
+**Discord bot** and the in-app assistant, and through **MCP**:
 every domain operation is a typed tool. The backend is a thin transport layer
 over those same operations, so nothing is locked behind the UI.
 
@@ -126,16 +126,20 @@ Highlights (full math and reasoning in [`docs/FORMULAS.md`](docs/FORMULAS.md)):
 ## AI components
 
 The AI is narrow and tool-scoped. The browser never talks to a model, and
-neither do the domain services. Every AI request goes through the **Coach**, a
-small worker that uses OpenAI's **Codex** as its agent harness. Codex runs
-locked down: no shell, no file writes, no plugins, and no access to secrets.
+neither do the domain services. There are two paths. Conversational help goes
+through the **Assistant** (`pl-assistant`), a Go service on Dapr durable
+workflows. Analytics reports and imports go through the **Coach**, a small
+worker that uses OpenAI's **Codex** as its agent harness, locked down: no
+shell, no file writes, no plugins, and no access to secrets. The Coach no
+longer handles chat.
 
-Right now the Coach runs on my ChatGPT subscription, but the harness and the
-model are separate. Each AI feature has its own provider, model and reasoning
-effort in the coach Terraform vars, so moving a feature to OpenRouter or API
-pricing is a config change, not a rewrite. The heavier reviews (program
-evaluation, multi-block comparison, template evaluation) run at high effort;
-everything else runs at medium.
+Models are only ever named by LiteLLM alias, and providers are registered once
+in LiteLLM. Right now the subscription-backed aliases run on my ChatGPT
+subscription, but the harness and the model are separate. The concrete model
+behind each alias, with its fallbacks, lives in Terraform vars, so moving a
+feature to OpenRouter or API pricing is a config change, not a rewrite. The
+heavier reviews (program evaluation, multi-block comparison, template
+evaluation) run at high effort; everything else runs at medium.
 
 Where the AI shows up:
 
@@ -147,10 +151,47 @@ Where the AI shows up:
 - **Accessory e1RM backfill**
 - **Spreadsheet import** (classify / parse / glossary-resolve)
 - **Glossary text generation**, muscle-group and fatigue-profile estimation
-- **Session note drafting**, **auto-regulation** suggestions, and the
-  **Discord** coach chat
+- **Session note drafting** and **auto-regulation** suggestions
+- The **Assistant**: chat in the web drawer and in Discord, with proposed
+  changes you approve
+
+### The Assistant
+
+Each conversation turn is a Dapr workflow. Model calls, tool calls and
+proposals are checkpointed activities stored in a Postgres cluster
+(`assistant-postgres`, pgvector), so a turn resumes on another replica if a pod
+dies. History is held on the server; a request carries only the new message.
+The turn loads recent turns you may see, plus similar snippets from other
+conversations, with the permission filter applied before similarity ranking.
+Discord uses one shared conversation per athlete and channel, with
+speaker-labelled history, and a reply is only delivered if every participant
+is still allowed to see it.
+
+There is no classifier step in front. A coordinator model answers directly or
+delegates to a responder subagent at a low, medium or high complexity tier
+(optionally with web research), reviews what comes back, and can escalate to a
+stronger tier. A security subagent can only tighten what's allowed. Every
+decision is recorded as an orchestration event. The model aliases are
+`pl-coordinator`, `pl-responder-fast`, `pl-strong`, `pl-web` (web research
+only), `pl-light` (security) and `pl-embed`.
+
+Tool calls never carry a model-chosen identity. Each call gets a short-lived
+signed job token (person, athlete, conversation, workflow, scope) that every
+domain service verifies, forwarded through the LiteLLM MCP gateway with a
+per-consumer virtual key. Unknown operations and bad tokens are denied.
+
+The assistant can't write directly. It can only propose a change, which is
+validated against the operation's input schema, stored with a structured diff
+and the target version, and committed after you approve it (buttons in the web
+drawer, a reply in Discord). The commit re-checks the version, is idempotent,
+and reports any failure back to you. Everything is written to an append-only
+audit table. The web drawer opens from sessions, goals, supplements, biometrics
+and templates, streams the model's text as it's produced, and has a Stop
+button that terminates the workflow. See ADR-0007 and ADR-0008.
 
 ### How a request runs
+
+This is the path for analytics reports and imports, which still use the Coach.
 
 The domain code does the real work. It loads the data, computes the numbers,
 and only stops when it needs the model to interpret them. At that point it
@@ -198,7 +239,7 @@ guard rails are about keeping the model away from making things up:
 - **Ranges are clamped in code**, like the 1.0–2.0 stimulus coefficient.
   Fatigue estimates aren't bounded yet.
 - **Nothing is saved without you.** Suggestions pre-fill the form, imports are
-  staged for review, and the Discord coach only writes when asked.
+  staged for review, and the Assistant only proposes changes you approve.
 - **No silent retries.** If a job is interrupted, it's flagged so you can
   check what happened instead of being re-run.
 
@@ -233,12 +274,14 @@ flowchart LR
     FE["Frontend<br/>static PWA"]
     BE["Express API<br/>sessions, auth, cache"]
     Valkey[("Valkey<br/>cache + sessions")]
-    Services["16 typed domain services<br/>HTTP + MCP"]
+    Services["19 typed domain services<br/>HTTP + MCP"]
     Analytics["pl-analytics<br/>Rust"]
     AnalyticsAI["pl-analytics-ai<br/>Go, AI reports"]
     AnalyticsExport["pl-analytics-export<br/>Go, exports"]
     Rankings["pl-rankings<br/>Rust, OpenPowerlifting data"]
-    Coach["pl-coach<br/>Codex worker"]
+    Coach["pl-coach<br/>Codex worker, jobs"]
+    Assistant["pl-assistant<br/>Go, Dapr workflows"]
+    AssistantDB[("assistant-postgres<br/>pgvector")]
     Bot["pl-coach-discord<br/>gateway bot"]
     LiteLLM["LiteLLM<br/>model aliases + fallbacks"]
     Runner["Actions runner<br/>applies k8s stacks"]
@@ -272,7 +315,10 @@ flowchart LR
   Services -->|"inference steps"| Coach
   Coach -->|"tools"| Services
   DiscordApp <-->|"websocket"| Bot
-  Bot --> Coach
+  BE -->|"chat"| Assistant
+  Bot --> Assistant
+  Assistant --> AssistantDB
+  Assistant -->|"model calls + MCP tools"| LiteLLM
   Coach -->|"model calls"| LiteLLM
   Tunnel -->|"llm host"| LiteLLM
   Services --> DDB
@@ -295,7 +341,7 @@ copies the competition directory to every athlete, and video thumbnails.
 
 Every model call goes through LiteLLM at `llm.nolift.training`. The ChatGPT
 subscription is logged in there once instead of in each pod, and the app only
-asks for an alias like `pl-standard`, so I can group providers and set
+asks for an alias like `pl-coordinator`, so I can group providers and set
 fallbacks (OpenRouter and so on) without touching the app.
 
 Logins go through Authentik with Discord as the identity source, backed by a

@@ -121,6 +121,7 @@ func (b block) tables() []Table {
 		{"Lift Metrics", "Lift Metrics", b.liftMetricRows()},
 	}
 	optional := []Table{
+		{"Sessions", "Sessions", b.sessionRows()},
 		{"Stimulus-Adjusted INOL", "INOL", b.inolRows()},
 		{"EWMA ACWR", "ACWR", b.acwrRows()},
 		{"Relative Intensity Distribution", "RI Distribution", b.riRows()},
@@ -397,6 +398,76 @@ func (b block) projectionRows() []Row {
 	return rows
 }
 
+func sessionList(value any) []map[string]any {
+	switch typed := value.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		sessions := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			sessions = append(sessions, record(item))
+		}
+		return sessions
+	}
+	return nil
+}
+
+func sortedSessions(sessions []map[string]any) []map[string]any {
+	sorted := make([]map[string]any, len(sessions))
+	copy(sorted, sessions)
+	sort.SliceStable(sorted, func(a, c int) bool { return text(sorted[a]["date"]) < text(sorted[c]["date"]) })
+	return sorted
+}
+
+func sessionStatus(session map[string]any) string {
+	if completed, _ := session["completed"].(bool); completed {
+		return "Completed"
+	}
+	switch text(session["status"]) {
+	case "completed", "logged":
+		return "Completed"
+	case "skipped":
+		return "Skipped"
+	}
+	return "Planned"
+}
+
+// sessionRows lists every logged exercise set across the block's sessions,
+// scoped to the block's date window. This is the raw training log, not a
+// derived metric - it is what makes the export a full record of the block
+// rather than just its computed analytics.
+func (b block) sessionRows() []Row {
+	start, end := compact(b.meta["startDate"]), compact(b.meta["endDate"])
+	rows := []Row{{"Date", "Day", "Status", "Exercise", "Prescription", "Load", "RPE", "Notes"}}
+	for _, session := range sortedSessions(sessionList(b.bundle["sessions"])) {
+		date := text(session["date"])
+		if start != "" && date < start {
+			continue
+		}
+		if end != "" && date > end {
+			continue
+		}
+		day, status := text(session["day"]), sessionStatus(session)
+		exercises := list(session["exercises"])
+		if len(exercises) == 0 {
+			rows = append(rows, Row{date, day, status, "--", "", "", "", text(session["session_comments"])})
+			continue
+		}
+		for _, raw := range exercises {
+			exercise := record(raw)
+			rows = append(rows, Row{
+				date, day, status, text(exercise["name"]),
+				compact(exercise["sets"]) + " x " + compact(exercise["reps"]),
+				formatKg(exercise["kg"]), formatNumber(exercise["rpe"], 1), text(exercise["notes"]),
+			})
+		}
+	}
+	if len(rows) == 1 {
+		return nil
+	}
+	return rows
+}
+
 func (b block) alertRows() []Row {
 	alerts := list(b.weekly["alerts"])
 	if len(alerts) == 0 {
@@ -450,8 +521,7 @@ func evaluationRows(evaluation map[string]any) []Row {
 	}{
 		{"Working", "what_is_working"},
 		{"Not Working", "what_is_not_working"},
-		{"Adjustments", "small_changes"},
-		{"Monitoring", "monitoring_focus"},
+		{"Key Takeaways", "key_takeaways"},
 		{"Conclusion", "conclusion"},
 	}
 	for _, section := range sections {

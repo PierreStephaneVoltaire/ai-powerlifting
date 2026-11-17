@@ -73,7 +73,7 @@ func OperationPermission(rules func(string) (contract.Rule, bool), name string, 
 	if !ok || rule.Permission == "" {
 		return ""
 	}
-	if (truthyBool(arguments, "cache_only") || truthyBool(arguments, "cacheOnly")) && !truthyBool(arguments, "refresh") {
+	if (name == "analytics.blocks_get" || truthyBool(arguments, "cache_only") || truthyBool(arguments, "cacheOnly")) && !truthyBool(arguments, "refresh") {
 		if rule.CacheRead != "" {
 			return rule.CacheRead
 		}

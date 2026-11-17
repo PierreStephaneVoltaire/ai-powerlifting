@@ -1,19 +1,24 @@
 locals {
   mesh_domains            = ["calculations", "competition", "export", "federation", "glossary", "goals", "imports", "lift-profiles", "performance", "profile", "program", "sessions", "templates", "videos", "weight-log"]
   domain_callers          = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
+  litellm_mcp_domains     = ["sessions", "program", "competition", "profile", "glossary", "templates", "goals", "performance", "lift-profiles", "weight-log", "federation", "calculations"]
   analysis_domain_callers = ["pl-competition", "pl-export", "pl-profile", "pl-program", "pl-templates"]
 
   native_callers = {
     "pl-analytics"        = concat(["powerlifting-app-backend", "pl-coach", "pl-analytics-ai", "pl-analytics-export"], local.analysis_domain_callers)
-    "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics"]
+    "pl-analytics-ai"     = ["powerlifting-app-backend", "pl-coach", "pl-analytics", "pl-analytics-export"]
     "pl-analytics-export" = ["powerlifting-app-backend", "pl-analytics-ai"]
     "pl-rankings"         = ["powerlifting-app-backend", "pl-analytics", "pl-coach"]
-    "litellm"             = ["pl-coach"]
+    "litellm"             = ["pl-coach", "pl-assistant", "pl-litellm-keys"]
+    "pl-assistant"        = ["powerlifting-app-backend", "pl-coach-discord"]
     "pl-prompt-cache-api" = concat(["pl-analytics-ai"], [for name in local.mesh_domains : "pl-${name}"])
   }
 
   mesh_callers = merge(
-    { for name in local.mesh_domains : "pl-${name}" => name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export", "pl-sessions", "pl-program", "pl-competition", "pl-glossary"]) : local.domain_callers },
+    { for name in local.mesh_domains : "pl-${name}" => concat(
+      name == "profile" ? concat(local.domain_callers, ["pl-rankings", "pl-analytics-ai", "pl-analytics-export", "pl-sessions", "pl-program", "pl-competition", "pl-glossary", "pl-assistant"]) : local.domain_callers,
+      contains(local.litellm_mcp_domains, name) ? ["litellm"] : [],
+    ) },
     local.native_callers,
   )
 
@@ -38,6 +43,7 @@ locals {
       pl-competition      = { service = "pl-competition", app = "pl-competition", ports = [8000] }
       pl-profile          = { service = "pl-profile", app = "pl-profile", ports = [8000] }
       litellm             = { service = "litellm", app = "litellm", ports = [4000] }
+      pl-assistant        = { service = "pl-assistant", app = "pl-assistant", ports = [8000] }
       pl-prompt-cache-api = { service = "pl-prompt-cache-api", app = "pl-prompt-cache-api", ports = [8000] }
     },
     { for name, service in kubernetes_service_v1.service : service.metadata[0].name => { service = service.metadata[0].name, app = service.spec[0].selector.app, ports = [8000] } },
@@ -106,7 +112,7 @@ resource "kubectl_manifest" "l4_waypoint_only" {
     }
   })
 
-  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.sessions, kubernetes_service_v1.program, kubernetes_service_v1.competition, kubernetes_service_v1.profile, kubernetes_service_v1.litellm, kubernetes_service_v1.glossary]
+  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.sessions, kubernetes_service_v1.program, kubernetes_service_v1.competition, kubernetes_service_v1.profile, kubernetes_service_v1.litellm, kubernetes_service_v1.glossary, kubernetes_service_v1.assistant]
 }
 
 resource "kubectl_manifest" "edge_only" {
@@ -158,5 +164,5 @@ resource "kubectl_manifest" "service_callers" {
     }
   })
 
-  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.sessions, kubernetes_service_v1.program, kubernetes_service_v1.competition, kubernetes_service_v1.profile, kubernetes_service_v1.litellm, kubernetes_service_v1.glossary]
+  depends_on = [kubectl_manifest.portal_waypoint, kubectl_manifest.strict_mtls, kubernetes_service_v1.service, kubernetes_service_v1.analytics, kubernetes_service_v1.rankings, kubernetes_service_v1.analytics_ai, kubernetes_service_v1.analytics_export, kubernetes_service_v1.sessions, kubernetes_service_v1.program, kubernetes_service_v1.competition, kubernetes_service_v1.profile, kubernetes_service_v1.litellm, kubernetes_service_v1.glossary, kubernetes_service_v1.assistant]
 }

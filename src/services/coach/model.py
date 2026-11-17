@@ -2,7 +2,6 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -31,22 +30,8 @@ class ModelError(RuntimeError):
         super().__init__(message)
 
 
-@dataclass(frozen=True)
-class ToolServer:
-    url: str
-    token: str
-
-
-@dataclass(frozen=True)
-class Reply:
-    text: str
-    thread_id: str
-
-
 class Model(Protocol):
     async def complete(self, ai: AISettings, instructions: str, prompt: str, workspace: Path | None = None) -> str: ...
-
-    async def converse(self, ai: AISettings, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply: ...
 
 
 def _environment() -> dict[str, str]:
@@ -58,14 +43,6 @@ def _provider_overrides(name: str, provider: Provider) -> tuple[str, ...]:
         return ('forced_login_method="chatgpt"',)
     definition = "{name=" + json.dumps(name) + ",base_url=" + json.dumps(provider.base_url) + ",env_key=" + json.dumps(PROVIDER_KEY_ENV) + ',wire_api="responses"}'
     return ("model_providers." + name + "=" + definition, "model_provider=" + json.dumps(name))
-
-
-def _tool_overrides(tools: ToolServer) -> tuple[str, ...]:
-    return (
-        "mcp_servers.powerlifting.url=" + json.dumps(tools.url),
-        "mcp_servers.powerlifting.http_headers={Authorization=" + json.dumps("Bearer " + tools.token) + "}",
-        'mcp_servers.powerlifting.default_tools_approval_mode="approve"',
-    )
 
 
 def workspace_for(root: Path, owner: str, conversation_id: str) -> Path:
@@ -100,16 +77,16 @@ class CodexModel:
         if getattr(kind, "value", kind) != "chatgpt":
             raise ModelError("subscription_required", "Coach requires ChatGPT subscription login")
 
-    async def _run(self, ai: AISettings, cwd: Path, overrides: tuple[str, ...], thread_id: str | None, instructions: str, prompt: str, ephemeral: bool = False) -> Reply:
+    async def _run(self, ai: AISettings, cwd: Path, instructions: str, prompt: str) -> str:
         from openai_codex import ApprovalMode, AsyncCodex, Sandbox
 
         provider = self.providers[ai.provider]
         started = time.monotonic()
-        async with AsyncCodex(self._config(cwd, overrides, ai.provider)) as codex:
+        async with AsyncCodex(self._config(cwd, (), ai.provider)) as codex:
             if provider.subscription:
                 await self._check_subscription(codex)
             options = dict(model=ai.model, model_provider=None if provider.subscription else ai.provider, cwd=str(cwd), sandbox=Sandbox.read_only, approval_mode=ApprovalMode.deny_all, developer_instructions=instructions)
-            thread = await codex.thread_resume(thread_id, **options) if thread_id else await codex.thread_start(ephemeral=ephemeral, **options)
+            thread = await codex.thread_start(ephemeral=True, **options)
             result = await thread.run(prompt, model=ai.model, effort=ai.effort)
         llm_log.emit(
             "llm_call",
@@ -117,7 +94,6 @@ class CodexModel:
             provider=ai.provider,
             effort=ai.effort,
             thread_id=thread.id,
-            resumed=bool(thread_id),
             status=getattr(result.status, "value", result.status),
             error=result.error.message if result.error else None,
             latency_ms=round((time.monotonic() - started) * 1000),
@@ -130,12 +106,10 @@ class CodexModel:
             raise ModelError("model_failed", result.error.message)
         if getattr(result.status, "value", result.status) != "completed":
             raise ModelError("interrupted", "Coach turn did not complete; check side effects before retrying")
-        return Reply(text=result.final_response or "", thread_id=thread.id)
+        return result.final_response or ""
 
     async def complete(self, ai: AISettings, instructions: str, prompt: str, workspace: Path | None = None) -> str:
         cwd = workspace or self.scratch
         cwd.mkdir(parents=True, exist_ok=True)
-        return (await self._run(ai, cwd, (), None, instructions, prompt, ephemeral=True)).text
+        return await self._run(ai, cwd, instructions, prompt)
 
-    async def converse(self, ai: AISettings, workspace: Path, thread_id: str | None, instructions: str, prompt: str, tools: ToolServer) -> Reply:
-        return await self._run(ai, workspace, _tool_overrides(tools), thread_id, instructions, prompt)

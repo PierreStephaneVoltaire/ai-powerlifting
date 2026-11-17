@@ -112,7 +112,7 @@
   {
     "name": "health_get_supplements",
     "domain": "program",
-    "description": "Get the supplement protocol from the program.",
+    "description": "Get supplements and supplement phases for one training block, defaulting to the current block. Returns block_id and current_block_id. Past-block data is historical, not the current protocol.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -355,7 +355,7 @@
   {
     "name": "block_notes_update",
     "domain": "program",
-    "description": "Replace the block notes array for a program version. This is a full replace — send the complete array of block note dicts.",
+    "description": "Replace the block notes array for a program version. This is a full replace \u2014 send the complete array of block note dicts.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -386,7 +386,7 @@
   {
     "name": "diet_notes_update",
     "domain": "program",
-    "description": "Replace the diet notes array for a program version. Full replace — send the complete array of note dicts.",
+    "description": "Replace the diet notes array for a program version. Full replace \u2014 send the complete array of note dicts.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -419,7 +419,7 @@
   {
     "name": "supplement_phases_update",
     "domain": "program",
-    "description": "Replace the supplement phases array for a program version. Full replace — send the complete array of phase dicts.",
+    "description": "Replace supplement phases in the current block only. Send all current-block phases; past-block phases are preserved and cannot be written. Phases without a block_id belong to the current block.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -433,7 +433,58 @@
         },
         "phases": {
           "type": "array",
-          "description": "Full array of supplement phase dicts to write."
+          "description": "Complete array of current-block supplement phases. Do not include past-block phases.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "phase": {
+                "type": "integer"
+              },
+              "phase_name": {
+                "type": "string"
+              },
+              "block_id": {
+                "type": "string"
+              },
+              "block": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Active ingredient or compound name, not a multivitamin, multimineral or product brand."
+                    },
+                    "dose": {
+                      "type": "string",
+                      "description": "Total daily amount of this compound across all products, with units (e.g. 200 mg/day). Scale label amounts to actual daily intake; capsule or pill counts are not compound doses."
+                    },
+                    "notes": {
+                      "type": "string",
+                      "description": "Explain what the compound does and flag whether the daily total is below, within or above an evidence-supported effective range for that purpose. State uncertainty where effectiveness is not established; never invent thresholds. No \"as reported\", provenance disclaimers, brand/serving arithmetic or filler."
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "dose"
+                  ]
+                },
+                "description": "One row per active ingredient or compound. Expand verified combination-product labels and combine matching compounds across products within this phase."
+              }
+            },
+            "required": [
+              "phase",
+              "phase_name",
+              "items"
+            ]
+          }
+        },
+        "block_id": {
+          "type": "string",
+          "description": "Current block ID or current. Past blocks are rejected."
         }
       },
       "required": [
@@ -450,7 +501,7 @@
   {
     "name": "export_program_markdown",
     "domain": "program",
-    "description": "Generate a markdown export of the current program and return its content as a string. Includes phases, sessions, meta, and analysis sections (deterministic only — AI sections excluded).",
+    "description": "Generate a markdown export of the current program and return its content as a string. Includes phases, sessions, meta, and analysis sections (deterministic only \u2014 AI sections excluded).",
     "input_schema": {
       "type": "object",
       "properties": {

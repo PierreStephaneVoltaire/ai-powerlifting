@@ -19,10 +19,10 @@ function serviceUrl(domain: string): string {
   return SERVICE_BASE_URL ? `${SERVICE_BASE_URL.replace(/\/$/, '')}/${domain}` : `http://pl-${domain}:8000`
 }
 
-export async function pollJob(jobId: string, operation: string, person: string, athlete?: string): Promise<any> {
+export async function pollJob(jobId: string, operation: string, person: string, athlete?: string, baseUrl?: string): Promise<any> {
   for (let attempt = 0; attempt < 1800; attempt += 1) {
     const scope = operationScope.getStore()
-    const response = await fetch(`${coachUrl()}/v1/jobs/${encodeURIComponent(jobId)}/result`, { headers: serviceHeaders({ athlete: athlete || scope?.athlete || '', person }) })
+    const response = await fetch(`${baseUrl || coachUrl()}/v1/jobs/${encodeURIComponent(jobId)}/result`, { headers: serviceHeaders({ athlete: athlete || scope?.athlete || '', person }) })
     if (response.status === 202) { await new Promise((done) => setTimeout(done, 500)); continue }
     if (!response.ok) throw new Error(`Job error ${response.status} for ${operation}: ${await response.text()}`)
     const body: any = await response.json()

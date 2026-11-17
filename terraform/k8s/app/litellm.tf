@@ -15,6 +15,7 @@ variable "litellm_models" {
     provider = string
     model    = string
     weight   = optional(number)
+    mode     = optional(string)
   })))
 
   validation {
@@ -82,7 +83,7 @@ locals {
     {
       model_list = flatten([for alias, deployments in var.litellm_models : [for deployment in deployments : {
         model_name = alias
-        model_info = { mode = "responses" }
+        model_info = { mode = coalesce(deployment.mode, "responses") }
         litellm_params = merge(
           { model = "${var.litellm_providers[deployment.provider].type}/${deployment.model}" },
           var.litellm_providers[deployment.provider].type == "chatgpt" ? {} : { litellm_credential_name = deployment.provider },
@@ -96,6 +97,7 @@ locals {
       }
     },
     length(local.litellm_credentials) > 0 ? { credential_list = local.litellm_credentials } : {},
+    length(local.litellm_mcp_servers) > 0 ? { mcp_servers = local.litellm_mcp_servers } : {},
     length(var.litellm_fallbacks) > 0 ? { router_settings = { fallbacks = [for alias, targets in var.litellm_fallbacks : { (alias) = targets }] } } : {},
   )
 }

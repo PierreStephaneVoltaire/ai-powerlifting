@@ -189,16 +189,10 @@ function ProgramEvaluationSection({
               <TextList items={report.what_is_not_working} />
             </Stack>
           </SimpleGrid>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Stack gap={4}>
-              <Text fw={500} fz="sm">Adjustments</Text>
-              <TextList items={report.small_changes} />
-            </Stack>
-            <Stack gap={4}>
-              <Text fw={500} fz="sm">Monitoring</Text>
-              <TextList items={report.monitoring_focus} />
-            </Stack>
-          </SimpleGrid>
+          <Stack gap={4}>
+            <Text fw={500} fz="sm">Key Takeaways</Text>
+            <TextList items={report.key_takeaways} empty="No standout takeaways." />
+          </Stack>
           {report.conclusion && <Text fz="sm" c="dimmed">{report.conclusion}</Text>}
         </Stack>
       ) : (
@@ -420,11 +414,11 @@ function BlockAnalysisDetails({
           </Table>
         </Paper>
 
+        {!bundle.block.trainingOnly && (
         <Paper withBorder p="md">
           <Group gap="xs" mb="sm">
             <Trophy size={18} />
             <Text fw={500}>Competition Outcome</Text>
-            {bundle.block.trainingOnly && <Badge color="gray" variant="light" size="sm">Training only</Badge>}
           </Group>
           {outcome ? (
             <Stack gap="sm">
@@ -481,11 +475,13 @@ function BlockAnalysisDetails({
               )}
             </Stack>
           ) : (
-            <Text fz="sm" c="dimmed">No completed competition maps to this block.</Text>
+            <Text fz="sm" c="dimmed">Competition results have not been recorded yet.</Text>
           )}
         </Paper>
+        )}
       </SimpleGrid>
 
+      {bundle.historical.missingData.length > 0 && (
       <Paper withBorder p="md">
         <Group gap="xs" mb="sm">
           <Database size={18} />
@@ -493,6 +489,7 @@ function BlockAnalysisDetails({
         </Group>
         <QualityBadges flags={bundle.historical.missingData} />
       </Paper>
+      )}
 
       <ProgramEvaluationSection
         report={programEvaluation}

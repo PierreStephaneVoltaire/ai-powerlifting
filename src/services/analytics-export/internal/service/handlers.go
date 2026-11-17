@@ -45,6 +45,17 @@ func (s *Service) blockExport(ctx context.Context, arguments map[string]any, cal
 	if render.BlockIsCurrent(bundle) {
 		return nil, apperr.BadRequest("Use the existing current-block program export for current analysis.")
 	}
+	if sessions, err := s.bundles.Sessions(ctx, caller); err == nil {
+		bundle["sessions"] = sessions
+	}
+	if s.ai != nil {
+		if evaluation, err := s.ai.BlockEvaluation(ctx, blockKey, caller); err == nil && evaluation != nil {
+			bundle["programEvaluation"] = evaluation
+		}
+		if correlation, err := s.ai.BlockCorrelation(ctx, blockKey, caller); err == nil && correlation != nil {
+			bundle["correlation"] = correlation
+		}
+	}
 	filename := render.BlockFilename(bundle, format)
 	if format == "markdown" {
 		return envelope([]byte(render.BlockMarkdown(bundle, s.now())), render.MarkdownType, filename), nil

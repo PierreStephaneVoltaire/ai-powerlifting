@@ -9,14 +9,11 @@ from fastapi.testclient import TestClient
 
 from services.coach.app import create_app
 from services.coach.config import load
-from services.coach.model import Reply
 
 
 SERVICES = Path(__file__).resolve().parents[2]
 AI_OPERATIONS = [record["name"] for path in sorted((SERVICES / "operations").glob("*.json")) for record in json.loads(path.read_text()) if record.get("execution") == "ai"]
 OPERATION_AI = {name: {"provider": "openrouter" if name == "glossary_estimate_batch" else "chatgpt", "model": "estimate-model" if name == "glossary_estimate_batch" else "analysis-model", "effort": "high"} for name in AI_OPERATIONS}
-OPERATION_AI["chat_guard"] = {"provider": "chatgpt", "model": "guard-model", "effort": "low"}
-GENERAL_ROUTE = json.dumps({"surface": "general", "template_name": None, "intent": "other", "standalone": True, "reason": "training question"})
 
 
 class FakeServices:
@@ -37,49 +34,24 @@ class FakeServices:
         if request.url.path == "/executions/exec-1":
             assert body == {"challenge_id": "ch-1", "content": {"e1rm_kg": 200}}
             return httpx.Response(200, json={"status": "succeeded", "result": {"status": "estimated", "estimate": {"e1rm_kg": 200, "basis": "model"}}})
-        if request.url.path == "/operations/template_list":
-            return httpx.Response(200, json=[])
-        if request.url.path == "/operations/calculate_dots":
-            assert "x-if-turn-id" not in request.headers
-            return httpx.Response(200, json={"dots": 412.5})
         return httpx.Response(404, json={"detail": "missing"})
 
 
 class FakeModel:
     def __init__(self):
         self.completions = []
-        self.app = None
 
     async def complete(self, ai, instructions, prompt):
-        if ai.model == "guard-model":
-            return GENERAL_ROUTE
         self.completions.append((instructions, prompt, ai))
         return "```json\n{\"e1rm_kg\": \"heavy\"}\n```" if len(self.completions) == 1 else "{\"e1rm_kg\": 200}"
-
-    async def converse(self, ai, workspace, thread_id, instructions, prompt, tools):
-        assert ai.effort == "medium"
-        transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://coach") as client:
-            headers = {"Authorization": "Bearer " + tools.token}
-            path = httpx.URL(tools.url).path
-            listed = (await client.post(path, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers=headers)).json()
-            names = {tool["name"] for tool in listed["result"]["tools"]}
-            assert "identity_resolve" not in names and "calculate_dots" in names
-            called = (await client.post(path, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "calculate_dots", "arguments": {"total_kg": 600, "bodyweight_kg": 90, "sex": "male", "_access": {"x": 1}}}}, headers=headers)).json()
-            denied = await client.post(path, json={"jsonrpc": "2.0", "id": 3, "method": "tools/list"}, headers={"Authorization": "Bearer wrong"})
-        assert denied.status_code == 401
-        dots = json.loads(called["result"]["content"][0]["text"])["dots"]
-        return Reply(text=f"{'resumed' if thread_id else 'new'}:{prompt.splitlines()[-1]}:{dots}", thread_id="thread-1")
 
 
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
     monkeypatch.setenv("PL_SERVICES_DIR", str(SERVICES))
     monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
-    monkeypatch.setenv("COACH_URL", "http://coach")
     monkeypatch.setenv("COACH_PROVIDERS", json.dumps({"chatgpt": {"auth": "chatgpt", "max_concurrent": 1}, "openrouter": {"auth": "api_key", "base_url": "https://openrouter.example/v1", "max_concurrent": 1}}))
     monkeypatch.setenv("COACH_PROVIDER_KEYS", json.dumps({"openrouter": "router-key"}))
-    monkeypatch.setenv("COACH_CONVERSATION_AI", json.dumps({"provider": "chatgpt", "model": "chat-model", "effort": "medium"}))
     monkeypatch.setenv("COACH_OPERATION_AI", json.dumps(OPERATION_AI))
     from services.coach.services import PowerliftingServices
 
@@ -87,7 +59,6 @@ def harness(tmp_path, monkeypatch):
     fake = FakeServices()
     model = FakeModel()
     app = create_app(settings, model, PowerliftingServices(settings, httpx.MockTransport(fake.handler)))
-    model.app = app
     with TestClient(app) as client:
         yield client, fake, model
 
@@ -107,7 +78,7 @@ def wait(client, job_id, request_headers):
 
 def test_domain_job_answers_inference_challenges_and_returns_compatible_result(harness):
     client, fake, model = harness
-    submitted = client.post("/v1/jobs", json={"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"id": "squat"}, "athlete": "operator"}}, headers=headers())
+    submitted = client.post("/v1/jobs", json={"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"ids": ["squat"], "aspects": ["e1rm"]}, "athlete": "operator"}}, headers=headers())
     assert submitted.status_code == 202, submitted.text
     job = wait(client, submitted.json()["job_id"], headers())
     assert job["status"] == "succeeded", job
@@ -118,36 +89,11 @@ def test_domain_job_answers_inference_challenges_and_returns_compatible_result(h
 
 def test_domain_job_rejects_unauthorized_person_and_scope(harness):
     client, _, _ = harness
-    payload = {"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"id": "squat"}, "athlete": "operator"}}
+    payload = {"kind": "domain", "payload": {"operation": "glossary_estimate_batch", "arguments": {"ids": ["squat"], "aspects": ["e1rm"]}, "athlete": "operator"}}
     assert client.post("/v1/jobs", json=payload, headers=headers(person="outsider")).status_code == 403
-    scoped = {"kind": "domain", "payload": {**payload["payload"], "arguments": {"id": "squat", "pk": "someone-else"}}}
+    scoped = {"kind": "domain", "payload": {**payload["payload"], "arguments": {"ids": ["squat"], "aspects": ["e1rm"], "pk": "someone-else"}}}
     assert client.post("/v1/jobs", json=scoped, headers=headers()).status_code == 403
     assert client.post("/v1/jobs", json=payload, headers={"X-Athlete-Pk": "operator"}).status_code == 403
-
-
-def test_conversation_turn_uses_scoped_tools_and_keeps_thread(harness):
-    client, fake, _ = harness
-    first = client.post("/v1/conversations/powerlifting:operator:discord:1/turns", json={"messages": [{"role": "user", "content": "What is my DOTS?"}]}, headers=headers())
-    assert first.status_code == 202, first.text
-    done = wait(client, first.json()["job_id"], headers())
-    assert done["status"] == "succeeded", done
-    assert done["result"]["content"] == "new:What is my DOTS?:412.5"
-    forwarded = next(call for call in fake.calls if call[1] == "/operations/calculate_dots")
-    assert "_access" not in forwarded[3]
-    second = client.post("/v1/conversations/powerlifting:operator:discord:1/turns", json={"messages": [{"role": "user", "content": "And now?"}]}, headers=headers())
-    assert wait(client, second.json()["job_id"], headers())["result"]["content"] == "resumed:And now?:412.5"
-    assert client.get(f"/v1/jobs/{second.json()['job_id']}", headers=headers(person="someone")).status_code == 404
-    assert client.delete("/v1/conversations/powerlifting:operator:discord:1", headers=headers()).json() == {"reset": True}
-
-
-def test_tools_refuse_finished_turns(harness):
-    client, _, _ = harness
-    runner = client.app.state.runner
-    job = runner.store.create("operator", "operator", "conversation", "c", {"messages": []})
-    job.status = "succeeded"
-    runner.store.update(job)
-    response = client.post(f"/v1/jobs/{job.job_id}/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers={"Authorization": "Bearer " + runner.tool_token(job.job_id)})
-    assert response.status_code == 409
 
 
 def test_coach_refuses_to_start_without_model_settings_for_every_ai_operation(harness, monkeypatch):
@@ -218,7 +164,6 @@ def _lifetime_job(tmp_path, monkeypatch, bucket="bucket"):
     monkeypatch.setenv("COACH_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("POWERLIFTING_S3_BUCKET", bucket)
     monkeypatch.setenv("COACH_PROVIDERS", json.dumps({"chatgpt": {"auth": "chatgpt", "max_concurrent": 1}}))
-    monkeypatch.setenv("COACH_CONVERSATION_AI", json.dumps({"provider": "chatgpt", "model": "m", "effort": "medium"}))
     monkeypatch.setenv("COACH_OPERATION_AI", json.dumps(OPERATION_AI))
     job = Job.__new__(Job)
     job.owner, job.athlete, job.job_id = "operator", "ath-1", "job-1"

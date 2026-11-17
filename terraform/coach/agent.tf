@@ -105,11 +105,6 @@ resource "kubernetes_deployment_v1" "coach" {
           }
 
           env {
-            name  = "COACH_CONVERSATION_AI"
-            value = jsonencode(var.conversation_ai)
-          }
-
-          env {
             name  = "COACH_OPERATION_AI"
             value = jsonencode(var.operation_ai)
           }

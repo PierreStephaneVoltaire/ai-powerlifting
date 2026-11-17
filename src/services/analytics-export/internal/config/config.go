@@ -10,6 +10,7 @@ type Config struct {
 	GRPCAddr       string
 	ProfileURL     string
 	AnalyticsGRPC  string
+	AnalyticsAIURL string
 	Bucket         string
 	AllowedCallers []string
 	LogLevel       string
@@ -35,6 +36,7 @@ func Load() Config {
 		GRPCAddr:       env("GRPC_ADDR", ":50051"),
 		ProfileURL:     strings.TrimRight(env("PL_PROFILE_URL", "http://pl-profile:8000"), "/"),
 		AnalyticsGRPC:  env("ANALYTICS_GRPC_URL", "pl-analytics:50051"),
+		AnalyticsAIURL: strings.TrimRight(env("ANALYTICS_AI_URL", "http://pl-analytics-ai:8000"), "/"),
 		Bucket:         env("POWERLIFTING_S3_BUCKET", ""),
 		AllowedCallers: allowed,
 		LogLevel:       env("LOG_LEVEL", "info"),

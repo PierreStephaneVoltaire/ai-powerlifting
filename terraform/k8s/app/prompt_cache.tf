@@ -48,7 +48,7 @@ resource "kubernetes_deployment_v1" "prompt_cache" {
 
         container {
           name              = "qdrant"
-          image             = "qdrant/qdrant:v1.15.5"
+          image             = "ghcr.io/qdrant/qdrant/qdrant:v1.15.5"
           image_pull_policy = "IfNotPresent"
 
           port {

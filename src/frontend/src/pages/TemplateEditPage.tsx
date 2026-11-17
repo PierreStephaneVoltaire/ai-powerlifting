@@ -19,6 +19,7 @@ export default function TemplateEditPage() {
   const resolvedSk = sk ?? searchParams.get('sk') ?? undefined
   const navigate = useNavigate()
   const [template, setTemplate] = useState<Template | null>(null)
+  const [hasChanges, setHasChanges] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +30,7 @@ export default function TemplateEditPage() {
       return
     }
     fetchTemplate(resolvedSk)
-      .then(setTemplate)
+      .then((loaded) => { setTemplate(loaded); setHasChanges(false) })
       .catch((e) => setError(e?.message ?? 'Failed to load template'))
       .finally(() => setLoading(false))
   }, [resolvedSk])
@@ -99,7 +100,7 @@ export default function TemplateEditPage() {
             <Title order={3}>Details</Title>
             <TemplateMetaEditor
               meta={template.meta}
-              onChange={(meta) => setTemplate(t => t ? { ...t, meta } : t)}
+              onChange={(meta) => { setTemplate(t => t ? { ...t, meta } : t); setHasChanges(true) }}
               disabled={readOnly || template.is_owner !== true}
             />
           </Stack>
@@ -110,7 +111,14 @@ export default function TemplateEditPage() {
             <Title order={3}>Phases</Title>
             <TemplatePhasesEditor
               phases={template.phases}
-              onChange={(phases) => setTemplate(t => t ? { ...t, phases } : t)}
+              templateSk={resolvedSk}
+              onChange={(phases) => { setTemplate(t => t ? { ...t, phases } : t); setHasChanges(true) }}
+              hasChanges={hasChanges}
+              onApplied={async () => {
+                if (!resolvedSk || hasChanges) return
+                const refreshed = await fetchTemplate(resolvedSk)
+                setTemplate((current) => current === template ? refreshed : current)
+              }}
               disabled={readOnly || template.is_owner !== true}
             />
           </Stack>
@@ -121,7 +129,7 @@ export default function TemplateEditPage() {
             <Title order={3}>Sessions</Title>
             <TemplateSessionsEditor
               sessions={template.sessions}
-              onChange={(sessions) => setTemplate(t => t ? { ...t, sessions } : t)}
+              onChange={(sessions) => { setTemplate(t => t ? { ...t, sessions } : t); setHasChanges(true) }}
               disabled={readOnly || template.is_owner !== true}
             />
           </Stack>

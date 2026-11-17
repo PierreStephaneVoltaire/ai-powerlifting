@@ -66,6 +66,18 @@ litellm_models = {
   pl-light     = [{ provider = "chatgpt", model = "gpt-6-luna" }]
   pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]
   pl-background = [{ provider = "openrouter", model = "deepseek/deepseek-v4-flash" }]
+  pl-coordinator = [
+    { provider = "openrouter", model = "anthropic/claude-sonnet-5" },
+    { provider = "openrouter", model = "anthropic/claude-sonnet-4.5" },
+  ]
+  pl-responder-fast = [{ provider = "openrouter", model = "deepseek/deepseek-v4-flash" }]
+  pl-embed          = [{ provider = "openrouter", model = "openai/text-embedding-3-small", mode = "embedding" }]
+  pl-strong         = [{ provider = "openrouter", model = "anthropic/claude-opus-4.6" }]
 }
-litellm_fallbacks = {}
+litellm_fallbacks = {
+  pl-coordinator    = ["pl-analysis"]
+  pl-responder-fast = ["pl-light"]
+  pl-strong         = ["pl-coordinator"]
+}
+# litellm_mcp_servers = { custom = { url = "http://example.svc:8000/mcp" } }
 litellm_admins            = []

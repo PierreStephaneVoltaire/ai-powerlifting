@@ -100,10 +100,11 @@ fatigue, main-lift sessions).
 
 ### Cache identity
 
-`generation.CorrelationPromptVersion = "main-lift-drivers-v1"` is a hand-bumped
-constant in the report identity. Replace it with a hash of the rendered
-correlation system prompt template and tool schema, so a prompt change
-invalidates old reports automatically. No version constants.
+Corrected 2026-11-15: saved Analysis reports must survive prompt changes as well
+as data updates and elapsed time. Neither a version constant nor a prompt hash
+belongs in their identity. Only explicit regeneration replaces a saved report.
+The input-sensitive prompt cache is separate; see the cache design rules in
+`docs/ARCHITECTURE.md`.
 
 ## Tests
 

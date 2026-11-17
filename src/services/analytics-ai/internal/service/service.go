@@ -10,7 +10,6 @@ import (
 
 	"powerlifting/analytics-ai/internal/apperr"
 	"powerlifting/analytics-ai/internal/auth"
-	"powerlifting/analytics-ai/internal/cache"
 	"powerlifting/analytics-ai/internal/coach"
 	"powerlifting/analytics-ai/internal/contract"
 	"powerlifting/analytics-ai/internal/data"
@@ -24,7 +23,6 @@ type Service struct {
 	Coach      coach.Client
 	Source     data.Source
 	Exporter   data.Exporter
-	KV         cache.KV
 	Backend    generation.Backend
 	Executions *execution.Manager
 	Now        func() time.Time

@@ -31,6 +31,7 @@ func system(name string) string {
 
 func CorrelationSystem() string       { return system("correlation_system") }
 func ProgramEvaluationSystem() string { return system("program_evaluation_system") }
+func BlockEvaluationSystem() string   { return system("block_evaluation_system") }
 func MultiBlockSystem() string        { return system("multi_block_comparison_system") }
 
 func Tool(name string) map[string]any {

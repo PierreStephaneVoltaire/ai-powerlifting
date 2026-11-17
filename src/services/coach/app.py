@@ -1,13 +1,11 @@
-import hmac
-import json
 import logging
 import uuid
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from jsonschema import ValidationError, validate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from services.runtime.mesh import caller
 from .config import Settings, load
@@ -15,7 +13,6 @@ from .model import CodexModel, Model
 from .runner import Runner
 from .services import PowerliftingServices, Scope, ServiceError
 from .store import TERMINAL, Job, Store
-from .surfaces import SURFACES
 
 
 SCOPE_KEYS = {"athlete", "pk", "user_pk", "mapped_pk", "person_pk", "_user_pk"}
@@ -29,24 +26,12 @@ class JobRequest(BaseModel):
     conversation_id: str = ""
 
 
-class TurnRequest(BaseModel):
-    messages: list[dict[str, Any]] = Field(min_length=1)
-    athlete: str = ""
-    surface: str | None = None
-    template_sk: str | None = None
-
-
 def _conflicting_scope(value: Any, athlete: str) -> bool:
     if isinstance(value, dict):
         return any((key in SCOPE_KEYS and item != athlete) or _conflicting_scope(item, athlete) for key, item in value.items() if key != "_report_source")
     if isinstance(value, list):
         return any(_conflicting_scope(item, athlete) for item in value)
     return False
-
-
-def _athlete_from(conversation_id: str, person: str) -> str:
-    parts = conversation_id.split(":")
-    return parts[1] if len(parts) >= 3 and parts[0] == "powerlifting" and parts[1] else person
 
 
 def create_app(settings: Settings | None = None, model: Model | None = None, services: PowerliftingServices | None = None) -> FastAPI:
@@ -92,7 +77,7 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
     @app.post("/v1/jobs", status_code=202)
     async def submit(request: JobRequest, owner: str = Depends(person), x_pl_source_principal: str = Header(default="")):
         if request.kind != "domain":
-            raise HTTPException(422, "Only domain jobs may be submitted; use conversation turns")
+            raise HTTPException(422, "Only domain jobs may be submitted")
         payload = dict(request.payload)
         operation = runner.catalog.get(payload.get("operation", ""))
         if operation is None:
@@ -132,49 +117,6 @@ def create_app(settings: Settings | None = None, model: Model | None = None, ser
         job = await readable(job_id, owner, CANCEL_ACTION)
         runner.cancel(job.job_id)
         return job_or_404(job_id).view()
-
-    @app.post("/v1/conversations/{conversation_id}/turns", status_code=202)
-    async def turn(conversation_id: str, request: TurnRequest, owner: str = Depends(person)):
-        athlete = request.athlete or _athlete_from(conversation_id, owner)
-        if athlete != owner and not (await access(owner, athlete, "access_context", {})).get("permissions"):
-            raise HTTPException(403, "No Grant for this Athlete")
-        if request.surface and (request.surface not in SURFACES or not request.template_sk):
-            raise HTTPException(422, "A known surface and its template_sk are required together")
-        return runner.submit_turn(owner, athlete, conversation_id, request.messages, request.surface, request.template_sk, uuid.uuid4().hex).view()
-
-    @app.delete("/v1/conversations/{conversation_id}")
-    async def reset(conversation_id: str, owner: str = Depends(person)):
-        runner.store.forget_thread(owner, conversation_id)
-        return {"reset": True}
-
-    @app.post("/v1/jobs/{job_id}/mcp")
-    async def mcp(job_id: str, request: Request, authorization: str = Header(default="")):
-        if not hmac.compare_digest("Bearer " + runner.tool_token(job_id), authorization):
-            raise HTTPException(401, "Invalid tool scope")
-        job = job_or_404(job_id)
-        if job.kind != "conversation" or job.status != "running":
-            raise HTTPException(409, "Conversation turn is not running")
-        body = await request.json()
-        request_id, method = body.get("id"), body.get("method")
-        if request_id is None:
-            return JSONResponse({}, status_code=202)
-        if method == "initialize":
-            outcome = {"protocolVersion": "2025-03-26", "capabilities": {"tools": {}}, "serverInfo": {"name": "powerlifting-coach", "version": "1.0.0"}}
-        elif method == "ping":
-            outcome = {}
-        elif method == "tools/list":
-            outcome = {"tools": [{"name": op.name, "description": op.description, "inputSchema": op.input_schema} for op in runner.surface_tools(job).values()]}
-        elif method == "tools/call":
-            params = body.get("params") or {}
-            try:
-                value = await runner.call_tool(job, params.get("name", ""), params.get("arguments") or {})
-                outcome = {"content": [{"type": "text", "text": json.dumps(value, default=str)}], "isError": False}
-            except Exception as exc:
-                detail = {"error": exc.detail, "status": exc.status} if isinstance(exc, ServiceError) else {"error": str(exc)}
-                outcome = {"content": [{"type": "text", "text": json.dumps(detail, default=str)}], "isError": True}
-        else:
-            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Method not found"}}
-        return {"jsonrpc": "2.0", "id": request_id, "result": outcome}
 
     return app
 

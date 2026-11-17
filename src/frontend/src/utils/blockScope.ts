@@ -75,7 +75,7 @@ export function recordBlock(record: BlockScoped, field: string, program: Program
   if (date && blocks(program).length) return blockForDate(date, program)
   const stamped = record.block_id || record.block
   if (stamped) return stamped === 'current' ? active : stamped
-  if (field === 'supplement_phases') return mostRecentCompleted(program) || active
+  if (field === 'supplement_phases' || field === 'supplements') return mostRecentCompleted(program) || active
   return active
 }
 

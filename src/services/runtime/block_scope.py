@@ -105,7 +105,7 @@ def record_block(record: Any, field: str, program: dict) -> str:
     stamped = record_block_key(record)
     if stamped:
         return active if stamped == ACTIVE else stamped
-    if field == "supplement_phases":
+    if field in {"supplement_phases", "supplements"}:
         return _most_recent_completed_block(program) or active
     return active
 

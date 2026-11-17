@@ -50,7 +50,7 @@ function getDB(): Promise<IDBPDatabase> {
 }
 
 
-async function clearContextCache(partition = requestPartition()): Promise<void> {
+export async function clearContextCache(partition = requestPartition()): Promise<void> {
   const db = await getDB()
   const tx = db.transaction(STORE_RESPONSES, 'readwrite')
   let cursor = await tx.store.index('byPartition').openCursor(partition)

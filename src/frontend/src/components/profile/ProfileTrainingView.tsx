@@ -148,7 +148,7 @@ function ReadOnlySessions({ program, unit }: { program: Program; unit: 'kg' | 'l
   )
 }
 
-function ReadOnlyAnalysis({ athlete, program, unit, sex }: { athlete: string; program: Program; unit: 'kg' | 'lb'; sex: 'male' | 'female' | null }) {
+function ReadOnlyAnalysis({ athlete, program, unit, sex, authenticated }: { athlete: string; program: Program; unit: 'kg' | 'lb'; sex: 'male' | 'female' | null; authenticated: boolean }) {
   const [bundle, setBundle] = useState<BlockAnalysisBundle | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -180,7 +180,7 @@ function ReadOnlyAnalysis({ athlete, program, unit, sex }: { athlete: string; pr
         {[
           { value: 'weekly', label: 'Weekly' },
           { value: 'blocks', label: 'Past Blocks' },
-          { value: 'compare', label: 'Lifetime Compare' },
+          ...(authenticated ? [{ value: 'compare', label: 'Lifetime Compare' }] : []),
           { value: 'maxes', label: 'Maxes' },
         ].map((item) => (
           <button
@@ -205,13 +205,13 @@ function ReadOnlyAnalysis({ athlete, program, unit, sex }: { athlete: string; pr
         />
       )}
       {section === 'blocks' && <PastBlocksPanel unit={unit} readOnly viewAthlete={athlete} viewProgram={program} viewSex={program.meta?.sex ?? sex} />}
-      {section === 'compare' && <LifetimeComparePanel unit={unit} readOnly viewAthlete={athlete} />}
+      {section === 'compare' && authenticated && <LifetimeComparePanel unit={unit} readOnly viewAthlete={athlete} />}
       {section === 'maxes' && <MaxesPage viewProgram={program} />}
     </Stack>
   )
 }
 
-export default function ProfileTrainingView({ athlete, tab, analysisAvailable, sex = null }: { athlete: string; tab: ProfileTrainingTab; analysisAvailable: boolean; sex?: 'male' | 'female' | null }) {
+export default function ProfileTrainingView({ athlete, tab, analysisAvailable, sex = null, authenticated = true }: { athlete: string; tab: ProfileTrainingTab; analysisAvailable: boolean; sex?: 'male' | 'female' | null; authenticated?: boolean }) {
   const { unit } = useSettingsStore()
   const [program, setProgram] = useState<Program | null>(null)
   const [loading, setLoading] = useState(true)
@@ -233,7 +233,7 @@ export default function ProfileTrainingView({ athlete, tab, analysisAvailable, s
   if (error || !program) return <Alert color="yellow" icon={<AlertCircle size={16} />}>{error ?? 'Sessions are unavailable.'}</Alert>
   if (tab === 'analysis') {
     return analysisAvailable
-      ? <ReadOnlyAnalysis athlete={athlete} program={program} unit={unit} sex={sex} />
+      ? <ReadOnlyAnalysis athlete={athlete} program={program} unit={unit} sex={sex} authenticated={authenticated} />
       : <Alert color="yellow" icon={<AlertCircle size={16} />}>This Athlete has not shared their Analysis.</Alert>
   }
   return <ReadOnlySessions program={program} unit={unit} />

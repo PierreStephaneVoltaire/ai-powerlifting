@@ -69,6 +69,10 @@ func (f *fakeBundles) BlockBundle(_ context.Context, caller auth.Caller, blockKe
 	return f.bundle, f.err
 }
 
+func (f *fakeBundles) Sessions(context.Context, auth.Caller) ([]map[string]any, error) {
+	return nil, nil
+}
+
 type env struct {
 	handler http.Handler
 	profile *profile
@@ -92,7 +96,7 @@ func newEnv(t *testing.T, profileStatus int) *env {
 		}},
 		objects: store.NewMemory(),
 	}
-	svc, err := service.New(registry, auth.NewAccess(e.profile.URL), e.bundles, e.objects, func() time.Time { return time.Unix(0, 0) })
+	svc, err := service.New(registry, auth.NewAccess(e.profile.URL), e.bundles, nil, e.objects, func() time.Time { return time.Unix(0, 0) })
 	if err != nil {
 		t.Fatal(err)
 	}

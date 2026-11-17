@@ -232,7 +232,7 @@ func newHarness(t *testing.T) *harness {
 	manager := execution.New(cache.Prompts{KV: kv, URL: newPromptCacheServer(t).URL})
 	h.svc = &Service{
 		Registry: registry, Access: h.access, Coach: coach.HTTP{URL: stub.server.URL, Client: stub.server.Client()}, Source: h.source,
-		Exporter: h.exporter, KV: kv, Backend: h.backend, Executions: manager, Now: func() time.Time { return clock },
+		Exporter: h.exporter, Backend: h.backend, Executions: manager, Now: func() time.Time { return clock },
 	}
 	return h
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -104,7 +105,7 @@ func Handler(svc *service.Service, log *slog.Logger) http.Handler {
 	for _, operation := range svc.Registry.All() {
 		registerOperation(api, svc, operation)
 	}
-	registerMCP(api, svc)
+	registerMCP(api, svc, auth.NewJobVerifier(os.Getenv("PL_JOB_TOKEN_PUBLIC_KEY"), log))
 	router.Post("/operations/{name}", unknownOperation(svc))
 	return router
 }

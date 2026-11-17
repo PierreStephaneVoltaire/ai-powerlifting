@@ -7,11 +7,12 @@ import {
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
 import { useAuth } from '@/auth/AuthProvider'
+import { useAssistant } from '@/components/assistant/useAssistant'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 import { currentBlockId, recordBlock } from '@/utils/blockScope'
 
 export default function SupplementsPage() {
-  const { readOnly } = useAuth()
+  const { readOnly: accessReadOnly } = useAuth()
   const { program, updateSupplementPhases } = useProgramStore()
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
@@ -19,6 +20,8 @@ export default function SupplementsPage() {
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
   const [block, setBlock] = useState(() => currentBlockId(program))
+  const readOnly = accessReadOnly || block !== currentBlockId(program)
+  const assistant = useAssistant('supplements', {}, readOnly || hasChanges)
 
   const availableBlocks = useMemo(() => {
     const ids = (program?.meta?.blocks ?? []).map((item) => item.id).filter(Boolean)
@@ -44,12 +47,13 @@ export default function SupplementsPage() {
   }, [program?.meta?.current_block_id])
 
   useEffect(() => {
+    if (hasChanges) return
     if (program?.supplement_phases) {
       setPhases(program.supplement_phases)
     } else {
       setPhases([])
     }
-  }, [program])
+  }, [program, hasChanges])
 
   useEffect(() => {
     if (filteredPhases.length === 0) {
@@ -178,13 +182,16 @@ export default function SupplementsPage() {
 
   return (
     <Stack gap="md" className="if-mock-page">
+      {assistant.drawer}
       <Group justify="space-between" className="if-mock-header">
         <Stack gap={0}>
           <h1 className="if-mock-title">Supplements</h1>
           <div className="if-mock-subtitle">What you are taking this block, with dose and notes.</div>
         </Stack>
         <Group gap="sm">
+          {assistant.button}
           <Select
+            aria-label="Training block"
             value={block}
             onChange={(v) => setBlock(v ?? currentBlockId(program))}
             data={availableBlocks.map((b) => ({
@@ -314,8 +321,8 @@ export default function SupplementsPage() {
                     </div>
 
                     <div className="if-supp-table-header">
-                      <span className="if-supp-table-label">Name</span>
-                      <span className="if-supp-table-label">Dose</span>
+                      <span className="if-supp-table-label">Compound</span>
+                      <span className="if-supp-table-label">Daily total</span>
                       <span className="if-supp-table-label">Notes</span>
                       <Button
                         variant="default"
@@ -336,7 +343,7 @@ export default function SupplementsPage() {
                           onChange={(e) =>
                             updateItem(originalIndex, itemIndex, { name: e.currentTarget.value })
                           }
-                          placeholder="Supplement name"
+                          placeholder="Compound name"
                           size="xs"
                           disabled={readOnly}
                         />
@@ -355,7 +362,7 @@ export default function SupplementsPage() {
                           onChange={(e) =>
                             updateItem(originalIndex, itemIndex, { notes: e.currentTarget.value })
                           }
-                          placeholder="Notes or observations..."
+                          placeholder="Purpose and effective-dose notes"
                           size="xs"
                           disabled={readOnly}
                           classNames={{ input: 'if-supp-note-input' }}

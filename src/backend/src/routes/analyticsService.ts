@@ -124,7 +124,7 @@ analyticsServiceRouter.get('/blocks', async (req: Request, res: Response) => {
 })
 
 analyticsServiceRouter.get('/blocks/:blockKey/analysis', async (req: Request, res: Response) => {
-  try { res.json({ data: await invokeAnalyticsOperation('analytics.blocks_get', req.mapped_pk!, { blockKey: req.params.blockKey, refresh: req.query.refresh === 'true', cacheOnly: req.readOnly || req.query.cacheOnly === 'true' }), error: null }) }
+  try { res.json({ data: await invokeAnalyticsOperation('analytics.blocks_get', req.mapped_pk!, { blockKey: req.params.blockKey, refresh: req.query.refresh === 'true', cacheOnly: req.query.cacheOnly === 'true' }), error: null }) }
   catch (error) { failed(res, error, 'Block analysis error') }
 })
 

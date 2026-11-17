@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from services.runtime.mesh import BACKEND_ACCOUNT, caller, is_account
 
-from .coach_client import CoachClient
+from .assistant_client import AssistantClient
 from .gateway import Gateway, Relay
 from .store import Registration, RegistrationStore
 from .users import UserDirectory
@@ -44,9 +44,9 @@ def view(registration: Registration, gateway: Gateway) -> dict:
     }
 
 
-def create_app(store: RegistrationStore | None = None, coach: CoachClient | None = None, gateway: Gateway | None = None, directory: UserDirectory | None = None) -> FastAPI:
-    coach = coach or CoachClient(os.getenv("COACH_URL", "http://pl-coach:8000"))
-    relay = Relay(coach, directory or directory_from_env())
+def create_app(store: RegistrationStore | None = None, assistant: AssistantClient | None = None, gateway: Gateway | None = None, directory: UserDirectory | None = None) -> FastAPI:
+    assistant = assistant or AssistantClient(os.getenv("ASSISTANT_URL", "http://pl-assistant.powerlifting.svc.cluster.local:8000"))
+    relay = Relay(assistant, directory or directory_from_env())
     state = {"store": store, "gateway": gateway}
 
     @asynccontextmanager
@@ -59,7 +59,7 @@ def create_app(store: RegistrationStore | None = None, coach: CoachClient | None
         yield
         await state["gateway"].close()
 
-    app = FastAPI(title="Powerlifting Coach Discord bot", lifespan=lifespan)
+    app = FastAPI(title="Powerlifting assistant Discord relay", lifespan=lifespan)
 
     def authorized(x_pl_source_principal: str = Header(default="")) -> None:
         if not is_account(caller(x_pl_source_principal), BACKEND_ACCOUNT):

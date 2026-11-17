@@ -48,10 +48,7 @@ pub fn data_quality(
         .filter(|session| session.completed)
         .collect();
     match linked {
-        None => flags.push(Flag::info(
-            "training_only",
-            "No completed competition linked",
-        )),
+        None => {}
         Some(link) => {
             let competition = &link.competition;
             if !has_results(results_of(competition)) {

@@ -33,7 +33,8 @@ def test_dates_win_over_stale_stamps_and_current_means_active():
 
 def test_undated_records_have_fallback_blocks():
     program = program_with_ranges()
-    assert record_block({"name": "creatine"}, "supplements", program) == "block-active"
+    assert record_block({"name": "creatine"}, "supplements", program) == "block-middle"
+    assert record_block({"name": "creatine", "block_id": "block-active"}, "supplements", program) == "block-active"
     assert record_block({"start_week": 29}, "supplement_phases", program) == "block-middle"
     assert record_block({"start_week": 35}, "supplement_phases", program) == "block-middle"
     assert record_block({"start_week": 1, "date": "2026-10-07"}, "supplement_phases", program) == record_block({"date": "2026-10-07"}, "diet_notes", program)
@@ -66,7 +67,8 @@ def test_scope_program_filters_records_outside_the_block():
     }
     scoped = scope_program(program)
     assert scoped["competitions"] == []
-    assert scoped["supplements"] == [{"name": "creatine"}]
+    assert scoped["supplements"] == []
+    assert scope_program(program, "block-middle")["supplements"] == [{"name": "creatine"}]
     assert scoped["meta"]["block_notes"] == []
 
 

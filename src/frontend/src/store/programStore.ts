@@ -3,6 +3,7 @@ import type { Program, Session, Exercise, Phase, WeightEntry, ProgramListItem, S
 import * as api from '@/api/client'
 import { requestPartition } from '@/api/context'
 import { activeBlockId } from '@/utils/weekStart'
+import { currentBlockId, recordBlock } from '@/utils/blockScope'
 import { kgToLb } from '@/utils/units'
 
 interface ProgramState {
@@ -377,8 +378,9 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Supplements
   updateSupplementPhases: async (phases) => {
-    const { version } = get()
-    await api.updateSupplementPhases(version, phases)
+    const { version, program } = get()
+    const active = currentBlockId(program)
+    await api.updateSupplementPhases(version, phases.filter((phase) => recordBlock(phase, 'supplement_phases', program) === active))
 
     set((state) => {
       if (!state.program) return state

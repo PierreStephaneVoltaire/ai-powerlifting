@@ -57,7 +57,8 @@ func run(cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	defer bundles.Close()
-	svc, err := service.New(registry, auth.NewAccess(cfg.ProfileURL), bundles, objects, time.Now)
+	aiReports := data.NewAIClient(cfg.AnalyticsAIURL)
+	svc, err := service.New(registry, auth.NewAccess(cfg.ProfileURL), bundles, aiReports, objects, time.Now)
 	if err != nil {
 		return err
 	}

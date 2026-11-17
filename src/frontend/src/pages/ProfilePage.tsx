@@ -519,7 +519,7 @@ export default function ProfilePage() {
       )}
 
       {readOnlyView && publicProfile && profileSection !== 'profile' && sectionAvailable(profileSection) ? (
-        <ProfileTrainingView athlete={publicProfile.athlete_pk} tab={profileSection} analysisAvailable={publicProfile.public_training_summary_enabled} sex={publicProfile.sex ?? null} />
+        <ProfileTrainingView athlete={publicProfile.athlete_pk} tab={profileSection} analysisAvailable={publicProfile.public_training_summary_enabled} sex={publicProfile.sex ?? null} authenticated={Boolean(user)} />
       ) : (
       <>
       <Paper withBorder p="lg" radius="md" className="if-card">
