@@ -79,6 +79,11 @@ resource "kubernetes_deployment_v1" "service" {
             value = each.value.domain
           }
 
+          env {
+            name  = "PORT"
+            value = "8000"
+          }
+
           dynamic "env" {
             for_each = local.service_env
             content {
