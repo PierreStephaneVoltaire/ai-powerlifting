@@ -8,6 +8,7 @@ locals {
     PROMPT_CACHE_URL            = "http://pl-prompt-cache-api.${var.namespace}.svc.cluster.local:8000"
     AWS_SHARED_CREDENTIALS_FILE = "/secrets/aws/credentials"
     AWS_CONFIG_FILE             = "/secrets/aws/config"
+    IF_SUPPLEMENTS_TABLE_NAME   = "if-supplements"
     PL_JOB_TOKEN_PUBLIC_KEY     = local.job_token_public_key
   }
 

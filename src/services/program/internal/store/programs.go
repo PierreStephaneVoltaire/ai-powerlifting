@@ -79,6 +79,9 @@ func (p Programs) List(ctx context.Context, athlete string, includeArchived bool
 				continue
 			}
 		}
+		if err := p.loadSupplements(ctx, pyval.Str(item["pk"]), pyval.Str(item["sk"]), item); err != nil {
+			return nil, err
+		}
 		out = append(out, item)
 	}
 	return out, nil
@@ -151,6 +154,9 @@ func (p Programs) Load(ctx context.Context, athlete, selected string, withSessio
 	}
 	if !published(program) {
 		return nil, notFound("Program version is unpublished: %s", refSK)
+	}
+	if err := p.loadSupplements(ctx, athlete, refSK, program); err != nil {
+		return nil, err
 	}
 	if _, ok := program["meta"].(map[string]any); !ok {
 		program["meta"] = map[string]any{}
@@ -226,6 +232,9 @@ func (p Programs) Snapshot(ctx context.Context, athlete, selected string) (*Snap
 	if program == nil {
 		return nil, notFound("Program not found: %s", selected)
 	}
+	if err := p.loadSupplements(ctx, athlete, selected, program); err != nil {
+		return nil, err
+	}
 	return &Snapshot{Program: program, SK: selected}, nil
 }
 
@@ -246,6 +255,12 @@ func (p Programs) Commit(ctx context.Context, athlete string, snapshot *Snapshot
 	updated["pk"] = athlete
 	updated["sk"] = snapshot.SK
 	delete(updated, "sessions")
+	if p.Tables.Supplements != "" {
+		if err := p.saveSupplementChanges(ctx, athlete, snapshot, program); err != nil {
+			return "", err
+		}
+		removeSupplementFields(updated)
+	}
 	if err := p.DB.Put(ctx, p.Tables.Health, updated); err != nil {
 		return "", err
 	}
@@ -286,6 +301,12 @@ func (p Programs) WriteNewVersion(ctx context.Context, athlete string, program m
 	}
 	item := pyval.CopyMap(program)
 	delete(item, "sessions")
+	if err := p.persistSupplements(ctx, athlete, newSK, item); err != nil {
+		return nil, err
+	}
+	if p.Tables.Supplements != "" {
+		removeSupplementFields(item)
+	}
 	item["pk"] = athlete
 	item["sk"] = newSK
 	item["published"] = true
@@ -352,6 +373,13 @@ func (p Programs) WriteInitial(ctx context.Context, athlete string, program map[
 	item := pyval.CopyMap(program)
 	sessions, _ := item["sessions"].([]any)
 	delete(item, "sessions")
+	item["pk"] = athlete
+	if err := p.persistSupplements(ctx, athlete, sk, item); err != nil {
+		return "", err
+	}
+	if p.Tables.Supplements != "" {
+		removeSupplementFields(item)
+	}
 	item["sk"] = sk
 	item["published"] = true
 	if err := p.DB.Put(ctx, p.Tables.Health, item); err != nil {

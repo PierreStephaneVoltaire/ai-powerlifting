@@ -32,7 +32,7 @@ func TestSupplementPhaseCreationAfterBlockTransition(t *testing.T) {
 	if err != nil || len(read.(map[string]any)["supplement_phases"].([]any)) != 1 {
 		t.Fatalf("approved phase is missing on readback: %v, %v", read, err)
 	}
-	stored, err := db.Get(context.Background(), "h", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
+	stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
 	if err != nil || len(stored["supplement_phases"].([]any)) != 2 {
 		t.Fatalf("past phase must survive alongside the new phase: %v, %v", stored, err)
 	}
@@ -73,7 +73,7 @@ func TestSupplementPhasesReplaceOnlyCurrentBlock(t *testing.T) {
 		if _, err := supplementPhasesUpdate(deps, notesRequest(map[string]any{"phases": phases})); err != nil {
 			t.Fatal(err)
 		}
-		stored, err := db.Get(context.Background(), "h", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
+		stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

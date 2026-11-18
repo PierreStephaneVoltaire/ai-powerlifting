@@ -406,6 +406,7 @@ erDiagram
 |-------|---------|---------|
 | `if-health` | DynamoDB | Program document, glossary, max history, weight log |
 | `if-sessions` | DynamoDB | Sessions (separate from program; merged by version in `programController.getProgram()`) |
+| `if-supplements` | DynamoDB | Supplements and supplement phases, stored by Athlete and Program version |
 | `if-user` | DynamoDB | Verified provider-subject pointers, Person/profile settings and Athlete mapping |
 | `if-powerlifting-analysis-cache` | DynamoDB | Legacy and no longer used. It held AI generation records before they moved to S3 and Valkey. The operator deletes it; nothing may read or write it |
 | `analysis-reports/{athlete}/{generation_id}.json` | S3 (powerlifting bucket) | Finished AI reports (correlation / ROI, program evaluation, block comparison and any other generation), saved after the calculations. Valkey holds the pointer |

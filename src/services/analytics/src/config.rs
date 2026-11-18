@@ -5,6 +5,7 @@ pub const DOMAIN: &str = "analytics";
 #[derive(Clone, Debug)]
 pub struct Tables {
     pub health: String,
+    pub supplements: String,
     pub sessions: String,
     pub competitions: String,
     pub goals: String,
@@ -67,6 +68,7 @@ impl Config {
             .collect(),
             tables: Tables {
                 health: table("IF_HEALTH_TABLE_NAME", "if-health"),
+                supplements: table("IF_SUPPLEMENTS_TABLE_NAME", "if-supplements"),
                 sessions: table("IF_SESSIONS_TABLE_NAME", "if-sessions"),
                 competitions: var(
                     "POWERLIFTING_USER_COMPETITIONS_TABLE",

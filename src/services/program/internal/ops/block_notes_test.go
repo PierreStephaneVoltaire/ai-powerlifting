@@ -14,7 +14,7 @@ import (
 func notesDeps(t *testing.T, items ...store.Item) (*Deps, *store.Memory) {
 	t.Helper()
 	db := store.NewMemory()
-	tables := store.Tables{Health: "h", Sessions: "s", Competitions: "c", Templates: "t"}
+	tables := store.Tables{Health: "h", Sessions: "s", Supplements: "sup", Competitions: "c", Templates: "t"}
 	if err := db.Seed(tables.Health, items...); err != nil {
 		t.Fatal(err)
 	}

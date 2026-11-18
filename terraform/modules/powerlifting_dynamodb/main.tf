@@ -236,6 +236,32 @@ resource "aws_dynamodb_table" "if_health" {
   }
 }
 
+resource "aws_dynamodb_table" "if_supplements" {
+  name         = "if-supplements"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Project = "if-prototype-a1"
+    Service = "supplements"
+  }
+}
+
 resource "aws_dynamodb_table" "if_health_templates" {
   name         = "if-health-templates"
   billing_mode = "PAY_PER_REQUEST"

@@ -85,6 +85,11 @@ resource "kubernetes_deployment_v1" "program" {
           }
 
           env {
+            name  = "IF_SUPPLEMENTS_TABLE_NAME"
+            value = "if-supplements"
+          }
+
+          env {
             name  = "PL_JOB_TOKEN_PUBLIC_KEY"
             value = local.job_token_public_key
           }

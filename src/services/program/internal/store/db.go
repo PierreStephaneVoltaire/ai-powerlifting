@@ -17,6 +17,7 @@ type Table string
 type Tables struct {
 	Health       Table
 	Sessions     Table
+	Supplements  Table
 	Competitions Table
 	Templates    Table
 }

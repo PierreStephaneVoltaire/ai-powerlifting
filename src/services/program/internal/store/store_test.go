@@ -3,11 +3,24 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"powerlifting/program/internal/env"
+	"powerlifting/program/internal/pyval"
 )
+
+type failingSupplementPut struct {
+	DB
+}
+
+func (f failingSupplementPut) Put(ctx context.Context, table Table, item Item) error {
+	if table == "sup" {
+		return errors.New("supplement write failed")
+	}
+	return f.DB.Put(ctx, table, item)
+}
 
 func fixedEnv() env.Env {
 	return env.Env{Now: func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }, UUID: func() string { return "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" }}
@@ -81,5 +94,98 @@ func TestNextLabel(t *testing.T) {
 		if got := nextLabel(c.label, c.minor, c.current, c.new); got != c.want {
 			t.Errorf("%s: got %s want %s", c.label, got, c.want)
 		}
+	}
+}
+
+func TestCommitMovesLegacySupplementsOutOfHealth(t *testing.T) {
+	db := NewMemory()
+	tables := Tables{Health: "h", Supplements: "sup"}
+	legacy := Item{"pk": "a", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b"}, "supplements": []any{map[string]any{"name": "creatine"}}, "supplement_phases": []any{map[string]any{"block_id": "b"}}, "other": "keep"}
+	if err := db.Seed("h", legacy); err != nil {
+		t.Fatal(err)
+	}
+	programs := New(db, tables, fixedEnv())
+	snapshot := &Snapshot{Program: pyval.CopyMap(legacy), SK: "program#v001"}
+	if _, err := programs.Commit(context.Background(), "a", snapshot, pyval.CopyMap(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	health, _ := db.Get(context.Background(), "h", Key{"a", "program#v001"}, GetOptions{})
+	supplements, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
+	if _, ok := health["supplements"]; ok {
+		t.Fatalf("health retained supplements: %v", health)
+	}
+	if supplements["supplements"] == nil || supplements["supplement_phases"] == nil || health["other"] != "keep" {
+		t.Fatalf("health %v supplements %v", health, supplements)
+	}
+}
+
+func TestCommitDoesNotRewriteUnchangedSupplements(t *testing.T) {
+	db := NewMemory()
+	tables := Tables{Health: "h", Supplements: "sup"}
+	stored := Item{"pk": "a", "sk": "program#v001", "supplements": []any{map[string]any{"name": "new"}}, "supplement_phases": []any{}}
+	if err := db.Seed("sup", stored); err != nil {
+		t.Fatal(err)
+	}
+	programs := New(db, tables, fixedEnv())
+	program := Item{"meta": map[string]any{}, "supplements": []any{map[string]any{"name": "stale"}}, "supplement_phases": []any{}, "notes": "updated"}
+	snapshot := &Snapshot{Program: pyval.CopyMap(program), SK: "program#v001"}
+	if _, err := programs.Commit(context.Background(), "a", snapshot, program); err != nil {
+		t.Fatal(err)
+	}
+	supplements, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
+	if supplements["supplements"].([]any)[0].(map[string]any)["name"] != "new" {
+		t.Fatalf("supplements overwritten: %v", supplements)
+	}
+}
+
+func TestSupplementRowDoesNotResurrectMissingLegacyFields(t *testing.T) {
+	db := NewMemory()
+	programs := New(db, Tables{Supplements: "sup"}, fixedEnv())
+	program := Item{"supplements": []any{"legacy supplements"}, "supplement_phases": []any{"legacy phases"}}
+	if err := db.Seed("sup", Item{"pk": "a", "sk": "program#v001", "supplements": []any{"new supplements"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := programs.loadSupplements(context.Background(), "a", "program#v001", program); err != nil {
+		t.Fatal(err)
+	}
+	if program["supplement_phases"] != nil || program["supplements"].([]any)[0] != "new supplements" {
+		t.Fatalf("hydrated supplements: %v", program)
+	}
+}
+
+func TestCommitKeepsLegacyDataWhenSupplementWriteFails(t *testing.T) {
+	db := NewMemory()
+	legacy := Item{"pk": "a", "sk": "program#v001", "meta": map[string]any{}, "supplements": []any{"legacy"}, "note": "old"}
+	if err := db.Seed("h", legacy); err != nil {
+		t.Fatal(err)
+	}
+	program := pyval.CopyMap(legacy)
+	program["note"] = "new"
+	programs := New(failingSupplementPut{DB: db}, Tables{Health: "h", Supplements: "sup"}, fixedEnv())
+	if _, err := programs.Commit(context.Background(), "a", &Snapshot{Program: pyval.CopyMap(legacy), SK: "program#v001"}, program); err == nil {
+		t.Fatal("commit succeeded")
+	}
+	stored, _ := db.Get(context.Background(), "h", Key{"a", "program#v001"}, GetOptions{})
+	if stored["supplements"] == nil || stored["note"] != "old" {
+		t.Fatalf("legacy program changed after failed supplement write: %v", stored)
+	}
+}
+
+func TestCommitPreservesUnchangedSupplementField(t *testing.T) {
+	db := NewMemory()
+	current := Item{"pk": "a", "sk": "program#v001", "supplements": []any{"current"}, "supplement_phases": []any{"old phase"}}
+	if err := db.Seed("sup", current); err != nil {
+		t.Fatal(err)
+	}
+	program := Item{"meta": map[string]any{}, "supplements": []any{"old supplement"}, "supplement_phases": []any{"old phase"}}
+	snapshot := &Snapshot{Program: pyval.CopyMap(program), SK: "program#v001"}
+	program["supplement_phases"] = []any{"new phase"}
+	programs := New(db, Tables{Health: "h", Supplements: "sup"}, fixedEnv())
+	if _, err := programs.Commit(context.Background(), "a", snapshot, program); err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
+	if stored["supplements"].([]any)[0] != "current" || stored["supplement_phases"].([]any)[0] != "new phase" {
+		t.Fatalf("supplement merge: %v", stored)
 	}
 }

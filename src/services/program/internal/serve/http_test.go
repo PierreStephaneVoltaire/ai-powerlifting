@@ -83,7 +83,7 @@ func newEnvironment(t *testing.T, profileStatus int) *environment {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tables := store.Tables{Health: "h", Sessions: "s", Competitions: "c", Templates: "t"}
+	tables := store.Tables{Health: "h", Sessions: "s", Supplements: "sup", Competitions: "c", Templates: "t"}
 	db := store.NewMemory()
 	runtimeEnv := env.Env{Now: func() time.Time { return time.Unix(0, 0).UTC() }, UUID: func() string { return "00000000-0000-4000-8000-000000000000" }}
 	e := &environment{profile: newProfile(t, profileStatus), db: db, bumps: &bumps{}}

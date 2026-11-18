@@ -13,6 +13,7 @@ type Config struct {
 	Region             string
 	HealthTable        string
 	SessionsTable      string
+	SupplementsTable   string
 	CompetitionsTable  string
 	TemplatesTable     string
 	TemplatesLibraryPK string
@@ -35,6 +36,7 @@ func Load() Config {
 		Region:             env("AWS_REGION", "ca-central-1"),
 		HealthTable:        env("IF_HEALTH_TABLE_NAME", "if-health"),
 		SessionsTable:      env("IF_SESSIONS_TABLE_NAME", "if-sessions"),
+		SupplementsTable:   env("IF_SUPPLEMENTS_TABLE_NAME", "if-supplements"),
 		CompetitionsTable:  env("POWERLIFTING_USER_COMPETITIONS_TABLE", "if-powerlifting-user-competitions"),
 		TemplatesTable:     env("IF_TEMPLATES_TABLE_NAME", "if-health-templates"),
 		TemplatesLibraryPK: env("IF_TEMPLATES_LIBRARY_PK", "template_library"),

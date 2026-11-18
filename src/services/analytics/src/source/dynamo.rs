@@ -10,6 +10,7 @@ use crate::config::Tables;
 use crate::error::Error;
 
 const COMPETITIONS_INDEX: &str = "entries-by-date";
+const SUPPLEMENT_FIELDS: [&str; 2] = ["supplements", "supplement_phases"];
 
 pub struct DynamoSource {
     client: Client,
@@ -31,6 +32,21 @@ fn key(pk: &str, sk: &str) -> Item {
         ("pk".to_owned(), AttributeValue::S(pk.to_owned())),
         ("sk".to_owned(), AttributeValue::S(sk.to_owned())),
     ])
+}
+
+fn hydrate_supplements(program: &mut Value, supplements: Value) {
+    let Some(supplements) = supplements.as_object() else {
+        return;
+    };
+    let Some(program) = program.as_object_mut() else {
+        return;
+    };
+    for field in SUPPLEMENT_FIELDS {
+        program.remove(field);
+        if let Some(value) = supplements.get(field) {
+            program.insert(field.to_owned(), value.clone());
+        }
+    }
 }
 
 impl DynamoSource {
@@ -196,13 +212,16 @@ impl DynamoSource {
         if !program.is_object() {
             return Err(Error::NotFound(format!("Program not found: {program_sk}")));
         }
-        let (sessions, competitions, goals, weight_log, glossary) = tokio::try_join!(
+        let (supplements, sessions, competitions, goals, weight_log, glossary) = tokio::try_join!(
+            self.get(&self.tables.supplements, athlete, &program_sk, true),
             self.sessions(athlete, &program_sk, window),
             self.competitions(athlete, window),
             self.goals(athlete),
             self.get(health, athlete, "weight_log#current", false),
             self.effective_glossary(athlete),
         )?;
+        let mut program = program;
+        hydrate_supplements(&mut program, supplements);
         Ok(RawData {
             pointer,
             program,
@@ -213,6 +232,36 @@ impl DynamoSource {
             competitions,
             goals,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::hydrate_supplements;
+
+    #[test]
+    fn destination_row_replaces_legacy_fields_and_preserves_missing_field_semantics() {
+        let mut program = json!({
+            "supplements": ["legacy supplements"],
+            "supplement_phases": ["legacy phases"],
+            "phases": ["program data"]
+        });
+        hydrate_supplements(
+            &mut program,
+            json!({"supplements": ["destination supplements"]}),
+        );
+        assert_eq!(program["supplements"], json!(["destination supplements"]));
+        assert!(program.get("supplement_phases").is_none());
+        assert_eq!(program["phases"], json!(["program data"]));
+    }
+
+    #[test]
+    fn missing_destination_row_keeps_legacy_fields() {
+        let mut program = json!({"supplements": ["legacy"]});
+        hydrate_supplements(&mut program, serde_json::Value::Null);
+        assert_eq!(program["supplements"], json!(["legacy"]));
     }
 }
 

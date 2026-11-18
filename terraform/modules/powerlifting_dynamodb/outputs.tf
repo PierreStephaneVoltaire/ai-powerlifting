@@ -38,6 +38,10 @@ output "goals_table_arn" {
   value = aws_dynamodb_table.if_powerlifting_goals.arn
 }
 
+output "supplements_table_arn" {
+  value = aws_dynamodb_table.if_supplements.arn
+}
+
 output "workout_videos_table_name" {
   value = aws_dynamodb_table.workout_videos.name
 }

@@ -60,7 +60,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 
 	runtimeEnv := env.Default()
 	tables := store.Tables{
-		Health: store.Table(cfg.HealthTable), Sessions: store.Table(cfg.SessionsTable),
+		Health: store.Table(cfg.HealthTable), Sessions: store.Table(cfg.SessionsTable), Supplements: store.Table(cfg.SupplementsTable),
 		Competitions: store.Table(cfg.CompetitionsTable), Templates: store.Table(cfg.TemplatesTable),
 	}
 	db := store.AWS{API: dynamodb.NewFromConfig(awsCfg)}

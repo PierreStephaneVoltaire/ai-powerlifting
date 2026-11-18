@@ -290,7 +290,7 @@ func newHarness(t *testing.T, f *fixture) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tables := store.Tables{Health: "if-health", Sessions: "if-sessions", Competitions: "if-powerlifting-user-competitions", Templates: "if-health-templates"}
+	tables := store.Tables{Health: "if-health", Sessions: "if-sessions", Supplements: "if-supplements", Competitions: "if-powerlifting-user-competitions", Templates: "if-health-templates"}
 	db := store.NewMemory()
 	for key, table := range map[string]store.Table{"health": tables.Health, "sessions": tables.Sessions, "competitions": tables.Competitions, "templates": tables.Templates} {
 		for _, item := range f.Seed[key] {

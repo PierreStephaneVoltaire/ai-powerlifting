@@ -57,7 +57,9 @@ class ProgramStore:
         self._pk = current_athlete.get() or pk
         self._region = region
         self._sessions_table_name = os.environ.get("IF_SESSIONS_TABLE_NAME", "if-sessions")
+        self._supplements_table_name = os.environ.get("IF_SUPPLEMENTS_TABLE_NAME", "if-supplements")
         self._table = None
+        self._supplements_table = None
         self._cache: Optional[dict] = None
         self._cache_version: Optional[int] = None
 
@@ -83,6 +85,30 @@ class ProgramStore:
                 "dynamodb", region_name=self._region
             ).Table(self._table_name)
         return self._table
+
+    @property
+    def supplements_table(self):
+        if self._supplements_table is None:
+            self._supplements_table = dynamodb_resource(
+                "dynamodb", region_name=self._region
+            ).Table(self._supplements_table_name)
+        return self._supplements_table
+
+    @staticmethod
+    def _supplement_fields() -> tuple[str, str]:
+        return "supplements", "supplement_phases"
+
+    def _hydrate_supplements_sync(self, program: dict, program_sk: str) -> bool:
+        row = self.supplements_table.get_item(
+            Key={"pk": self._pk, "sk": program_sk}, ConsistentRead=True
+        ).get("Item")
+        if isinstance(row, dict):
+            for field in self._supplement_fields():
+                program.pop(field, None)
+                if field in row:
+                    program[field] = copy.deepcopy(row[field])
+            return True
+        return False
     
     def invalidate_cache(self) -> None:
         """Clear the in-memory cache."""
@@ -105,6 +131,7 @@ class ProgramStore:
         if not isinstance(program, dict):
             raise ProgramNotFoundError(f"Program not found: {selected}")
         current = bool(pointer and str(pointer.get("ref_sk")) == str(selected))
+        self._hydrate_supplements_sync(program, str(selected))
         return copy.deepcopy(program), copy.deepcopy(pointer), str(selected), current
 
     async def _source_snapshot(self) -> tuple[dict, dict, str, bool]:
@@ -129,6 +156,32 @@ class ProgramStore:
         updated["pk"] = self._pk
         updated["sk"] = program_sk
         updated.pop("sessions", None)
+        current_supplements = self.supplements_table.get_item(
+            Key={"pk": self._pk, "sk": program_sk}, ConsistentRead=True
+        ).get("Item")
+        supplements_changed = any(
+            (field in program) != (field in snapshot[0]) or program.get(field) != snapshot[0].get(field)
+            for field in self._supplement_fields()
+        )
+        persist_supplements = supplements_changed or (
+            not isinstance(current_supplements, dict)
+            and any(field in snapshot[0] for field in self._supplement_fields())
+        )
+        if persist_supplements:
+            supplements = copy.deepcopy(current_supplements) if isinstance(current_supplements, dict) else {"pk": self._pk, "sk": program_sk}
+            source = current_supplements if isinstance(current_supplements, dict) else snapshot[0]
+            for field in self._supplement_fields():
+                changed = (field in program) != (field in snapshot[0]) or program.get(field) != snapshot[0].get(field)
+                if changed:
+                    if field in program:
+                        supplements[field] = copy.deepcopy(program[field])
+                    else:
+                        supplements.pop(field, None)
+                elif field in source and field not in supplements:
+                    supplements[field] = copy.deepcopy(source[field])
+            self.supplements_table.put_item(Item=self._floats_to_decimals(supplements))
+        for field in self._supplement_fields():
+            updated.pop(field, None)
         self.table.put_item(Item=self._floats_to_decimals(updated))
         self.invalidate_cache()
         return {**copy.deepcopy(result), "sk": program_sk, "updated_at": now}
@@ -298,6 +351,7 @@ class ProgramStore:
             program["meta"] = meta
         program.pop("pk", None)
         program.pop("sk", None)
+        self._hydrate_supplements_sync(program, str(ref_sk))
         program["sessions"] = self._get_session_store().list_sessions_sync(
             str(ref_sk),
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
@@ -841,6 +895,14 @@ class ProgramStore:
         self._validate_session_identities(sessions)
         program_without_sessions = copy.deepcopy(program)
         program_without_sessions.pop("sessions", None)
+
+        supplements = {"pk": self._pk, "sk": new_sk}
+        for field in self._supplement_fields():
+            if field in program:
+                supplements[field] = copy.deepcopy(program[field])
+        self.supplements_table.put_item(Item=self._floats_to_decimals(supplements))
+        for field in self._supplement_fields():
+            program_without_sessions.pop(field, None)
 
         program_item = {**program_without_sessions, "pk": self._pk, "sk": new_sk, "published": True}
         
