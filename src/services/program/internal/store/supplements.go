@@ -17,14 +17,13 @@ func (p Programs) loadSupplements(ctx context.Context, athlete, sk string, progr
 	if err != nil {
 		return err
 	}
-	if item != nil {
-		removeSupplementFields(program)
+	if item == nil {
+		return nil
 	}
+	removeSupplementFields(program)
 	for _, field := range supplementFields {
-		if item != nil {
-			if _, ok := item[field]; ok {
-				program[field] = item[field]
-			}
+		if _, ok := item[field]; ok {
+			program[field] = item[field]
 		}
 	}
 	return nil

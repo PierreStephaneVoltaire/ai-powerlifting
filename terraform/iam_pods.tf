@@ -29,8 +29,6 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-health-templates/index/*",
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-sessions",
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-sessions/index/*",
-          module.powerlifting_dynamodb.supplements_table_arn,
-          "${module.powerlifting_dynamodb.supplements_table_arn}/index/*",
           module.powerlifting_dynamodb.workout_videos_table_arn,
           "${module.powerlifting_dynamodb.workout_videos_table_arn}/index/*",
           "arn:aws:dynamodb:ca-central-1:429310424269:table/if-user",
@@ -82,4 +80,21 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
       },
     ]
   })
+}
+
+resource "aws_iam_policy" "powerlifting_pods_supplements" {
+  name = "powerlifting-pods-supplements"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+      Resource = module.powerlifting_dynamodb.supplements_table_arn
+    }]
+  })
+}
+
+resource "aws_iam_user_policy_attachment" "powerlifting_pods_supplements" {
+  user       = aws_iam_user.powerlifting_pods.name
+  policy_arn = aws_iam_policy.powerlifting_pods_supplements.arn
 }
