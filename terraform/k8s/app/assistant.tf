@@ -25,23 +25,6 @@ resource "kubernetes_service_account_v1" "assistant" {
   automount_service_account_token = false
 }
 
-data "aws_ssm_parameter" "assistant_reference_credentials" {
-  name            = "/powerlifting/reference-reader/aws-credentials"
-  with_decryption = true
-}
-
-resource "kubernetes_secret_v1" "assistant_reference_credentials" {
-  metadata {
-    name      = "assistant-reference-credentials"
-    namespace = var.namespace
-  }
-
-  data = {
-    AWS_ACCESS_KEY_ID     = jsondecode(data.aws_ssm_parameter.assistant_reference_credentials.value).access_key_id
-    AWS_SECRET_ACCESS_KEY = jsondecode(data.aws_ssm_parameter.assistant_reference_credentials.value).secret_access_key
-  }
-}
-
 resource "kubernetes_deployment_v1" "assistant" {
   depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls, kubectl_manifest.assistant_workflow_state, kubectl_manifest.assistant_dapr_peers]
   wait_for_rollout = false
@@ -128,10 +111,14 @@ resource "kubernetes_deployment_v1" "assistant" {
             value = var.region
           }
 
-          env_from {
-            secret_ref {
-              name = kubernetes_secret_v1.assistant_reference_credentials.metadata[0].name
-            }
+          env {
+            name  = "AWS_SHARED_CREDENTIALS_FILE"
+            value = "/secrets/aws/credentials"
+          }
+
+          env {
+            name  = "AWS_CONFIG_FILE"
+            value = "/secrets/aws/config"
           }
 
           env {
@@ -221,6 +208,20 @@ resource "kubernetes_deployment_v1" "assistant" {
             }
             initial_delay_seconds = 5
             period_seconds        = 10
+          }
+
+          volume_mount {
+            name       = "aws"
+            mount_path = "/secrets/aws"
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "aws"
+
+          secret {
+            secret_name = "pl-aws-credentials"
           }
         }
       }

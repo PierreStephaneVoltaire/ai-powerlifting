@@ -70,34 +70,6 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
       },
       {
         Effect   = "Allow"
-        Action   = "ecr:GetAuthorizationToken"
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer",
-        ]
-        Resource = "arn:aws:ecr:ca-central-1:429310424269:repository/if-powerlifting-*"
-      },
-    ]
-  })
-}
-
-resource "aws_iam_user" "reference_reader" {
-  name = "powerlifting-reference-reader"
-}
-
-resource "aws_iam_user_policy" "reference_reader" {
-  name = "powerlifting-reference-reader"
-  user = aws_iam_user.reference_reader.name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
         Action   = "s3:ListBucketVersions"
         Resource = aws_s3_bucket.reference_documents.arn
         Condition = {
@@ -117,19 +89,20 @@ resource "aws_iam_user_policy" "reference_reader" {
           "${aws_s3_bucket.reference_documents.arn}/references/federation-rules/*",
         ]
       },
+      {
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+        ]
+        Resource = "arn:aws:ecr:ca-central-1:429310424269:repository/if-powerlifting-*"
+      },
     ]
-  })
-}
-
-resource "aws_iam_access_key" "reference_reader" {
-  user = aws_iam_user.reference_reader.name
-}
-
-resource "aws_ssm_parameter" "reference_reader_credentials" {
-  name = "/powerlifting/reference-reader/aws-credentials"
-  type = "SecureString"
-  value = jsonencode({
-    access_key_id     = aws_iam_access_key.reference_reader.id
-    secret_access_key = aws_iam_access_key.reference_reader.secret
   })
 }

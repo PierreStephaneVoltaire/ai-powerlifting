@@ -46,4 +46,4 @@ After uploads, replacements, or deletions, restart the assistant deployment to t
 kubectl -n powerlifting rollout restart deployment/pl-assistant
 ```
 
-The deployment role needs the `terraform/ci-access` policy applied before the Kubernetes app scope can read the reference-reader credential from SSM. AWS and Kubernetes resources are applied through their respective existing scopes.
+The assistant uses the existing `pl-aws-credentials` secret. The AWS scope grants the shared `powerlifting-pods` identity read-only access to the two reference prefixes. Apply the AWS scope before the Kubernetes app scope so the assistant can index the bucket on startup.
