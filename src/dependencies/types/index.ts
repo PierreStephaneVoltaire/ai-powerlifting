@@ -487,6 +487,10 @@ export interface Supplement {
   block_id?: string
   name: string
   dose: string
+  notes?: string
+  dose_assessment?: 'below_range' | 'within_range' | 'above_range'
+  questionable_benefits?: boolean
+  wada_prohibited?: boolean
 }
 
 export interface SupplementPhase {
@@ -494,7 +498,7 @@ export interface SupplementPhase {
   phase: number
   phase_name: string
   notes: string
-  items: (Supplement & { notes?: string })[]
+  items: Supplement[]
   peak_week_protocol?: Record<string, string>  // Dynamic key-value pairs (caffeine, creatine_timing, etc.)
   block?: string          // Training block identifier. Default: "current"
   start_week?: number     // Week range start (from block's sessions)

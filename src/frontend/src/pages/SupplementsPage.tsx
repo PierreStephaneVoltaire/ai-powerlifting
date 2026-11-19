@@ -11,6 +11,12 @@ import { useAssistant } from '@/components/assistant/useAssistant'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 import { currentBlockId, recordBlock } from '@/utils/blockScope'
 
+const doseAssessments = [
+  { value: 'below_range', label: 'Below range' },
+  { value: 'within_range', label: 'Within range' },
+  { value: 'above_range', label: 'Above range' },
+] as const
+
 export default function SupplementsPage() {
   const { readOnly: accessReadOnly } = useAuth()
   const { program, updateSupplementPhases } = useProgramStore()
@@ -76,7 +82,7 @@ export default function SupplementsPage() {
     setHasChanges(true)
   }
 
-  function updateItem(phaseIndex: number, itemIndex: number, updates: Partial<Supplement & { notes?: string }>) {
+  function updateItem(phaseIndex: number, itemIndex: number, updates: Partial<Supplement>) {
     setPhases((prev) => {
       const newPhases = [...prev]
       const items = [...newPhases[phaseIndex].items]
@@ -311,19 +317,22 @@ export default function SupplementsPage() {
                     <div className="if-supp-section">
                       <div className="if-small-label">Phase notes</div>
                       <Textarea
+                        aria-label="Phase notes"
                         value={phase.notes}
                         onChange={(e) => updatePhase(originalIndex, { notes: e.currentTarget.value })}
-                        minRows={2}
-                        autosize
+                        rows={3}
+                        wrap="soft"
                         placeholder="Why you are running this stack, how it is going..."
-                        disabled={readOnly}
+                        readOnly={readOnly}
                       />
                     </div>
 
                     <div className="if-supp-table-header">
                       <span className="if-supp-table-label">Compound</span>
                       <span className="if-supp-table-label">Daily total</span>
-                      <span className="if-supp-table-label">Notes</span>
+                      <span className="if-supp-table-label">Dose assessment</span>
+                      <span className="if-supp-table-label">Benefits</span>
+                      <span className="if-supp-table-label">WADA prohibition</span>
                       <Button
                         variant="default"
                         size="compact-xs"
@@ -357,17 +366,45 @@ export default function SupplementsPage() {
                           disabled={readOnly}
                           styles={{ input: { fontFamily: 'var(--font-mono)' } }}
                         />
-                        <TextInput
-                          value={item.notes || ''}
-                          onChange={(e) =>
-                            updateItem(originalIndex, itemIndex, { notes: e.currentTarget.value })
-                          }
-                          placeholder="Purpose and effective-dose notes"
+                        <Select
+                          aria-label="Dose assessment"
+                          label="Dose assessment"
+                          classNames={{ label: 'if-supp-narrow-label' }}
+                          value={item.dose_assessment ?? null}
+                          onChange={(value) => updateItem(originalIndex, itemIndex, { dose_assessment: doseAssessments.find(option => option.value === value)?.value })}
+                          data={[...doseAssessments]}
+                          placeholder="Unassessed"
                           size="xs"
-                          disabled={readOnly}
-                          classNames={{ input: 'if-supp-note-input' }}
+                          readOnly={readOnly}
+                          clearable
+                        />
+                        <Select
+                          aria-label="Benefits"
+                          label="Benefits"
+                          classNames={{ label: 'if-supp-narrow-label' }}
+                          value={item.questionable_benefits == null ? null : String(item.questionable_benefits)}
+                          onChange={(value) => updateItem(originalIndex, itemIndex, { questionable_benefits: value == null ? undefined : value === 'true' })}
+                          data={[{ value: 'true', label: 'Questionable' }, { value: 'false', label: 'Supported' }]}
+                          placeholder="Unassessed"
+                          size="xs"
+                          readOnly={readOnly}
+                          clearable
+                        />
+                        <Select
+                          aria-label="WADA prohibition"
+                          label="WADA prohibition"
+                          className="if-supp-wada"
+                          classNames={{ label: 'if-supp-narrow-label' }}
+                          value={item.wada_prohibited == null ? null : String(item.wada_prohibited)}
+                          onChange={(value) => updateItem(originalIndex, itemIndex, { wada_prohibited: value == null ? undefined : value === 'true' })}
+                          data={[{ value: 'true', label: 'Prohibited' }, { value: 'false', label: 'Not prohibited' }]}
+                          placeholder="Unverified"
+                          size="xs"
+                          readOnly={readOnly}
+                          clearable
                         />
                         <ActionIcon
+                          className="if-supp-remove-item"
                           variant="subtle"
                           color="red"
                           size="sm"
@@ -377,6 +414,19 @@ export default function SupplementsPage() {
                         >
                           <Trash2 size={14} />
                         </ActionIcon>
+                        <Textarea
+                          aria-label={item.name ? `Notes for ${item.name}` : 'Supplement notes'}
+                          label="Notes"
+                          value={item.notes || ''}
+                          onChange={(e) => updateItem(originalIndex, itemIndex, { notes: e.currentTarget.value })}
+                          placeholder="Purpose and effective-dose notes"
+                          rows={3}
+                          size="xs"
+                          wrap="soft"
+                          readOnly={readOnly}
+                          className="if-supp-row-notes"
+                          classNames={{ input: 'if-supp-note-input' }}
+                        />
                       </div>
                     )) : (
                       <Text size="sm" c="dimmed" py="md" px={16}>

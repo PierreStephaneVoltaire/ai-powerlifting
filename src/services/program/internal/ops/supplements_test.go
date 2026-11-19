@@ -20,7 +20,11 @@ func TestSupplementPhaseCreationAfterBlockTransition(t *testing.T) {
 			},
 		}, "supplement_phases": []any{map[string]any{"phase": 1, "phase_name": "Past", "items": []any{}}}},
 	)
-	phase := map[string]any{"phase": 5, "phase_name": "Off season", "start_week": 1, "end_week": 5, "items": []any{map[string]any{"name": "Example", "dose": "as recorded"}}}
+	items := []any{
+		map[string]any{"name": "Assessed", "dose": "as recorded", "dose_assessment": "below_range", "questionable_benefits": true, "wada_prohibited": false},
+		map[string]any{"name": "Legacy", "dose": "as recorded"},
+	}
+	phase := map[string]any{"phase": 5, "phase_name": "Off season", "start_week": 1, "end_week": 5, "items": items}
 	result, err := supplementPhasesUpdate(deps, notesRequest(map[string]any{"block_id": "active", "phases": []any{phase}}))
 	if err != nil {
 		t.Fatal(err)
@@ -31,6 +35,10 @@ func TestSupplementPhaseCreationAfterBlockTransition(t *testing.T) {
 	read, err := getSupplements(deps, notesRequest(nil))
 	if err != nil || len(read.(map[string]any)["supplement_phases"].([]any)) != 1 {
 		t.Fatalf("approved phase is missing on readback: %v, %v", read, err)
+	}
+	gotItems := read.(map[string]any)["supplement_phases"].([]any)[0].(map[string]any)["items"]
+	if !reflect.DeepEqual(gotItems, items) {
+		t.Fatalf("optional assessments did not round trip: %v", gotItems)
 	}
 	stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
 	if err != nil || len(stored["supplement_phases"].([]any)) != 2 {

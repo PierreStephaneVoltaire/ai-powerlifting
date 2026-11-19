@@ -465,6 +465,19 @@
                     "notes": {
                       "type": "string",
                       "description": "Explain what the compound does and flag whether the daily total is below, within or above an evidence-supported effective range for that purpose. State uncertainty where effectiveness is not established; never invent thresholds. No \"as reported\", provenance disclaimers, brand/serving arithmetic or filler."
+                    },
+                    "dose_assessment": {
+                      "type": "string",
+                      "enum": ["below_range", "within_range", "above_range"],
+                      "description": "Optional comparison with the verified effective range for the stated purpose. Omit if the range or dose is unverified."
+                    },
+                    "questionable_benefits": {
+                      "type": "boolean",
+                      "description": "Optional assessment of the stated benefit. Set true for evidence-supported uncertainty or a lack of meaningful benefit, and false for a supported benefit. Omit when unassessed."
+                    },
+                    "wada_prohibited": {
+                      "type": "boolean",
+                      "description": "Optional WADA prohibition status for this substance and use. Omit when unverified or when timing, administration or other rules make the status conditional."
                     }
                   },
                   "required": [

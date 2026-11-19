@@ -190,10 +190,12 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 	if params.WebOnly {
 		defs = nil
 	}
-	state := agent.State{Messages: append([]llm.Message{{Role: "system", Content: agent.SystemPrompt(agent.PromptContext{
+	promptContext := agent.PromptContext{
 		Orchestrator: params.Orchestrator, Profile: params.Profile, SessionDate: params.Context.SessionDate, SessionIndex: params.Context.SessionIndex, ExerciseIndex: params.Context.ExerciseIndex,
 		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryBefore: params.HistoryBefore, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets, Reference: params.Reference,
-	})}}, params.Messages...)}
+	}
+	state := agent.State{Messages: append([]llm.Message{{Role: "system", Content: agent.SystemPrompt(promptContext)}}, params.Messages...)}
+	pinGuideEvidence := ctx.IsPatched("pin-supplement-guide-evidence") && !hasSupplementFinding(promptContext.Reference)
 	limits := agent.Limits{MaxSteps: w.Config.MaxSteps}
 	meta := llm.Metadata{UserID: params.Identity.Person, ConversationID: params.ConversationID, WorkflowID: ctx.ID(), TurnID: turnIDOf(ctx.ID()), Role: params.role()}
 	sequence := 0
@@ -234,6 +236,11 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 				return result, nil
 			}
 			state.AddToolResult(raw.ID, text)
+			if pinGuideEvidence && hasSupplementFinding(params.State.Reference) {
+				promptContext.Reference = params.State.Reference
+				state.Messages[0].Content = agent.SystemPrompt(promptContext)
+				pinGuideEvidence = false
+			}
 		}
 	}
 }

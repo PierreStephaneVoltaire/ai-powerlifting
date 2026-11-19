@@ -30,7 +30,8 @@ func TestReferenceLookupRejectsInconsistentCoverageAndRecitation(t *testing.T) {
 		want   string
 	}{
 		{`{"coverage":"full","finding":"A safe paraphrase.","gap":""}`, "full"},
-		{`{"coverage":"partial","finding":"A safe paraphrase.","gap":""}`, "none"},
+		{`{"coverage":"partial","finding":"A safe paraphrase.","gap":""}`, "partial"},
+		{`{"coverage":"full","finding":"A safe paraphrase.","gap":"Dose for the stated purpose"}`, "partial"},
 		{`{"coverage":"none","finding":"A safe paraphrase.","gap":"unknown"}`, "none"},
 		{`{"coverage":"full","finding":"The secret sentence contains several words that should never appear","gap":""}`, "none"},
 	} {
@@ -70,5 +71,15 @@ func TestReferenceMissDoesNotReturnContextOrUseOrdinaryModel(t *testing.T) {
 	}
 	if output := logs.String(); !strings.Contains(output, `"failed":true,"stage":"reader"`) || strings.Contains(output, "reference text") || strings.Contains(output, "secret-history-marker") || strings.Contains(output, "Is creatine useful?") {
 		t.Fatal("lookup log must contain the failure stage and omit passages, conversation context and query")
+	}
+}
+
+func TestPassageRecitationRequiresWholeWords(t *testing.T) {
+	passages := []reference.Passage{{Text: "eight distinct words are checked against each response"}}
+	if containsPassageRecitation("freight distinct words are checked against each response", passages) {
+		t.Fatal("a word ending in the source word must not count as a verbatim match")
+	}
+	if !containsPassageRecitation("Eight distinct words are checked against each response.", passages) {
+		t.Fatal("a verbatim passage must still be rejected")
 	}
 }

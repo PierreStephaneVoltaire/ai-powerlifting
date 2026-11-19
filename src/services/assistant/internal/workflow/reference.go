@@ -58,6 +58,11 @@ func useWeb(needsWeb bool, _ string, reference activities.ReferenceLookupOutput)
 	return needsWeb && !reference.NoWeb && reference.Coverage != "full" && (reference.Coverage != "partial" || reference.Gap != "")
 }
 
+func hasSupplementFinding(reference activities.ReferenceLookupOutput) bool {
+	return reference.Scope == "supplements" && !reference.Failed && reference.Finding != "" &&
+		(reference.Coverage == "full" || reference.Coverage == "partial")
+}
+
 func (w *Workflows) lookupReference(ctx *workflow.WorkflowContext, params run, args map[string]any) string {
 	raw, err := json.Marshal(args)
 	if err != nil {
