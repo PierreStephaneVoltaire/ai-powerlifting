@@ -39,6 +39,10 @@ build {
     ]
   }
 
+  provisioner "shell" {
+    inline = ["mkdir -p /usr/local/bin"]
+  }
+
   provisioner "file" {
     generated   = true
     source      = ".build/rankings/pl-rankings"
