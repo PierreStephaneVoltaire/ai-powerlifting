@@ -20,6 +20,8 @@ layers/**/.stage/
 docker/.build/
 .docker/
 *.tar.gz
+*.pdf
+*.PDF
 
 # Python
 __pycache__/

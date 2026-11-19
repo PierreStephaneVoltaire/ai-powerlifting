@@ -226,7 +226,8 @@ func TestMCPInitializeListAndCall(t *testing.T) {
 	}
 	called := rpc(t, f, self, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"access_context","arguments":{}}}`)
 	content, _ := called["result"].(map[string]any)
-	if content["isError"] != false || content["structuredContent"] == nil {
+	structured, _ := content["structuredContent"].(map[string]any)
+	if content["isError"] != false || structured["person_pk"] != "person_a" || structured["athlete_pk"] != "person_a" {
 		t.Fatalf("%v", called)
 	}
 	failed := rpc(t, f, nil, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"settings_get","arguments":{}}}`)

@@ -1,6 +1,7 @@
 package relations
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -53,7 +54,10 @@ func TestPermissionsRules(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0] != "sessions:read" {
 		t.Fatalf("%v %v", got, err)
 	}
-	if all, _ := Permissions("handler", nil, "write"); len(all) != 10 {
-		t.Fatalf("handler defaults: %d", len(all))
+	if all, _ := Permissions("handler", nil, "write"); !slices.Equal(all, []string{
+		"calculations:read", "competition:read", "competition:write", "lift-profiles:read", "performance:read",
+		"profile:read", "program:read", "sessions:read", "videos:read",
+	}) {
+		t.Fatalf("handler defaults: %v", all)
 	}
 }

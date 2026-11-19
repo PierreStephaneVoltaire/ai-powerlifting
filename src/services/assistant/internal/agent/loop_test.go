@@ -23,3 +23,19 @@ func TestToolResultPreservesCompleteResearch(t *testing.T) {
 		t.Fatal("tool result lost research data")
 	}
 }
+
+func TestReferenceLookupIsAnInternalTool(t *testing.T) {
+	call := Classify(llm.ToolCall{Function: llm.FunctionCall{Name: ReferenceTool, Arguments: `{"kind":"supplements","query":"Is ashwagandha useful?"}`}})
+	if call.Kind != KindReference || call.Malformed != "" {
+		t.Fatalf("reference call: %+v", call)
+	}
+	found := false
+	for _, def := range PseudoTools(nil, 0, 1) {
+		if def.Function.Name == ReferenceTool {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("reference lookup missing from coordinator tools")
+	}
+}

@@ -63,10 +63,13 @@ type delegationRecord struct {
 }
 
 type runState struct {
-	Floor       security.Verdict
-	Assessment  *security.Assessment
-	Delegations map[int]delegationRecord
-	Budget      int
+	Floor          security.Verdict
+	Assessment     *security.Assessment
+	Delegations    map[int]delegationRecord
+	Budget         int
+	Reference      activities.ReferenceLookupOutput
+	ReferenceQuery string
+	ReferenceDate  string
 }
 
 func newRunState() *runState {
@@ -80,6 +83,7 @@ func (s *runState) apply(assessment security.Assessment) {
 }
 
 type run struct {
+	WebOnly          bool
 	Profile          tools.Profile
 	Orchestrator     bool
 	Model            string
@@ -95,6 +99,7 @@ type run struct {
 	HistoryGap       bool
 	HistoryBefore    string
 	HistoryReference bool
+	Reference        activities.ReferenceLookupOutput
 	SharedWith       string
 	State            *runState
 }
@@ -135,6 +140,19 @@ func (w *Workflows) assess(ctx *workflow.WorkflowContext, suffix string, input a
 
 func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome, error) {
 	var result outcome
+	if ctx.IsPatched("reference-gap-isolated") && params.WebOnly {
+		response, err := call[activities.ModelCallOutput](ctx, activities.NameModelCall, activities.ModelCallInput{
+			Model: params.Model, Messages: webGapMessages(params.Task),
+		}, modelRetry)
+		if err != nil {
+			return result, err
+		}
+		if response.Limit != "" {
+			return result, errors.New(response.Limit)
+		}
+		result.Reply = response.Content
+		return result, nil
+	}
 	minted, err := call[activities.MintOutput](ctx, activities.NameMintToken, activities.MintInput{
 		Identity: params.Identity, ConversationID: params.ConversationID, WorkflowID: ctx.ID(),
 	}, quickRetry)
@@ -150,10 +168,31 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 	if err != nil {
 		return result, err
 	}
+	if ctx.IsPatched("supplement-reference-before-draft") && params.Profile.Name == tools.SurfaceSupplements && params.State.Reference.Scope == "" {
+		query := params.Message
+		if params.Task != "" {
+			query = params.Task
+		}
+		var recent []string
+		for _, message := range params.Messages {
+			if message.Role == "user" && message.Content != query {
+				recent = append(recent, message.Content)
+			}
+		}
+		w.lookupReference(ctx, params, map[string]any{"kind": "supplements", "query": query, "context": strings.Join(recent, "\n")})
+		params.State.ReferenceQuery = params.Message
+		if params.Task != "" {
+			params.State.ReferenceQuery = params.Task
+		}
+		params.Reference = params.State.Reference
+	}
 	defs := append(agent.ToolDefs(listed.Tools, subject.Scope), agent.PseudoTools(subject.Scope, params.Depth, w.Config.MaxDepth)...)
+	if params.WebOnly {
+		defs = nil
+	}
 	state := agent.State{Messages: append([]llm.Message{{Role: "system", Content: agent.SystemPrompt(agent.PromptContext{
 		Orchestrator: params.Orchestrator, Profile: params.Profile, SessionDate: params.Context.SessionDate, SessionIndex: params.Context.SessionIndex, ExerciseIndex: params.Context.ExerciseIndex,
-		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryBefore: params.HistoryBefore, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets,
+		TemplateSK: params.Context.TemplateSK, Area: params.Context.Area, Task: params.Task, Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryBefore: params.HistoryBefore, SharedWith: params.SharedWith, Assessment: params.State.Assessment, Snippets: params.Snippets, Reference: params.Reference,
 	})}}, params.Messages...)}
 	limits := agent.Limits{MaxSteps: w.Config.MaxSteps}
 	meta := llm.Metadata{UserID: params.Identity.Person, ConversationID: params.ConversationID, WorkflowID: ctx.ID(), TurnID: turnIDOf(ctx.ID()), Role: params.role()}
@@ -163,7 +202,11 @@ func (w *Workflows) runAgent(ctx *workflow.WorkflowContext, params run) (outcome
 			result.Reply = withCommitFailure(lastAssistantText(state.Messages, budgetText), result.CommitFailure)
 			return result, nil
 		}
-		response, err := modelWithLimitRetry(params.Model, w.Config.StrongModel, func(model string, retry bool) (activities.ModelCallOutput, error) {
+		stronger := w.Config.StrongModel
+		if !params.WebOnly && stronger == w.Config.WebModel {
+			stronger = ""
+		}
+		response, err := modelWithLimitRetry(params.Model, stronger, func(model string, retry bool) (activities.ModelCallOutput, error) {
 			policy := modelRetry
 			if retry {
 				policy = &workflow.RetryPolicy{MaxAttempts: 1}
@@ -219,10 +262,15 @@ func lastAssistantText(messages []llm.Message, fallback string) string {
 }
 
 func (w *Workflows) dispatch(ctx *workflow.WorkflowContext, params run, subject activities.Subject, call agent.Call, sequence int, result *outcome) (string, bool) {
+	if params.WebOnly {
+		return "error: tools are unavailable during web research", false
+	}
 	if call.Malformed != "" {
 		return "error: " + call.Malformed, false
 	}
 	switch call.Kind {
+	case agent.KindReference:
+		return w.lookupReference(ctx, params, call.Arguments), false
 	case agent.KindHistory:
 		return w.readHistory(ctx, params, call, result), false
 	case agent.KindDelegate:
@@ -332,9 +380,42 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 		eventKind = "escalate"
 	}
 	model := models.Model(tier)
-	usedWeb := delegation.NeedsWeb && w.Config.WebModel != ""
+	needsWeb := delegation.NeedsWeb
+	if ctx.IsPatched("reference-lookup-before-web") {
+		if ctx.IsPatched("reference-web-intent-v2") && needsWeb {
+			intent, intentErr := callActivity[activities.ModelCallOutput](ctx, activities.NameModelCall, activities.ModelCallInput{
+				Model: w.Config.CoordinatorModel, Messages: referenceIntentMessages(params.Messages, params.Message+"\nDelegated task: "+delegation.Task, params.Profile.Name), MaxTokens: 400,
+			}, modelRetry)
+			plan, valid := parseReferencePlan(intent.Content, delegation.Task, params.Context)
+			if intentErr != nil || intent.Limit != "" || !valid {
+				return "error: unable to determine whether reference lookup or browsing is appropriate"
+			}
+			params.State.Reference.NoWeb = params.State.Reference.NoWeb || plan.NoWeb
+			if params.State.Reference.Coverage == "none" && plan.Kind != "none" {
+				params.State.Reference.Gap = plan.Query
+			}
+			if plan.Kind == "none" && params.State.Reference.Scope != "" && !strings.EqualFold(strings.TrimSpace(delegation.Task), strings.TrimSpace(params.State.Reference.Gap)) && !strings.EqualFold(strings.TrimSpace(delegation.Task), strings.TrimSpace(params.State.ReferenceQuery)) {
+				params.State.Reference = activities.ReferenceLookupOutput{NoWeb: params.State.Reference.NoWeb}
+				params.State.ReferenceQuery = ""
+			}
+			if plan.Kind != "none" && !sameReferenceTask(params.State.Reference, params.State.ReferenceQuery, params.State.ReferenceDate, plan, delegation.Task) {
+				args := map[string]any{"kind": plan.Kind, "query": plan.Query, "federation_id": plan.FederationID, "effective_date": plan.EffectiveDate}
+				if text := w.lookupReference(ctx, params, args); params.State.Reference.Scope == "" {
+					return text
+				}
+			}
+		}
+		params.Reference = params.State.Reference
+		needsWeb = useWeb(needsWeb, params.Message, params.Reference)
+		if needsWeb && params.Reference.Scope != "" && params.Reference.Gap != "" {
+			delegation.Task = params.Reference.Gap
+		}
+	}
+	usedWeb := needsWeb && w.Config.WebModel != ""
 	if usedWeb {
 		model = w.Config.WebModel
+	} else if w.Config.WebModel != "" && model == w.Config.WebModel {
+		return "error: web model cannot be used for a non-web task"
 	}
 	w.record(ctx, params.Identity.Person, params.ConversationID, eventKind, model, "started", map[string]any{
 		"delegation_id": sequence, "kind": kind, "tier": tier.String(), "complexity": delegation.Complexity, "escalate_from": delegation.EscalateFrom, "needs_web": delegation.NeedsWeb, "web": usedWeb, "model": model, "depth": params.Depth + 1,
@@ -343,12 +424,25 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 	params.State.Budget--
 	share := min(childBudgetShare, params.State.Budget)
 	params.State.Budget -= share
+	childMessage := params.Message
+	childReference := params.Reference
+	childContext := params.Context
+	childSignals := params.Signals
+	childAssessment := params.State.Assessment
+	gapOnly := usedWeb && params.Reference.Scope != ""
+	if gapOnly {
+		childMessage = delegation.Task
+		childReference = activities.ReferenceLookupOutput{NoWeb: params.Reference.NoWeb}
+		childContext = RequestContext{}
+		childSignals = nil
+		childAssessment = nil
+	}
 	var output SubagentOutput
 	err = ctx.CallChildWorkflow(NameSubagentTask,
 		workflow.WithChildWorkflowInstanceID(fmt.Sprintf("%s:sub:%d", ctx.ID(), sequence)),
 		workflow.WithChildWorkflowInput(SubagentInput{
-			Kind: kind, Model: model, Task: delegation.Task, Message: params.Message, Identity: params.Identity, ConversationID: params.ConversationID, Depth: params.Depth + 1, Budget: share, Context: params.Context,
-			Signals: params.Signals, HistoryGap: params.HistoryGap, HistoryReference: params.HistoryReference, Floor: params.State.Floor, Assessment: params.State.Assessment,
+			WebOnly: gapOnly, Kind: kind, Model: model, Task: delegation.Task, Message: childMessage, Identity: params.Identity, ConversationID: params.ConversationID, Depth: params.Depth + 1, Budget: share, Context: childContext,
+			Signals: childSignals, HistoryGap: params.HistoryGap, HistoryReference: params.HistoryReference, Floor: params.State.Floor, Assessment: childAssessment, Reference: childReference,
 		}),
 	).Await(&output)
 	if err != nil {

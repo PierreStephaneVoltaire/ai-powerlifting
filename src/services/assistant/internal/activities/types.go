@@ -19,6 +19,7 @@ const (
 	NameSecurityReview  = "SecurityReview"
 	NameRecord          = "RecordOrchestration"
 	NameRetrieve        = "Retrieve"
+	NameReferenceLookup = "ReferenceLookup"
 	NameHistory         = "History"
 	NameListTools       = "ListTools"
 	NameModelCall       = "ModelCall"
@@ -86,6 +87,16 @@ type RetrieveInput struct {
 type RetrieveOutput struct {
 	Snippets []store.Snippet `json:"snippets"`
 }
+
+type ReferenceLookupInput struct {
+	Collection    string `json:"collection"`
+	Scope         string `json:"scope"`
+	Query         string `json:"query"`
+	EffectiveDate string `json:"effective_date,omitempty"`
+	Context       string `json:"context,omitempty"`
+}
+
+type ReferenceLookupOutput = agent.ReferenceLookupOutput
 
 type HistoryInput struct {
 	Identity       access.Identity `json:"identity"`

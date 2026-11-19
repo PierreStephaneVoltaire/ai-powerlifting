@@ -12,18 +12,23 @@ import (
 	"powerlifting/assistant/internal/audit"
 	"powerlifting/assistant/internal/config"
 	"powerlifting/assistant/internal/llm"
+	"powerlifting/assistant/internal/reference"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/token"
 	"powerlifting/assistant/internal/tools"
 )
 
 type Deps struct {
-	Config config.Config
-	Store  *store.Store
-	Access *access.Client
-	Audit  *audit.Recorder
-	LLM    *llm.Client
-	MCP    *tools.MCPClient
+	Config       config.Config
+	Store        *store.Store
+	Access       *access.Client
+	Audit        *audit.Recorder
+	LLM          *llm.Client
+	ReferenceLLM *llm.Client
+	MCP          *tools.MCPClient
+	Reference    interface {
+		Search(context.Context, reference.SearchRequest) ([]reference.Passage, error)
+	}
 	Signer *token.Signer
 	Log    *slog.Logger
 	Slots  chan struct{}
@@ -67,6 +72,7 @@ func Register(registry *workflow.Registry, d *Deps) error {
 		NameSecurityReview:  wrap(d.SecurityReview),
 		NameRecord:          wrap(d.Record),
 		NameRetrieve:        wrap(d.Retrieve),
+		NameReferenceLookup: wrap(d.ReferenceLookup),
 		NameHistory:         wrap(d.History),
 		NameListTools:       wrap(d.ListTools),
 		NameModelCall:       wrap(d.ModelCall),

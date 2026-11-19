@@ -85,3 +85,51 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
     ]
   })
 }
+
+resource "aws_iam_user" "reference_reader" {
+  name = "powerlifting-reference-reader"
+}
+
+resource "aws_iam_user_policy" "reference_reader" {
+  name = "powerlifting-reference-reader"
+  user = aws_iam_user.reference_reader.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "s3:ListBucketVersions"
+        Resource = aws_s3_bucket.reference_documents.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = [
+              "references/supplements/*",
+              "references/federation-rules/*",
+            ]
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = "s3:GetObjectVersion"
+        Resource = [
+          "${aws_s3_bucket.reference_documents.arn}/references/supplements/*",
+          "${aws_s3_bucket.reference_documents.arn}/references/federation-rules/*",
+        ]
+      },
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "reference_reader" {
+  user = aws_iam_user.reference_reader.name
+}
+
+resource "aws_ssm_parameter" "reference_reader_credentials" {
+  name = "/powerlifting/reference-reader/aws-credentials"
+  type = "SecureString"
+  value = jsonencode({
+    access_key_id     = aws_iam_access_key.reference_reader.id
+    secret_access_key = aws_iam_access_key.reference_reader.secret
+  })
+}

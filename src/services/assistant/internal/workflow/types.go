@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"powerlifting/assistant/internal/access"
+	"powerlifting/assistant/internal/activities"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/security"
 )
@@ -18,6 +19,8 @@ type RequestContext struct {
 	ExerciseIndex *int   `json:"exercise_index,omitempty"`
 	TemplateSK    string `json:"template_sk,omitempty"`
 	Area          string `json:"area,omitempty"`
+	FederationID  string `json:"federation_id,omitempty"`
+	MeetDate      string `json:"meet_date,omitempty"`
 }
 
 type TurnInput struct {
@@ -38,20 +41,22 @@ type TurnOutput struct {
 }
 
 type SubagentInput struct {
-	Kind             string               `json:"kind"`
-	Model            string               `json:"model"`
-	Task             string               `json:"task"`
-	Message          string               `json:"message"`
-	Identity         access.Identity      `json:"identity"`
-	ConversationID   string               `json:"conversation_id"`
-	Depth            int                  `json:"depth"`
-	Budget           int                  `json:"budget"`
-	Context          RequestContext       `json:"context"`
-	Signals          []string             `json:"signals"`
-	HistoryGap       bool                 `json:"history_gap"`
-	HistoryReference bool                 `json:"history_reference"`
-	Floor            security.Verdict     `json:"floor"`
-	Assessment       *security.Assessment `json:"assessment,omitempty"`
+	WebOnly          bool                             `json:"web_only,omitempty"`
+	Kind             string                           `json:"kind"`
+	Model            string                           `json:"model"`
+	Task             string                           `json:"task"`
+	Message          string                           `json:"message"`
+	Identity         access.Identity                  `json:"identity"`
+	ConversationID   string                           `json:"conversation_id"`
+	Depth            int                              `json:"depth"`
+	Budget           int                              `json:"budget"`
+	Context          RequestContext                   `json:"context"`
+	Signals          []string                         `json:"signals"`
+	HistoryGap       bool                             `json:"history_gap"`
+	HistoryReference bool                             `json:"history_reference"`
+	Floor            security.Verdict                 `json:"floor"`
+	Assessment       *security.Assessment             `json:"assessment,omitempty"`
+	Reference        activities.ReferenceLookupOutput `json:"reference,omitempty"`
 }
 
 type SubagentOutput struct {

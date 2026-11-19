@@ -23,7 +23,8 @@ type rpcRequest struct {
 }
 
 type mcpCallInput struct {
-	callInput
+	Headers
+	RawBody       []byte
 	Authorization string `header:"Authorization" required:"false" doc:"Bearer job token issued by the assistant."`
 }
 

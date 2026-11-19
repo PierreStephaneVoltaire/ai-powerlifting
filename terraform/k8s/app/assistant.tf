@@ -25,6 +25,23 @@ resource "kubernetes_service_account_v1" "assistant" {
   automount_service_account_token = false
 }
 
+data "aws_ssm_parameter" "assistant_reference_credentials" {
+  name            = "/powerlifting/reference-reader/aws-credentials"
+  with_decryption = true
+}
+
+resource "kubernetes_secret_v1" "assistant_reference_credentials" {
+  metadata {
+    name      = "assistant-reference-credentials"
+    namespace = var.namespace
+  }
+
+  data = {
+    AWS_ACCESS_KEY_ID     = jsondecode(data.aws_ssm_parameter.assistant_reference_credentials.value).access_key_id
+    AWS_SECRET_ACCESS_KEY = jsondecode(data.aws_ssm_parameter.assistant_reference_credentials.value).secret_access_key
+  }
+}
+
 resource "kubernetes_deployment_v1" "assistant" {
   depends_on       = [kubectl_manifest.l4_waypoint_only, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls, kubectl_manifest.assistant_workflow_state, kubectl_manifest.assistant_dapr_peers]
   wait_for_rollout = false
@@ -84,6 +101,37 @@ resource "kubernetes_deployment_v1" "assistant" {
           env {
             name  = "GOMEMLIMIT"
             value = "1792MiB"
+          }
+
+          env {
+            name  = "PL_REFERENCE_LITELLM_URL"
+            value = "http://reference-litellm.${var.namespace}.svc.cluster.local:4000"
+          }
+
+          env {
+            name = "PL_REFERENCE_LITELLM_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.reference_litellm.metadata[0].name
+                key  = "LITELLM_MASTER_KEY"
+              }
+            }
+          }
+
+          env {
+            name  = "PL_REFERENCE_BUCKET"
+            value = "powerlifting-reference-documents-429310424269-ca-central-1"
+          }
+
+          env {
+            name  = "AWS_REGION"
+            value = var.region
+          }
+
+          env_from {
+            secret_ref {
+              name = kubernetes_secret_v1.assistant_reference_credentials.metadata[0].name
+            }
           }
 
           env {

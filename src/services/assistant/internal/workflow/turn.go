@@ -159,11 +159,12 @@ func (w *Workflows) SubagentTask(ctx *workflow.WorkflowContext) (any, error) {
 	}
 	state := newRunState()
 	state.Budget = input.Budget
+	state.Reference = input.Reference
 	state.Floor = input.Floor
 	state.Assessment = input.Assessment
 	result, err := w.runAgent(ctx, run{
-		Profile: profile, Model: input.Model, Identity: input.Identity, ConversationID: input.ConversationID, Depth: input.Depth,
-		Context: input.Context, Task: input.Task, Message: input.Message, Messages: []llm.Message{{Role: "user", Content: input.Task}},
+		WebOnly: input.WebOnly, Profile: profile, Model: input.Model, Identity: input.Identity, ConversationID: input.ConversationID, Depth: input.Depth,
+		Context: input.Context, Task: input.Task, Message: input.Message, Messages: []llm.Message{{Role: "user", Content: input.Task}}, Reference: input.Reference,
 		Signals: input.Signals, HistoryGap: input.HistoryGap, HistoryReference: input.HistoryReference, State: state,
 	})
 	if err != nil {

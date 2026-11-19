@@ -8,38 +8,43 @@ import (
 )
 
 type Config struct {
-	HTTPAddr         string
-	LogLevel         string
-	ProfileURL       string
-	AllowedCallers   []string
-	DaprGRPCEndpoint string
-	LiteLLMBaseURL   string
-	LiteLLMAPIKey    string
-	MCPURL           string
-	MCPAliases       []string
-	MCPSeparator     string
-	PrivateKeyPEM    string
-	TokenTTL         time.Duration
-	PGHost           string
-	PGPort           string
-	PGDatabase       string
-	PGUser           string
-	PGPassword       string
-	PGSSLMode        string
-	EmbedDim         int
-	MaxConcurrency   int
-	MaxSteps         int
-	MaxDepth         int
-	DelegationBudget int
-	ApprovalTimeout  time.Duration
-	RatePerMinute    int
-	CoordinatorModel string
-	StrongModel      string
-	WebModel         string
-	FastModel        string
-	SecurityModel    string
-	EmbedModel       string
-	SubagentModels   map[string]string
+	HTTPAddr             string
+	LogLevel             string
+	ProfileURL           string
+	AllowedCallers       []string
+	DaprGRPCEndpoint     string
+	LiteLLMBaseURL       string
+	LiteLLMAPIKey        string
+	MCPURL               string
+	MCPAliases           []string
+	MCPSeparator         string
+	PrivateKeyPEM        string
+	TokenTTL             time.Duration
+	PGHost               string
+	PGPort               string
+	PGDatabase           string
+	PGUser               string
+	PGPassword           string
+	PGSSLMode            string
+	AWSRegion            string
+	ReferenceBucket      string
+	ReferenceLiteLLMURL  string
+	ReferenceLiteLLMKey  string
+	EmbedDim             int
+	MaxConcurrency       int
+	MaxSteps             int
+	MaxDepth             int
+	DelegationBudget     int
+	ApprovalTimeout      time.Duration
+	RatePerMinute        int
+	CoordinatorModel     string
+	StrongModel          string
+	WebModel             string
+	FastModel            string
+	SecurityModel        string
+	EmbedModel           string
+	ReferenceReaderModel string
+	SubagentModels       map[string]string
 }
 
 func env(name, fallback string) string {
@@ -78,37 +83,42 @@ func Load() Config {
 	coordinator := env("PL_MODEL_COORDINATOR", "pl-coordinator")
 	fast := env("PL_MODEL_RESPONDER_FAST", "pl-responder-fast")
 	return Config{
-		HTTPAddr:         env("HTTP_ADDR", ":8000"),
-		LogLevel:         env("LOG_LEVEL", "info"),
-		ProfileURL:       strings.TrimRight(env("PL_PROFILE_URL", "http://pl-profile:8000"), "/"),
-		AllowedCallers:   list("ALLOWED_CALLER_ACCOUNTS", "powerlifting-app-backend,pl-coach-discord"),
-		DaprGRPCEndpoint: daprEndpoint(),
-		LiteLLMBaseURL:   strings.TrimRight(env("LITELLM_BASE_URL", "http://litellm:4000"), "/"),
-		LiteLLMAPIKey:    env("LITELLM_API_KEY", ""),
-		MCPURL:           env("LITELLM_MCP_URL", ""),
-		MCPAliases:       list("LITELLM_MCP_ALIASES", "sessions,program,competition,profile,glossary,goals,templates,weight_log,performance,analytics,calculations,lift_profiles"),
-		MCPSeparator:     env("LITELLM_MCP_TOOL_SEPARATOR", "-"),
-		PrivateKeyPEM:    env("PL_JOB_TOKEN_PRIVATE_KEY", ""),
-		TokenTTL:         time.Duration(number("JOB_TOKEN_TTL_SECONDS", 300)) * time.Second,
-		PGHost:           env("PGHOST", "assistant-postgres-rw"),
-		PGPort:           env("PGPORT", "5432"),
-		PGDatabase:       env("PGDATABASE", "assistant"),
-		PGUser:           env("PGUSER", "assistant"),
-		PGPassword:       env("PGPASSWORD", ""),
-		PGSSLMode:        env("PGSSLMODE", "require"),
-		EmbedDim:         number("EMBED_DIM", 1536),
-		MaxConcurrency:   number("ASSISTANT_MAX_CONCURRENCY", 4),
-		MaxSteps:         number("AGENT_MAX_STEPS", 12),
-		MaxDepth:         number("AGENT_MAX_DEPTH", 3),
-		DelegationBudget: number("PL_DELEGATION_BUDGET", 6),
-		ApprovalTimeout:  time.Duration(number("APPROVAL_TIMEOUT_HOURS", 24)) * time.Hour,
-		RatePerMinute:    number("TURNS_PER_MINUTE", 12),
-		CoordinatorModel: coordinator,
-		FastModel:        fast,
-		StrongModel:      env("PL_MODEL_STRONG", coordinator),
-		WebModel:         env("PL_MODEL_WEB", ""),
-		SecurityModel:    env("PL_MODEL_SECURITY", "pl-light"),
-		EmbedModel:       env("PL_MODEL_EMBED", "pl-embed"),
+		HTTPAddr:             env("HTTP_ADDR", ":8000"),
+		LogLevel:             env("LOG_LEVEL", "info"),
+		ProfileURL:           strings.TrimRight(env("PL_PROFILE_URL", "http://pl-profile:8000"), "/"),
+		AllowedCallers:       list("ALLOWED_CALLER_ACCOUNTS", "powerlifting-app-backend,pl-coach-discord"),
+		DaprGRPCEndpoint:     daprEndpoint(),
+		LiteLLMBaseURL:       strings.TrimRight(env("LITELLM_BASE_URL", "http://litellm:4000"), "/"),
+		LiteLLMAPIKey:        env("LITELLM_API_KEY", ""),
+		MCPURL:               env("LITELLM_MCP_URL", ""),
+		MCPAliases:           list("LITELLM_MCP_ALIASES", "sessions,program,competition,profile,glossary,goals,templates,weight_log,performance,analytics,calculations,lift_profiles"),
+		MCPSeparator:         env("LITELLM_MCP_TOOL_SEPARATOR", "-"),
+		PrivateKeyPEM:        env("PL_JOB_TOKEN_PRIVATE_KEY", ""),
+		TokenTTL:             time.Duration(number("JOB_TOKEN_TTL_SECONDS", 300)) * time.Second,
+		PGHost:               env("PGHOST", "assistant-postgres-rw"),
+		PGPort:               env("PGPORT", "5432"),
+		PGDatabase:           env("PGDATABASE", "assistant"),
+		PGUser:               env("PGUSER", "assistant"),
+		PGPassword:           env("PGPASSWORD", ""),
+		PGSSLMode:            env("PGSSLMODE", "require"),
+		AWSRegion:            env("AWS_REGION", env("AWS_DEFAULT_REGION", "")),
+		ReferenceBucket:      env("PL_REFERENCE_BUCKET", ""),
+		ReferenceLiteLLMURL:  strings.TrimRight(env("PL_REFERENCE_LITELLM_URL", ""), "/"),
+		ReferenceLiteLLMKey:  env("PL_REFERENCE_LITELLM_KEY", ""),
+		EmbedDim:             number("EMBED_DIM", 1536),
+		MaxConcurrency:       number("ASSISTANT_MAX_CONCURRENCY", 4),
+		MaxSteps:             number("AGENT_MAX_STEPS", 12),
+		MaxDepth:             number("AGENT_MAX_DEPTH", 3),
+		DelegationBudget:     number("PL_DELEGATION_BUDGET", 6),
+		ApprovalTimeout:      time.Duration(number("APPROVAL_TIMEOUT_HOURS", 24)) * time.Hour,
+		RatePerMinute:        number("TURNS_PER_MINUTE", 12),
+		CoordinatorModel:     coordinator,
+		FastModel:            fast,
+		StrongModel:          env("PL_MODEL_STRONG", coordinator),
+		WebModel:             env("PL_MODEL_WEB", ""),
+		SecurityModel:        env("PL_MODEL_SECURITY", "pl-light"),
+		EmbedModel:           env("PL_MODEL_EMBED", "pl-embed"),
+		ReferenceReaderModel: env("PL_MODEL_REFERENCE_READER", "pl-strong"),
 		SubagentModels: map[string]string{
 			"template-phase": env("PL_MODEL_SUBAGENT_TEMPLATE_PHASE", coordinator),
 			"session-design": env("PL_MODEL_SUBAGENT_SESSION_DESIGN", coordinator),

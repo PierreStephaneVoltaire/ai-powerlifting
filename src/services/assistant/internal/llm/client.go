@@ -89,14 +89,18 @@ func (m Metadata) Headers() map[string]string {
 }
 
 type ChatRequest struct {
-	Meta           Metadata  `json:"-"`
-	Model          string    `json:"model"`
-	Messages       []Message `json:"messages"`
-	Tools          []ToolDef `json:"tools,omitempty"`
-	ResponseFormat any       `json:"response_format,omitempty"`
-	MaxTokens      int       `json:"max_tokens,omitempty"`
-	User           string    `json:"user,omitempty"`
-	Metadata       any       `json:"metadata,omitempty"`
+	Meta           Metadata        `json:"-"`
+	Private        bool            `json:"-"`
+	Cache          map[string]bool `json:"cache,omitempty"`
+	NoLog          bool            `json:"no-log,omitempty"`
+	Store          *bool           `json:"store,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	Tools          []ToolDef       `json:"tools,omitempty"`
+	ResponseFormat any             `json:"response_format,omitempty"`
+	MaxTokens      int             `json:"max_tokens,omitempty"`
+	User           string          `json:"user,omitempty"`
+	Metadata       any             `json:"metadata,omitempty"`
 }
 
 type ChatResponse struct {
@@ -117,7 +121,7 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{BaseURL: baseURL, APIKey: apiKey, HTTP: &http.Client{Timeout: chatTimeout}}
 }
 
-func (c *Client) post(ctx context.Context, path string, payload any, meta Metadata, out any) error {
+func (c *Client) post(ctx context.Context, path string, payload any, meta Metadata, private bool, out any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -128,6 +132,9 @@ func (c *Client) post(ctx context.Context, path string, payload any, meta Metada
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+c.APIKey)
+	if private {
+		request.Header.Set("Cache-Control", "no-store")
+	}
 	for name, value := range meta.Headers() {
 		request.Header.Set(name, value)
 	}
@@ -144,6 +151,9 @@ func (c *Client) post(ctx context.Context, path string, payload any, meta Metada
 		return fmt.Errorf("litellm %s response exceeds %d bytes; response was not processed", path, maxBodyBytes)
 	}
 	if response.StatusCode != http.StatusOK {
+		if private {
+			return fmt.Errorf("private litellm %s request failed with status %d", path, response.StatusCode)
+		}
 		return responseError(response.StatusCode, raw)
 	}
 	return json.Unmarshal(raw, out)
@@ -164,7 +174,13 @@ func (c *Client) Chat(ctx context.Context, request ChatRequest) (ChatResponse, e
 		request.User = request.Meta.UserID
 		request.Metadata = request.Meta.Body()
 	}
-	if err := c.post(ctx, "/v1/chat/completions", request, request.Meta, &payload); err != nil {
+	if request.Private {
+		store := false
+		request.Cache = map[string]bool{"no-store": true, "no-cache": true}
+		request.NoLog = true
+		request.Store = &store
+	}
+	if err := c.post(ctx, "/v1/chat/completions", request, request.Meta, request.Private, &payload); err != nil {
 		return ChatResponse{}, err
 	}
 	if len(payload.Choices) == 0 {
@@ -181,6 +197,14 @@ func (c *Client) Chat(ctx context.Context, request ChatRequest) (ChatResponse, e
 }
 
 func (c *Client) Embed(ctx context.Context, model string, input string, meta Metadata) ([]float32, error) {
+	return c.embed(ctx, model, input, meta, false)
+}
+
+func (c *Client) EmbedPrivate(ctx context.Context, model, input string) ([]float32, error) {
+	return c.embed(ctx, model, input, Metadata{}, true)
+}
+
+func (c *Client) embed(ctx context.Context, model, input string, meta Metadata, private bool) ([]float32, error) {
 	var payload struct {
 		Data []struct {
 			Embedding []float32 `json:"embedding"`
@@ -191,10 +215,20 @@ func (c *Client) Embed(ctx context.Context, model string, input string, meta Met
 		body["user"] = meta.UserID
 		body["metadata"] = meta.Body()
 	}
-	if err := c.post(ctx, "/v1/embeddings", body, meta, &payload); err != nil {
+	if private {
+		body["cache"] = map[string]bool{"no-store": true, "no-cache": true}
+		body["no-log"] = true
+	}
+	if err := c.post(ctx, "/v1/embeddings", body, meta, private, &payload); err != nil {
+		if private {
+			return nil, fmt.Errorf("private embedding request failed")
+		}
 		return nil, err
 	}
 	if len(payload.Data) == 0 || len(payload.Data[0].Embedding) == 0 {
+		if private {
+			return nil, fmt.Errorf("private embedding returned no vector")
+		}
 		return nil, fmt.Errorf("model %s returned no embedding", model)
 	}
 	return payload.Data[0].Embedding, nil

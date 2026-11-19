@@ -17,11 +17,12 @@ variable "image_tag" {
 }
 
 source "docker" "powerlifting_analytics" {
-  image    = "public.ecr.aws/docker/library/debian:bookworm-slim"
-  commit   = true
-  platform = "linux/amd64"
+  image       = "cgr.dev/chainguard/wolfi-base:latest"
+  commit      = true
+  run_command = ["-d", "-i", "-t", "--entrypoint=/bin/sh", "--", "{{.Image}}"]
+  platform    = "linux/amd64"
   changes = [
-    "USER 10001",
+    "USER 65532:65532",
     "EXPOSE 8000 50051",
     "ENTRYPOINT [\"/usr/local/bin/pl-analytics\"]"
   ]
@@ -34,16 +35,7 @@ build {
   provisioner "shell-local" {
     inline = [
       "rm -rf .build/analytics && mkdir -p .build/analytics",
-      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e CARGO_HOME=/tmp/cargo -e CARGO_TARGET_DIR=/tmp/target -e CARGO_BUILD_JOBS=4 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/analytics:/out\" -w /workspace/services/analytics public.ecr.aws/docker/library/rust:1-slim-bookworm sh -c 'cargo build --release --locked && cp /tmp/target/release/pl-analytics /out/pl-analytics'"
-    ]
-  }
-
-  provisioner "shell" {
-    inline = [
-      "apt-get update",
-      "apt-get install -y --no-install-recommends ca-certificates",
-      "rm -rf /var/lib/apt/lists/*",
-      "useradd --no-create-home --uid 10001 service"
+      "docker run --rm --platform linux/amd64 --user $(id -u):$(id -g) -e HOME=/tmp -e CARGO_HOME=/tmp/cargo -e CARGO_TARGET_DIR=/tmp/target -e CARGO_BUILD_JOBS=4 -v \"$(cd .. && pwd)/src/services:/workspace/services:ro\" -v \"$(pwd)/.build/analytics:/out\" -w /workspace/services/analytics --entrypoint /bin/sh cgr.dev/chainguard/rust:latest -c 'cargo build --release --locked && cp /tmp/target/release/pl-analytics /out/pl-analytics'"
     ]
   }
 

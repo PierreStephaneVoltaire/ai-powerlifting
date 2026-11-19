@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	dw "github.com/dapr/durabletask-go/workflow"
 
 	"powerlifting/assistant/internal/access"
@@ -18,6 +20,7 @@ import (
 	"powerlifting/assistant/internal/config"
 	"powerlifting/assistant/internal/httpapi"
 	"powerlifting/assistant/internal/llm"
+	"powerlifting/assistant/internal/reference"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/token"
 	"powerlifting/assistant/internal/tools"
@@ -57,6 +60,13 @@ func startWorker(ctx context.Context, engine *workflow.Engine, registry *dw.Regi
 	return err
 }
 
+func referenceClient(cfg config.Config) *llm.Client {
+	if cfg.ReferenceLiteLLMURL == "" || cfg.ReferenceLiteLLMKey == "" || cfg.ReferenceLiteLLMURL == cfg.LiteLLMBaseURL {
+		return nil
+	}
+	return llm.New(cfg.ReferenceLiteLLMURL, cfg.ReferenceLiteLLMKey)
+}
+
 func run(cfg config.Config, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -76,9 +86,46 @@ func run(cfg config.Config, log *slog.Logger) error {
 
 	recorder := &audit.Recorder{Store: db, Log: log}
 	resolver := access.New(cfg.ProfileURL)
+	llmClient := llm.New(cfg.LiteLLMBaseURL, cfg.LiteLLMAPIKey)
+	var references interface {
+		Search(context.Context, reference.SearchRequest) ([]reference.Passage, error)
+	}
+	referenceLLM := referenceClient(cfg)
+	if cfg.ReferenceBucket != "" && referenceLLM == nil {
+		log.Warn("reference indexing disabled: private model endpoint is not configured")
+	}
+	if cfg.ReferenceBucket != "" && referenceLLM != nil {
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
+		if err != nil {
+			return errors.New("reference AWS configuration unavailable")
+		}
+		referenceStore, err := reference.New(reference.Config{
+			Pool: db.Pool, S3: s3.NewFromConfig(awsCfg), Bucket: cfg.ReferenceBucket,
+			Collections: []reference.Collection{
+				{Name: "supplements", Prefix: "references/supplements/", Scope: "supplements"},
+				{Name: "federations", Prefix: "references/federation-rules/", Scope: "federation:*"},
+			},
+			Embed: func(ctx context.Context, text string) ([]float32, error) {
+				return referenceLLM.EmbedPrivate(ctx, cfg.EmbedModel, text)
+			},
+			EmbedBatch: func(ctx context.Context, texts []string) ([][]float32, error) {
+				return referenceLLM.EmbedPrivateBatch(ctx, cfg.EmbedModel, texts)
+			},
+			EmbedDim: cfg.EmbedDim, BatchSize: 32,
+		})
+		if err != nil {
+			return errors.New("reference importer initialization failed")
+		}
+		references = referenceStore
+		go func() {
+			if err := referenceStore.Start(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("reference scan stopped", "error", "reference scan error")
+			}
+		}()
+	}
 	deps := &activities.Deps{
 		Config: cfg, Store: db, Access: resolver, Audit: recorder,
-		LLM:    llm.New(cfg.LiteLLMBaseURL, cfg.LiteLLMAPIKey),
+		LLM: llmClient, ReferenceLLM: referenceLLM, Reference: references,
 		MCP:    tools.NewMCPClient(cfg.MCPURL, cfg.LiteLLMAPIKey, cfg.MCPAliases, cfg.MCPSeparator),
 		Signer: signer, Log: log, Slots: make(chan struct{}, cfg.MaxConcurrency), Now: time.Now,
 	}

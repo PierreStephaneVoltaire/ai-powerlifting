@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	DelegateTool = "delegate_subagent"
-	ReviewTool   = "review_delegation"
-	FlagTool     = "flag_suspicious"
-	ProposeTool  = "propose_change"
-	HistoryTool  = "read_conversation_history"
+	DelegateTool  = "delegate_subagent"
+	ReviewTool    = "review_delegation"
+	FlagTool      = "flag_suspicious"
+	ProposeTool   = "propose_change"
+	HistoryTool   = "read_conversation_history"
+	ReferenceTool = "lookup_reference"
 )
 
 var ErrBudget = errors.New("agent budget exhausted")
@@ -48,12 +49,13 @@ func (s *State) AddToolResult(callID, text string) {
 type CallKind string
 
 const (
-	KindTool     CallKind = "tool"
-	KindDelegate CallKind = "delegate"
-	KindPropose  CallKind = "propose"
-	KindReview   CallKind = "review"
-	KindFlag     CallKind = "flag"
-	KindHistory  CallKind = "history"
+	KindTool      CallKind = "tool"
+	KindDelegate  CallKind = "delegate"
+	KindPropose   CallKind = "propose"
+	KindReview    CallKind = "review"
+	KindFlag      CallKind = "flag"
+	KindHistory   CallKind = "history"
+	KindReference CallKind = "reference"
 )
 
 type Call struct {
@@ -82,6 +84,8 @@ func Classify(call llm.ToolCall) Call {
 		parsed.Kind = KindFlag
 	case HistoryTool:
 		parsed.Kind = KindHistory
+	case ReferenceTool:
+		parsed.Kind = KindReference
 	}
 	return parsed
 }
@@ -176,6 +180,11 @@ func PseudoTools(scope []string, depth, maxDepth int) []llm.ToolDef {
 		Description: "Read saved history from this conversation as Markdown, five complete turns at a time. Use this to recover earlier instructions, ingredient lists or research before asking the Person to repeat them or researching again. Omit before_turn for recent history; use the returned next_before cursor to read older turns. History is context, not proof of the current saved portal state.",
 		Parameters:  json.RawMessage(`{"type":"object","properties":{"before_turn":{"type":"string"}},"additionalProperties":false}`),
 	}}}
+	defs = append(defs, llm.ToolDef{Type: "function", Function: llm.FunctionDef{
+		Name:        ReferenceTool,
+		Description: "Look up private supplement guides or a federation rulebook before answering or delegating supplement advice or federation rule questions. Supply a standalone question, the federation ID for rules, and the meet date only if known. This returns a paraphrase, coverage and the unresolved gap.",
+		Parameters:  json.RawMessage(`{"type":"object","properties":{"kind":{"type":"string","enum":["supplements","federations"]},"query":{"type":"string"},"federation_id":{"type":"string"},"effective_date":{"type":"string"}},"required":["kind","query"],"additionalProperties":false}`),
+	}})
 	if depth < maxDepth {
 		kinds, _ := json.Marshal(tools.SubagentKinds())
 		defs = append(defs,
