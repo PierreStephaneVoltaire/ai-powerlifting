@@ -1,12 +1,8 @@
-variable "aws_workload_identity" {
-  description = "App service accounts migrated to AWS workload identity."
-  type        = set(string)
-  default     = []
-}
+data "aws_caller_identity" "workloads" {}
 
 locals {
-  credentialless_accounts = toset(["pl-calculations"])
-  aws_workload_accounts = setunion(toset(keys(local.services)), toset([
+  reference_bucket = "powerlifting-reference-documents-${data.aws_caller_identity.workloads.account_id}-${var.region}"
+  aws_workload_accounts = setunion(setsubtract(toset(keys(local.services)), ["pl-calculations"]), toset([
     "ecr-refresher",
     "pl-analytics",
     "pl-analytics-ai",
@@ -23,22 +19,14 @@ locals {
 }
 
 data "aws_iam_role" "workload" {
-  for_each = var.aws_workload_identity
+  for_each = local.aws_workload_accounts
   name     = "nolift-${each.key}"
-
-  lifecycle {
-    precondition {
-      condition     = contains(setsubtract(local.aws_workload_accounts, local.credentialless_accounts), each.key)
-      error_message = "Unknown or credentialless App service account: ${each.key}."
-    }
-  }
 }
 
 module "workload_aws" {
   for_each = local.aws_workload_accounts
   source   = "../modules/workload-aws"
 
-  role_arn           = try(data.aws_iam_role.workload[each.key].arn, null)
-  region             = var.region
-  shared_secret_name = contains(local.credentialless_accounts, each.key) ? null : "pl-aws-credentials"
+  role_arn = data.aws_iam_role.workload[each.key].arn
+  region   = var.region
 }

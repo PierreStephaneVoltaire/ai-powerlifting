@@ -118,7 +118,7 @@ resource "kubernetes_deployment_v1" "service" {
           }
 
           dynamic "env" {
-            for_each = module.workload_aws[each.key].env
+            for_each = try(module.workload_aws[each.key].env, {})
             content {
               name  = env.key
               value = env.value
@@ -126,7 +126,7 @@ resource "kubernetes_deployment_v1" "service" {
           }
 
           dynamic "volume_mount" {
-            for_each = concat(module.workload_aws[each.key].secret_names, module.workload_aws[each.key].token_paths)
+            for_each = contains(local.aws_workload_accounts, each.key) ? [each.key] : []
             content {
               name       = "aws"
               mount_path = module.workload_aws[each.key].mount_path
@@ -136,26 +136,16 @@ resource "kubernetes_deployment_v1" "service" {
         }
 
         dynamic "volume" {
-          for_each = concat(module.workload_aws[each.key].secret_names, module.workload_aws[each.key].token_paths)
+          for_each = contains(local.aws_workload_accounts, each.key) ? [each.key] : []
           content {
             name = "aws"
 
-            dynamic "secret" {
-              for_each = module.workload_aws[each.key].secret_names
-              content {
-                secret_name = secret.value
-              }
-            }
-
-            dynamic "projected" {
-              for_each = module.workload_aws[each.key].token_paths
-              content {
-                sources {
-                  service_account_token {
-                    audience           = "sts.amazonaws.com"
-                    expiration_seconds = 3600
-                    path               = projected.value
-                  }
+            projected {
+              sources {
+                service_account_token {
+                  audience           = "sts.amazonaws.com"
+                  expiration_seconds = 3600
+                  path               = module.workload_aws[each.key].token_path
                 }
               }
             }

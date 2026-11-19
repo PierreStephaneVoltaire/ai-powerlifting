@@ -123,22 +123,12 @@ resource "kubernetes_deployment_v1" "backend" {
         volume {
           name = "aws"
 
-          dynamic "secret" {
-            for_each = module.workload_aws["powerlifting-app-backend"].secret_names
-            content {
-              secret_name = secret.value
-            }
-          }
-
-          dynamic "projected" {
-            for_each = module.workload_aws["powerlifting-app-backend"].token_paths
-            content {
-              sources {
-                service_account_token {
-                  audience           = "sts.amazonaws.com"
-                  expiration_seconds = 3600
-                  path               = projected.value
-                }
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["powerlifting-app-backend"].token_path
               }
             }
           }

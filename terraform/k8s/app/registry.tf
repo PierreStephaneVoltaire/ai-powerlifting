@@ -21,10 +21,7 @@ resource "kubernetes_cron_job_v1" "registry_refresher" {
 
         template {
           metadata {
-            labels = merge(
-              { app = "ecr-token-refresher" },
-              contains(var.aws_workload_identity, "ecr-refresher") ? { "istio.io/dataplane-mode" = "ambient" } : {},
-            )
+            labels = { app = "ecr-token-refresher", "istio.io/dataplane-mode" = "ambient" }
           }
 
           spec {
@@ -70,22 +67,12 @@ resource "kubernetes_cron_job_v1" "registry_refresher" {
             volume {
               name = "aws"
 
-              dynamic "secret" {
-                for_each = module.workload_aws["ecr-refresher"].secret_names
-                content {
-                  secret_name = secret.value
-                }
-              }
-
-              dynamic "projected" {
-                for_each = module.workload_aws["ecr-refresher"].token_paths
-                content {
-                  sources {
-                    service_account_token {
-                      audience           = "sts.amazonaws.com"
-                      expiration_seconds = 3600
-                      path               = projected.value
-                    }
+              projected {
+                sources {
+                  service_account_token {
+                    audience           = "sts.amazonaws.com"
+                    expiration_seconds = 3600
+                    path               = module.workload_aws["ecr-refresher"].token_path
                   }
                 }
               }

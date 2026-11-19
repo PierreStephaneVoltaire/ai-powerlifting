@@ -173,22 +173,12 @@ resource "kubernetes_deployment_v1" "coach" {
         volume {
           name = "aws"
 
-          dynamic "secret" {
-            for_each = module.workload_aws["pl-coach"].secret_names
-            content {
-              secret_name = secret.value
-            }
-          }
-
-          dynamic "projected" {
-            for_each = module.workload_aws["pl-coach"].token_paths
-            content {
-              sources {
-                service_account_token {
-                  audience           = "sts.amazonaws.com"
-                  expiration_seconds = 3600
-                  path               = projected.value
-                }
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-coach"].token_path
               }
             }
           }

@@ -1,13 +1,7 @@
-variable "workload_identity_enabled" {
-  type    = bool
-  default = false
-}
-
 variable "workload_identity_jwks" {
-  type    = string
-  default = ""
+  type = string
   validation {
-    condition     = var.workload_identity_jwks == "" || try(length(jsondecode(var.workload_identity_jwks).keys) > 0 && alltrue([for key in jsondecode(var.workload_identity_jwks).keys : key.kty == "RSA" && can(key.n) && can(key.e) && length(setintersection(toset(keys(key)), toset(["d", "p", "q", "dp", "dq", "qi", "oth"]))) == 0]), false)
+    condition     = try(length(jsondecode(var.workload_identity_jwks).keys) > 0 && alltrue([for key in jsondecode(var.workload_identity_jwks).keys : key.kty == "RSA" && can(key.n) && can(key.e) && length(setintersection(toset(keys(key)), toset(["d", "p", "q", "dp", "dq", "qi", "oth"]))) == 0]), false)
     error_message = "workload_identity_jwks must contain only public RSA keys."
   }
 }
@@ -97,7 +91,7 @@ locals {
 }
 
 resource "aws_s3_bucket" "workload_identity" {
-  count  = var.workload_identity_enabled ? 1 : 0
+
   bucket = local.workload_identity_bucket
   lifecycle {
     prevent_destroy = true
@@ -112,8 +106,8 @@ resource "aws_s3_bucket_public_access_block" "workload_identity" {
   lifecycle {
     prevent_destroy = true
   }
-  count                   = var.workload_identity_enabled ? 1 : 0
-  bucket                  = aws_s3_bucket.workload_identity[0].id
+
+  bucket                  = aws_s3_bucket.workload_identity.id
   block_public_acls       = true
   ignore_public_acls      = true
   block_public_policy     = false
@@ -124,13 +118,13 @@ resource "aws_s3_bucket_policy" "workload_identity" {
   lifecycle {
     prevent_destroy = true
   }
-  count  = var.workload_identity_enabled ? 1 : 0
-  bucket = aws_s3_bucket.workload_identity[0].id
+
+  bucket = aws_s3_bucket.workload_identity.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow", Principal = "*", Action = "s3:GetObject"
-      Resource = ["${aws_s3_bucket.workload_identity[0].arn}/.well-known/openid-configuration", "${aws_s3_bucket.workload_identity[0].arn}/openid/v1/jwks"]
+      Resource = ["${aws_s3_bucket.workload_identity.arn}/.well-known/openid-configuration", "${aws_s3_bucket.workload_identity.arn}/openid/v1/jwks"]
     }]
   })
   depends_on = [aws_s3_bucket_public_access_block.workload_identity]
@@ -140,8 +134,8 @@ resource "aws_s3_object" "workload_identity_discovery" {
   lifecycle {
     prevent_destroy = true
   }
-  count        = var.workload_identity_enabled ? 1 : 0
-  bucket       = aws_s3_bucket.workload_identity[0].id
+
+  bucket       = aws_s3_bucket.workload_identity.id
   key          = ".well-known/openid-configuration"
   content_type = "application/json"
   content = jsonencode({
@@ -154,8 +148,8 @@ resource "aws_s3_object" "workload_identity_jwks" {
   lifecycle {
     prevent_destroy = true
   }
-  count        = var.workload_identity_enabled ? 1 : 0
-  bucket       = aws_s3_bucket.workload_identity[0].id
+
+  bucket       = aws_s3_bucket.workload_identity.id
   key          = "openid/v1/jwks"
   content_type = "application/json"
   content      = var.workload_identity_jwks
@@ -165,7 +159,7 @@ resource "aws_iam_openid_connect_provider" "workload_identity" {
   lifecycle {
     prevent_destroy = true
   }
-  count          = var.workload_identity_enabled ? 1 : 0
+
   url            = local.workload_identity_url
   client_id_list = ["sts.amazonaws.com"]
   depends_on     = [aws_s3_bucket_policy.workload_identity, aws_s3_object.workload_identity_discovery, aws_s3_object.workload_identity_jwks]
@@ -175,13 +169,13 @@ resource "aws_iam_role" "workload_identity" {
   lifecycle {
     prevent_destroy = true
   }
-  for_each = var.workload_identity_enabled ? local.workload_identity_accounts : toset([])
+  for_each = local.workload_identity_accounts
   name     = "nolift-${each.key}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow", Action = "sts:AssumeRoleWithWebIdentity"
-      Principal = { Federated = aws_iam_openid_connect_provider.workload_identity[0].arn }
+      Principal = { Federated = aws_iam_openid_connect_provider.workload_identity.arn }
       Condition = { StringEquals = {
         "${local.workload_identity_host}:aud" = "sts.amazonaws.com"
         "${local.workload_identity_host}:sub" = "system:serviceaccount:${var.workload_identity_namespace}:${each.key}"
@@ -235,7 +229,7 @@ resource "aws_iam_role_policy" "workload_identity" {
 }
 
 output "workload_identity_issuer" {
-  value = var.workload_identity_enabled ? local.workload_identity_url : null
+  value = local.workload_identity_url
 }
 
 output "workload_identity_role_arns" {

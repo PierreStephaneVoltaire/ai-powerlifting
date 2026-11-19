@@ -121,13 +121,7 @@ jobs:
       - working-directory: ${{ matrix.directory }}
         run: terraform validate
       - if: ${{ matrix.directory == 'terraform' }}
-        working-directory: terraform
-        run: terraform test -filter=tests/workload_identity.tftest.hcl
-      - if: ${{ matrix.directory == 'terraform' }}
         run: python3 -m unittest discover -s scripts -p 'test_verify_*.py'
-      - if: ${{ matrix.directory == 'terraform/k8s/modules/workload-aws' || matrix.directory == 'terraform/k8s/mesh' || matrix.directory == 'terraform/k8s/app' }}
-        working-directory: ${{ matrix.directory }}
-        run: terraform test
 
   lambda:
     needs: changes

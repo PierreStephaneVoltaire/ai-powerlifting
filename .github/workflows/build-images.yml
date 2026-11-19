@@ -17,6 +17,7 @@ on:
       - "scripts/image_tag.py"
       - "scripts/migrate_identity_pointers.py"
       - "scripts/verify_workload_identity.py"
+      - "scripts/k3s-workload-identity*"
       - "scripts/verify_network_canary.py"
       - "scripts/test_verify_*.py"
       - ".github/workflows/**"
@@ -331,11 +332,51 @@ jobs:
       - working-directory: terraform
         run: terraform validate
 
+  workload-identity-inputs:
+    needs: changes
+    if: >-
+      ${{ needs.changes.outputs.terraform == 'true'
+        && github.actor == github.repository_owner
+        && github.triggering_actor == github.repository_owner }}
+    runs-on: powerlifting-k8s
+    outputs:
+      jwks: ${{ steps.discovery.outputs.jwks }}
+    steps:
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.5
+      - id: discovery
+        run: |
+          set -euo pipefail
+          umask 077
+          kubeconfig="$RUNNER_TEMP/kubeconfig"
+          cat > "$kubeconfig" <<'EOF'
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: in-cluster
+            cluster:
+              certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              server: https://kubernetes.default.svc
+          contexts:
+          - name: runner
+            context:
+              cluster: in-cluster
+              user: runner
+          current-context: runner
+          users:
+          - name: runner
+            user:
+              tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+          EOF
+          jwks="$(kubectl --kubeconfig "$kubeconfig" get --raw /openid/v1/jwks | jq -ce '{keys: [.keys[] | {kid, kty, alg, use, n, e}]} | select(.keys | length > 0)')"
+          printf 'jwks=%s\n' "$jwks" >> "$GITHUB_OUTPUT"
+
   terraform-plan:
-    needs: terraform-validate
+    needs: [terraform-validate, workload-identity-inputs]
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ needs.terraform-validate.result == 'success' }}
+    if: ${{ needs.terraform-validate.result == 'success' && needs.workload-identity-inputs.result == 'success' }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -348,8 +389,7 @@ jobs:
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
-      TF_VAR_workload_identity_enabled: ${{ vars.WORKLOAD_IDENTITY_ENABLED || 'false' }}
-      TF_VAR_workload_identity_jwks: ${{ vars.WORKLOAD_IDENTITY_JWKS }}
+      TF_VAR_workload_identity_jwks: ${{ needs.workload-identity-inputs.outputs.jwks }}
     steps:
       - uses: actions/checkout@v4
 
@@ -379,7 +419,9 @@ jobs:
         run: terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}"
 
   terraform-apply:
-    needs: [changes, terraform-plan]
+    needs: [changes, terraform-plan, workload-identity-inputs]
+    outputs:
+      workload_issuer: ${{ steps.apply.outputs.workload_issuer }}
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
@@ -395,8 +437,7 @@ jobs:
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
-      TF_VAR_workload_identity_enabled: ${{ vars.WORKLOAD_IDENTITY_ENABLED || 'false' }}
-      TF_VAR_workload_identity_jwks: ${{ vars.WORKLOAD_IDENTITY_JWKS }}
+      TF_VAR_workload_identity_jwks: ${{ needs.workload-identity-inputs.outputs.jwks }}
     steps:
       - uses: actions/checkout@v4
 
@@ -422,11 +463,13 @@ jobs:
       - working-directory: terraform
         run: terraform init -input=false
 
-      - working-directory: terraform
+      - id: apply
+        working-directory: terraform
         run: |
           umask 077
           terraform plan -input=false -no-color -var="region=${{ env.AWS_REGION }}" -out="$RUNNER_TEMP/aws.tfplan"
           terraform apply -input=false -no-color "$RUNNER_TEMP/aws.tfplan"
+          printf 'workload_issuer=%s\n' "$(terraform output -raw workload_identity_issuer)" >> "$GITHUB_OUTPUT"
 
   kubernetes-apply:
     needs: [changes, build-backend, build-services, build-coach, build-frontend, terraform-apply]
@@ -518,6 +561,30 @@ jobs:
           chmod 600 "$RUNNER_TEMP/kubeconfig"
           echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
+      - name: Configure the k3s workload issuer
+        if: ${{ needs.terraform-apply.result == 'success' }}
+        env:
+          WORKLOAD_IDENTITY_ISSUER: ${{ needs.terraform-apply.outputs.workload_issuer }}
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/k3s-workload-issuer.json"
+          bash scripts/k3s-workload-identity-plan.sh "$WORKLOAD_IDENTITY_ISSUER" "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" > "$manifest"
+          if [ -s "$manifest" ]; then
+            kubectl apply -f "$manifest"
+            for attempt in {1..90}; do
+              if kubectl --request-timeout=5s get --raw /.well-known/openid-configuration 2>/dev/null |
+                jq -e --arg issuer "$WORKLOAD_IDENTITY_ISSUER" '.issuer == $issuer and .jwks_uri == ($issuer + "/openid/v1/jwks")' >/dev/null; then
+                break
+              fi
+              sleep 5
+            done
+            kubectl --request-timeout=15s get --raw /.well-known/openid-configuration |
+              jq -e --arg issuer "$WORKLOAD_IDENTITY_ISSUER" '.issuer == $issuer and .jwks_uri == ($issuer + "/openid/v1/jwks")' >/dev/null
+            kubectl wait --for=condition=Complete --timeout=120s -f "$manifest"
+            kubectl --request-timeout=15s get --raw /readyz >/dev/null
+            kubectl wait --for=condition=Ready --timeout=120s node -l node-role.kubernetes.io/control-plane
+          fi
+
       - env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
           APPLY_COACH: ${{ needs.build-coach.result == 'success' || needs.changes.outputs.kubernetes == 'true' }}
@@ -563,8 +630,6 @@ jobs:
           set -euo pipefail
           namespace="$(terraform -chdir=terraform/k8s/core output -raw namespace)"
           role="$(kubectl -n "$namespace" get deployment pl-rankings -o json | jq -r '.spec.template.spec.containers[].env[]? | select(.name == "AWS_ROLE_ARN") | .value')"
-          if [ -n "$role" ]; then
-            python3 scripts/verify_workload_identity.py \
-              --namespace "$namespace" --region "$AWS_REGION" \
-              --service-account pl-rankings --role-arn "$role"
-          fi
+          python3 scripts/verify_workload_identity.py \
+            --namespace "$namespace" --region "$AWS_REGION" \
+            --service-account pl-rankings --role-arn "$role"

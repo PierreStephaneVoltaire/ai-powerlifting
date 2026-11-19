@@ -28,12 +28,12 @@ locals {
     discord-cdn   = { host = "cdn.discordapp.com", callers = toset(["pl-profile", "pl-coach-discord"]) }
     openrouter    = { host = "openrouter.ai", callers = toset(["litellm", "reference-litellm"]) }
     openai-api    = { host = "api.openai.com", callers = toset(concat(["pl-prompt-cache-api"], anytrue([for provider in values(var.litellm_providers) : provider.type == "openai" && provider.base_url == null]) ? ["litellm"] : [])) }
-    aws-sts       = { host = "sts.${var.region}.amazonaws.com", callers = setunion(setsubtract(local.aws_workload_accounts, local.credentialless_accounts), toset(["pl-coach", "pl-coach-discord"])) }
+    aws-sts       = { host = "sts.${var.region}.amazonaws.com", callers = setunion(local.aws_workload_accounts, toset(["pl-coach", "pl-coach-discord"])) }
     aws-dynamodb  = { host = "dynamodb.${var.region}.amazonaws.com", callers = toset(["pl-analytics", "pl-profile", "pl-program", "pl-sessions", "pl-competition", "pl-glossary", "pl-federation", "pl-goals", "pl-performance", "pl-weight-log", "pl-export", "pl-imports", "pl-lift-profiles", "pl-templates", "pl-videos", "pl-coach-discord"]) }
     aws-ecr       = { host = "api.ecr.${var.region}.amazonaws.com", callers = toset(["ecr-refresher"]) }
     aws-dataset   = { host = "${var.dataset_bucket}.s3.${var.region}.amazonaws.com", callers = toset(["pl-analytics", "pl-analytics-ai", "pl-analytics-export", "pl-rankings", "pl-coach"]) }
     aws-videos    = { host = "powerlifting-session-videos.s3.${var.region}.amazonaws.com", callers = toset(["powerlifting-app-backend", "pl-profile", "pl-videos"]) }
-    aws-reference = { host = "powerlifting-reference-documents-429310424269-ca-central-1.s3.${var.region}.amazonaws.com", callers = toset(["pl-assistant"]) }
+    aws-reference = { host = "${local.reference_bucket}.s3.${var.region}.amazonaws.com", callers = toset(["pl-assistant"]) }
   }
   all_external_service_entries = merge(var.external_service_entries, local.required_external_service_entries)
 }

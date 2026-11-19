@@ -103,7 +103,7 @@ resource "kubernetes_deployment_v1" "assistant" {
 
           env {
             name  = "PL_REFERENCE_BUCKET"
-            value = "powerlifting-reference-documents-429310424269-ca-central-1"
+            value = local.reference_bucket
           }
 
           dynamic "env" {
@@ -213,22 +213,12 @@ resource "kubernetes_deployment_v1" "assistant" {
         volume {
           name = "aws"
 
-          dynamic "secret" {
-            for_each = module.workload_aws["pl-assistant"].secret_names
-            content {
-              secret_name = secret.value
-            }
-          }
-
-          dynamic "projected" {
-            for_each = module.workload_aws["pl-assistant"].token_paths
-            content {
-              sources {
-                service_account_token {
-                  audience           = "sts.amazonaws.com"
-                  expiration_seconds = 3600
-                  path               = projected.value
-                }
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-assistant"].token_path
               }
             }
           }

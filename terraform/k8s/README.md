@@ -20,13 +20,15 @@ applies Coach with `COACH_TFVARS` after a successful Coach image build. The
 Coach state key remains `powerlifting-app/coach/terraform.tfstate`. The in-cluster runner uses its
 service account for Kubernetes access. `TF_STATE_BUCKET` names the state bucket
 and AWS reads go through the OIDC deploy role. App workloads use dedicated
-service accounts and use Ambient enrollment. During the legacy phase, the pods'
-AWS key belongs to the scoped `powerlifting-pods` IAM user and is stored in SSM
-at `/powerlifting/k8s/aws-credentials`; its value is also copied into the
-Kubernetes Secret and therefore present in Terraform state. It is never stored
-in tfvars. The staged move to per-workload projected-token roles, including
-operator key retirement, is documented in
-[`docs/runbooks/aws-workload-identity.md`](../../docs/runbooks/aws-workload-identity.md).
+service accounts and Ambient enrollment. Every AWS-using workload assumes its
+own IAM role with a projected Kubernetes service-account token; no shared AWS
+key or workload credential Secret is used at runtime. The pipeline applies the
+AWS roles and public OIDC documents from the required public-only JWKS input,
+sets the k3s issuer, then applies App and Coach in one coordinated deployment
+wave. Pipeline verification precedes operator retirement of the old shared IAM
+key and SSM parameter. Network isolation remains independently opt-in through
+its workload/database ingress and egress inputs, exact external ServiceEntries,
+and waypoint policy.
 
 The app stack selects the ECR image tag from `image_tag` (default `latest`). CI
 publishes `latest` only for `master`; other protected branches publish their
