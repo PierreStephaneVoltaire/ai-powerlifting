@@ -70,27 +70,6 @@ resource "aws_iam_user_policy" "powerlifting_pods_access" {
       },
       {
         Effect   = "Allow"
-        Action   = "s3:ListBucketVersions"
-        Resource = aws_s3_bucket.reference_documents.arn
-        Condition = {
-          StringLike = {
-            "s3:prefix" = [
-              "references/supplements/*",
-              "references/federation-rules/*",
-            ]
-          }
-        }
-      },
-      {
-        Effect = "Allow"
-        Action = "s3:GetObjectVersion"
-        Resource = [
-          "${aws_s3_bucket.reference_documents.arn}/references/supplements/*",
-          "${aws_s3_bucket.reference_documents.arn}/references/federation-rules/*",
-        ]
-      },
-      {
-        Effect   = "Allow"
         Action   = "ecr:GetAuthorizationToken"
         Resource = "*"
       },
