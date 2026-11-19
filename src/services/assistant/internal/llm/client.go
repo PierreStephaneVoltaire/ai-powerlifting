@@ -89,18 +89,19 @@ func (m Metadata) Headers() map[string]string {
 }
 
 type ChatRequest struct {
-	Meta           Metadata        `json:"-"`
-	Private        bool            `json:"-"`
-	Cache          map[string]bool `json:"cache,omitempty"`
-	NoLog          bool            `json:"no-log,omitempty"`
-	Store          *bool           `json:"store,omitempty"`
-	Model          string          `json:"model"`
-	Messages       []Message       `json:"messages"`
-	Tools          []ToolDef       `json:"tools,omitempty"`
-	ResponseFormat any             `json:"response_format,omitempty"`
-	MaxTokens      int             `json:"max_tokens,omitempty"`
-	User           string          `json:"user,omitempty"`
-	Metadata       any             `json:"metadata,omitempty"`
+	Meta            Metadata        `json:"-"`
+	Private         bool            `json:"-"`
+	Cache           map[string]bool `json:"cache,omitempty"`
+	NoLog           bool            `json:"no-log,omitempty"`
+	Store           *bool           `json:"store,omitempty"`
+	Model           string          `json:"model"`
+	Messages        []Message       `json:"messages"`
+	Tools           []ToolDef       `json:"tools,omitempty"`
+	ResponseFormat  any             `json:"response_format,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
+	User            string          `json:"user,omitempty"`
+	Metadata        any             `json:"metadata,omitempty"`
 }
 
 type ChatResponse struct {
