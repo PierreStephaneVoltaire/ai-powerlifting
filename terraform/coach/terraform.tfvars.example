@@ -37,3 +37,7 @@ coach_replicas = 1
 # operation_ai = {
 #   program_evaluation = { provider = "litellm", model = "<alias>", effort = "high" }
 # }
+
+aws_workload_identity            = []
+network_policy_ingress_workloads = []
+network_policy_egress_workloads  = []

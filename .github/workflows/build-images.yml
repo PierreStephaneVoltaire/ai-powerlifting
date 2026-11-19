@@ -16,6 +16,9 @@ on:
       - "src/tsconfig.json"
       - "scripts/image_tag.py"
       - "scripts/migrate_identity_pointers.py"
+      - "scripts/verify_workload_identity.py"
+      - "scripts/verify_network_canary.py"
+      - "scripts/test_verify_*.py"
       - ".github/workflows/**"
       - ".github/image-filters.yml"
       - "!**/*.md"
@@ -345,6 +348,8 @@ jobs:
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
+      TF_VAR_workload_identity_enabled: ${{ vars.WORKLOAD_IDENTITY_ENABLED || 'false' }}
+      TF_VAR_workload_identity_jwks: ${{ vars.WORKLOAD_IDENTITY_JWKS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -390,6 +395,8 @@ jobs:
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
+      TF_VAR_workload_identity_enabled: ${{ vars.WORKLOAD_IDENTITY_ENABLED || 'false' }}
+      TF_VAR_workload_identity_jwks: ${{ vars.WORKLOAD_IDENTITY_JWKS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -549,4 +556,15 @@ jobs:
             terraform -chdir=../coach apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/coach.tfvars" -var="image_tag=$IMAGE_TAG"
             kubectl -n "$namespace" rollout status deployment/pl-coach --timeout=600s
             kubectl -n "$namespace" rollout status deployment/pl-coach-discord --timeout=600s
+          fi
+
+      - name: Verify projected AWS trust
+        run: |
+          set -euo pipefail
+          namespace="$(terraform -chdir=terraform/k8s/core output -raw namespace)"
+          role="$(kubectl -n "$namespace" get deployment pl-rankings -o json | jq -r '.spec.template.spec.containers[].env[]? | select(.name == "AWS_ROLE_ARN") | .value')"
+          if [ -n "$role" ]; then
+            python3 scripts/verify_workload_identity.py \
+              --namespace "$namespace" --region "$AWS_REGION" \
+              --service-account pl-rankings --role-arn "$role"
           fi

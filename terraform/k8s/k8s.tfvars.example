@@ -81,3 +81,15 @@ litellm_fallbacks = {
 }
 # litellm_mcp_servers = { custom = { url = "http://example.svc:8000/mcp" } }
 litellm_admins            = []
+
+aws_workload_identity                      = []
+retain_shared_aws_credentials              = true
+namespace_service_entry_visibility_enabled = false
+external_service_entries_enabled           = false
+external_service_entries                   = {}
+waypoint_network_policy_enabled            = false
+network_policy_ingress_workloads           = []
+network_policy_egress_workloads            = []
+network_policy_ingress_databases           = []
+network_policy_egress_databases            = []
+kubernetes_api_cidrs                       = []

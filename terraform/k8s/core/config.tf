@@ -35,7 +35,5 @@ resource "kubernetes_config_map_v1" "app" {
     MEDIA_SIGNING_KEY_PAIR_ID              = nonsensitive(data.aws_ssm_parameter.media_signing_key_pair_id.value)
     MEDIA_VIDEO_URL_TTL_HOURS              = "72"
     VALKEY_URL                             = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
-    AWS_SHARED_CREDENTIALS_FILE            = "/secrets/aws/credentials"
-    AWS_CONFIG_FILE                        = "/secrets/aws/config"
   }
 }

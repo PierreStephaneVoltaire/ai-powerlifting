@@ -1,15 +1,13 @@
 locals {
   service_env = {
-    IF_API_URL                  = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
-    PL_SERVICE_URL_TEMPLATE     = "http://pl-{domain}.${var.namespace}.svc.cluster.local:8000"
-    VALKEY_URL                  = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
-    PROMPT_CACHE_QDRANT_URL     = "http://pl-prompt-cache.${var.namespace}.svc.cluster.local:6333"
-    PROMPT_CACHE_MCP_URL        = "http://pl-prompt-cache-mcp.${var.namespace}.svc.cluster.local:8000/mcp"
-    PROMPT_CACHE_URL            = "http://pl-prompt-cache-api.${var.namespace}.svc.cluster.local:8000"
-    AWS_SHARED_CREDENTIALS_FILE = "/secrets/aws/credentials"
-    AWS_CONFIG_FILE             = "/secrets/aws/config"
-    IF_SUPPLEMENTS_TABLE_NAME   = "if-supplements"
-    PL_JOB_TOKEN_PUBLIC_KEY     = local.job_token_public_key
+    IF_API_URL                = "http://pl-coach.${var.namespace}.svc.cluster.local:8000"
+    PL_SERVICE_URL_TEMPLATE   = "http://pl-{domain}.${var.namespace}.svc.cluster.local:8000"
+    VALKEY_URL                = "redis://pl-valkey.${var.namespace}.svc.cluster.local:6379"
+    PROMPT_CACHE_QDRANT_URL   = "http://pl-prompt-cache.${var.namespace}.svc.cluster.local:6333"
+    PROMPT_CACHE_MCP_URL      = "http://pl-prompt-cache-mcp.${var.namespace}.svc.cluster.local:8000/mcp"
+    PROMPT_CACHE_URL          = "http://pl-prompt-cache-api.${var.namespace}.svc.cluster.local:8000"
+    IF_SUPPLEMENTS_TABLE_NAME = "if-supplements"
+    PL_JOB_TOKEN_PUBLIC_KEY   = local.job_token_public_key
   }
 
   small = { limits = { cpu = "500m", memory = "256Mi" }, requests = { cpu = "25m", memory = "64Mi" } }
@@ -119,18 +117,48 @@ resource "kubernetes_deployment_v1" "service" {
             period_seconds        = 10
           }
 
-          volume_mount {
-            name       = "aws"
-            mount_path = "/secrets/aws"
-            read_only  = true
+          dynamic "env" {
+            for_each = module.workload_aws[each.key].env
+            content {
+              name  = env.key
+              value = env.value
+            }
+          }
+
+          dynamic "volume_mount" {
+            for_each = concat(module.workload_aws[each.key].secret_names, module.workload_aws[each.key].token_paths)
+            content {
+              name       = "aws"
+              mount_path = module.workload_aws[each.key].mount_path
+              read_only  = true
+            }
           }
         }
 
-        volume {
-          name = "aws"
+        dynamic "volume" {
+          for_each = concat(module.workload_aws[each.key].secret_names, module.workload_aws[each.key].token_paths)
+          content {
+            name = "aws"
 
-          secret {
-            secret_name = "pl-aws-credentials"
+            dynamic "secret" {
+              for_each = module.workload_aws[each.key].secret_names
+              content {
+                secret_name = secret.value
+              }
+            }
+
+            dynamic "projected" {
+              for_each = module.workload_aws[each.key].token_paths
+              content {
+                sources {
+                  service_account_token {
+                    audience           = "sts.amazonaws.com"
+                    expiration_seconds = 3600
+                    path               = projected.value
+                  }
+                }
+              }
+            }
           }
         }
       }

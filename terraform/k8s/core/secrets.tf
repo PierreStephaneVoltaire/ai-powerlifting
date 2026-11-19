@@ -42,16 +42,30 @@ resource "kubernetes_secret_v1" "profile" {
   }
 }
 
+variable "retain_shared_aws_credentials" {
+  description = "Retain the legacy shared AWS secret until all workloads are migrated."
+  type        = bool
+  default     = true
+}
+
 data "aws_ssm_parameter" "pod_credentials" {
+  count           = var.retain_shared_aws_credentials ? 1 : 0
   name            = "/powerlifting/k8s/aws-credentials"
   with_decryption = true
 }
 
 locals {
-  pod_credentials = jsondecode(data.aws_ssm_parameter.pod_credentials.value)
+  pod_credentials = var.retain_shared_aws_credentials ? jsondecode(data.aws_ssm_parameter.pod_credentials[0].value) : null
+}
+
+moved {
+  from = kubernetes_secret_v1.aws_credentials
+  to   = kubernetes_secret_v1.aws_credentials[0]
 }
 
 resource "kubernetes_secret_v1" "aws_credentials" {
+  count = var.retain_shared_aws_credentials ? 1 : 0
+
   metadata {
     name      = "pl-aws-credentials"
     namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name

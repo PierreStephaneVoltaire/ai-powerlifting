@@ -105,9 +105,17 @@ resource "kubernetes_deployment_v1" "backend" {
             period_seconds        = 5
           }
 
+          dynamic "env" {
+            for_each = module.workload_aws["powerlifting-app-backend"].env
+            content {
+              name  = env.key
+              value = env.value
+            }
+          }
+
           volume_mount {
             name       = "aws"
-            mount_path = "/secrets/aws"
+            mount_path = module.workload_aws["powerlifting-app-backend"].mount_path
             read_only  = true
           }
         }
@@ -115,8 +123,24 @@ resource "kubernetes_deployment_v1" "backend" {
         volume {
           name = "aws"
 
-          secret {
-            secret_name = "pl-aws-credentials"
+          dynamic "secret" {
+            for_each = module.workload_aws["powerlifting-app-backend"].secret_names
+            content {
+              secret_name = secret.value
+            }
+          }
+
+          dynamic "projected" {
+            for_each = module.workload_aws["powerlifting-app-backend"].token_paths
+            content {
+              sources {
+                service_account_token {
+                  audience           = "sts.amazonaws.com"
+                  expiration_seconds = 3600
+                  path               = projected.value
+                }
+              }
+            }
           }
         }
       }

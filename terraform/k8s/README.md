@@ -20,10 +20,13 @@ applies Coach with `COACH_TFVARS` after a successful Coach image build. The
 Coach state key remains `powerlifting-app/coach/terraform.tfstate`. The in-cluster runner uses its
 service account for Kubernetes access. `TF_STATE_BUCKET` names the state bucket
 and AWS reads go through the OIDC deploy role. App workloads use dedicated
-service accounts and use Ambient enrollment. The pods' AWS key belongs to the scoped
-`powerlifting-pods` IAM user, created outside terraform and stored in SSM at
-`/powerlifting/k8s/aws-credentials`; no AWS key lives in any tfvars file or
-terraform state.
+service accounts and use Ambient enrollment. During the legacy phase, the pods'
+AWS key belongs to the scoped `powerlifting-pods` IAM user and is stored in SSM
+at `/powerlifting/k8s/aws-credentials`; its value is also copied into the
+Kubernetes Secret and therefore present in Terraform state. It is never stored
+in tfvars. The staged move to per-workload projected-token roles, including
+operator key retirement, is documented in
+[`docs/runbooks/aws-workload-identity.md`](../../docs/runbooks/aws-workload-identity.md).
 
 The app stack selects the ECR image tag from `image_tag` (default `latest`). CI
 publishes `latest` only for `master`; other protected branches publish their

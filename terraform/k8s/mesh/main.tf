@@ -22,7 +22,9 @@ resource "helm_release" "istiod" {
   namespace  = kubernetes_namespace_v1.istio_system.metadata[0].name
   wait       = true
 
-  values     = [yamlencode({ profile = "ambient" })]
+  values = [yamlencode(merge({ profile = "ambient" }, var.namespace_service_entry_visibility_enabled ? {
+    meshConfig = { serviceEntryVisibility = { defaultVisibility = "PUBLIC", policies = [{ visibility = "NAMESPACE", matchingRules = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = var.namespace } } }] }] } }
+  } : {}))]
   depends_on = [helm_release.base]
 }
 
