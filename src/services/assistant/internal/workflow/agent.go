@@ -461,15 +461,24 @@ func (w *Workflows) delegate(ctx *workflow.WorkflowContext, params run, call age
 	result.Permissions = visibility.Union(result.Permissions, output.Permissions)
 	result.Proposals = append(result.Proposals, output.Proposals...)
 	params.State.Floor = security.Tighten(params.State.Floor, output.Floor)
+	header := delegationResultHeader(sequence, tier, output)
 	if output.Error != "" || strings.TrimSpace(output.Reply) == "" {
 		reason := output.Error
 		if reason == "" {
 			reason = "empty result"
 		}
 		w.record(ctx, params.Identity.Person, params.ConversationID, "review", model, "failed", map[string]any{"delegation_id": sequence, "tier": tier.String(), "reason": reason, "source": "automatic"})
-		return fmt.Sprintf("[delegation_id=%d tier=%s] error: %s. %s", sequence, tier, reason, w.escalationAdvice(sequence, tier))
+		return fmt.Sprintf("%s\nerror: %s. %s", header, reason, w.escalationAdvice(sequence, tier))
 	}
-	return fmt.Sprintf("[delegation_id=%d tier=%s]\n%s", sequence, tier, output.Reply)
+	return header + "\n" + output.Reply
+}
+
+func delegationResultHeader(sequence int, tier orchestration.Tier, output SubagentOutput) string {
+	header := fmt.Sprintf("[delegation_id=%d tier=%s]", sequence, tier)
+	if committed := tools.Writes(output.UsedOperations); len(committed) > 0 {
+		header += "\nConfirmed committed operations: " + strings.Join(committed, ", ")
+	}
+	return header
 }
 
 func (w *Workflows) propose(ctx *workflow.WorkflowContext, params run, subject activities.Subject, call agent.Call, sequence int, result *outcome) string {

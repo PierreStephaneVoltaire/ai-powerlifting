@@ -69,7 +69,7 @@ def _extract_xlsx(content, template=False):
 
     workbook = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     rows = []
-    sheets = []
+    sheet_headings = {}
     for sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
         if sheet.max_row is None or sheet.max_row < 2:
@@ -79,6 +79,12 @@ def _extract_xlsx(content, template=False):
         header_index = 0
         if template:
             header_index = next((index for index, values in enumerate(sheet_rows[:12]) if _training_header(values)), 0)
+            sheet_headings[sheet_name] = [
+                value.strip()
+                for values in sheet_rows[:header_index + 1]
+                for value in values
+                if isinstance(value, str) and value.strip()
+            ]
         header_values = sheet_rows[header_index]
         dated_headers = {
             index: _calendar_date(value)
@@ -108,7 +114,6 @@ def _extract_xlsx(content, template=False):
                 headers.append("row_label")
             else:
                 headers.append(str(value).strip() if value is not None else f"col_{index}")
-        sheet_has_data = False
         last_day = None
         for cells in sheet_rows[header_index + 1:]:
             row = {"_sheet": f"Week {week_number}" if week_number else sheet_name}
@@ -132,10 +137,7 @@ def _extract_xlsx(content, template=False):
                 row["day"] = last_day
             if has_data:
                 rows.append(row)
-                sheet_has_data = True
-        if sheet_has_data:
-            sheets.append(sheet_name)
-    return rows, ", ".join(sheets) if sheets else "empty"
+    return rows, sheet_headings
 
 
 def _extract_csv(content):
@@ -207,7 +209,7 @@ async def _dispatch(args):
     if args.get("template_import") and classification != "template":
         raise ValueError("template_import requires import_type=template")
     is_template = classification == "template"
-    rows, _ = _extract_xlsx(content, template=is_template) if filename.lower().endswith(".xlsx") else (_extract_csv(content), "")
+    rows, sheet_headings = _extract_xlsx(content, template=is_template) if filename.lower().endswith(".xlsx") else (_extract_csv(content), {})
     if is_template:
         rows = _normalize_template_rows(rows)
     pk = args["pk"]
@@ -224,10 +226,11 @@ async def _dispatch(args):
             context = {"current_maxes": {}, "current_program_weeks": 0}
     parsed = await generate_import_parse_report(
         json.dumps(rows if is_template else rows[:100], indent=2, default=str),
-        "reusable-template" if is_template else filename,
+        filename,
         classification,
         context,
         args.get("import_instructions", ""),
+        sheet_headings,
     )
     if not isinstance(parsed, dict):
         raise ValueError("The AI parser returned an invalid result")

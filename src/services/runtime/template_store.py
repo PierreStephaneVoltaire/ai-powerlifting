@@ -234,10 +234,10 @@ class TemplateStore:
         self._assert_owner(existing, actor_pk)
 
         now = self._now()
-        template_item = copy.deepcopy(template)
+        template_item = copy.deepcopy({**existing, **template})
         template_item.pop("is_owner", None)
-        incoming_meta = template_item.setdefault("meta", {})
         existing_meta = existing.get("meta") if isinstance(existing.get("meta"), dict) else {}
+        incoming_meta = template_item["meta"] = {**existing_meta, **template.get("meta", {})}
 
         incoming_meta["created_at"] = existing_meta.get("created_at", now)
         incoming_meta["updated_at"] = now

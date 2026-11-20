@@ -1,6 +1,7 @@
 import base64
 import asyncio
 import importlib
+import io
 
 import pytest
 
@@ -114,6 +115,46 @@ def test_parse_stages_csv_using_authenticated_scope_and_native_parser(monkeypatc
     assert imports.staged[0]["ai_parse_result"]["sessions"][0]["exercises"][0]["glossary_id"] == "glossary#squat"
 
 
+def test_template_parser_receives_workbook_title_and_import_instructions(monkeypatch):
+    from openpyxl import Workbook
+    from services.imports.import_parse_file import core, import_parse_ai
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Week 1"
+    sheet.append(["Candito 6 Week Powerlifting Program"])
+    sheet.append(["Day", "Exercise"])
+    sheet.append(["Monday", "Squat"])
+    content = io.BytesIO()
+    workbook.save(content)
+    imports = FakeImportStore()
+
+    class Glossary:
+        async def get_glossary(self):
+            return []
+
+        async def fuzzy_resolve(self, *args, **kwargs):
+            return None
+
+    async def parse(rows, filename, classification, context, instructions, sheet_headings):
+        assert filename == "program.xlsx"
+        assert classification == "template"
+        assert instructions == "Name this Candito Meet Prep"
+        assert "Candito 6 Week Powerlifting Program" in sheet_headings["Week 1"]
+        return {"program_name": "Candito Meet Prep", "sessions": [{"exercises": [{"name": "Squat"}]}]}
+
+    monkeypatch.setattr(core, "_get_glossary_store", lambda pk: Glossary())
+    monkeypatch.setattr(core, "_get_import_store", lambda pk: imports)
+    monkeypatch.setattr(import_parse_ai, "generate_import_parse_report", parse)
+    dispatch(load_operations("imports")["import_parse_file"], {
+        "pk": "athlete-1", "filename": "program.xlsx", "import_type": "template",
+        "base64_content": base64.b64encode(content.getvalue()).decode(),
+        "import_instructions": "Name this Candito Meet Prep",
+    })
+
+    assert imports.staged[0]["ai_parse_result"]["program_name"] == "Candito Meet Prep"
+
+
 def test_apply_session_offsets_dates_and_preserves_program_write(monkeypatch):
     apply = importlib.import_module("services.imports.import_apply.core")
     imports = FakeImportStore({"import_id": "import-1", "status": "awaiting_review", "import_type": "session_import", "ai_parse_result": {"sessions": [{"date": "2026-09-01", "exercises": [{"name": "Squat"}]}]}})
@@ -128,10 +169,18 @@ def test_apply_session_offsets_dates_and_preserves_program_write(monkeypatch):
     assert imports.applied
 
 
-def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch):
+@pytest.mark.parametrize(("parsed_name", "source_filename", "expected_name"), [
+    ("Candito 6 Week", "block.csv", "Candito 6 Week"),
+    ("Imported Template", "block.csv", "block"),
+    (None, "block.csv", "block"),
+    (None, "Imported_Template.csv", "Training program import-2"),
+])
+def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch, parsed_name, source_filename, expected_name):
     apply = importlib.import_module("services.imports.import_apply.core")
     imports = FakeImportStore({"import_id": "import-2", "status": "awaiting_review", "import_type": "template", "source_filename": "block.csv", "source_file_hash": "sha256:abc", "ai_parse_result": {"phases": [], "sessions": [{"week_number": 1, "day_index": 1, "exercises": [{"name": "Squat", "load_type": "percentage", "load_value": 75}]}], "parse_notes": "parsed"}})
     templates = FakeTemplateStore()
+    imports.pending["ai_parse_result"]["program_name"] = parsed_name
+    imports.pending["source_filename"] = source_filename
     monkeypatch.setattr(apply, "_get_import_store", lambda pk: imports)
     monkeypatch.setattr(apply, "_get_template_store", lambda: templates)
 
@@ -142,6 +191,7 @@ def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch):
 
     assert result == {"status": "applied", "target_sk": "template#new"}
     assert templates.kwargs == {"actor_pk": "coach-person", "author": "Ari", "published": False, "import_job_id": "import-2"}
+    assert templates.template["meta"]["name"] == expected_name
     assert templates.template["sessions"][0]["exercises"][0]["load_value"] == 0.75
 
 

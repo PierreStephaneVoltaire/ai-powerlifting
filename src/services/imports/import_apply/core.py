@@ -6,6 +6,8 @@ import os
 import uuid
 from datetime import date, datetime, timezone
 
+from services.runtime.template_name import imported_template_name
+
 from .._import_store import ImportStore
 
 
@@ -136,7 +138,6 @@ def _prepare_template(template, glossary=None):
                     required_maxes.add(glossary_id)
             elif str(exercise.get("name") or "").strip():
                 unresolved.add(str(exercise["name"]).strip())
-    metadata.setdefault("name", "Imported Template")
     metadata.setdefault("description", "")
     metadata.setdefault("estimated_weeks", max_week)
     metadata.setdefault("days_per_week", _days_per_week(sessions))
@@ -211,7 +212,7 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
             sessions = parsed.get("sessions") if isinstance(parsed.get("sessions"), list) else []
             template = _prepare_template({
                 "meta": {
-                    "name": "Imported Template",
+                    "name": imported_template_name(parsed.get("program_name"), pending.get("source_filename"), import_id),
                     "description": "",
                     "program_context": "",
                     "source_filename": pending.get("source_filename"),

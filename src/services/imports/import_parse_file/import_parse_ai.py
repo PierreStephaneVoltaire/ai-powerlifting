@@ -19,12 +19,13 @@ _TOOL_SCHEMA = {
         "parameters": {
             "type": "object",
             "properties": {
+                "program_name": {"type": ["string", "null"]},
                 "phases": {"type": "array", "items": {"type": "object"}},
                 "sessions": {"type": "array", "items": {"type": "object"}},
                 "warnings": {"type": "array", "items": {"type": "object"}},
                 "parse_notes": {"type": "string"},
             },
-            "required": ["phases", "sessions", "warnings", "parse_notes"],
+            "required": ["program_name", "phases", "sessions", "warnings", "parse_notes"],
         },
     },
 }
@@ -40,10 +41,11 @@ def _sanitize(value: Any) -> Any:
     return value
 
 
-async def generate_import_parse_report(file_content, file_name, classification, athlete_context=None, import_instructions=""):
+async def generate_import_parse_report(file_content, file_name, classification, athlete_context=None, import_instructions="", sheet_headings=None):
     user_message = json.dumps({
         "file_content": file_content,
         "file_name": file_name,
+        "sheet_headings": sheet_headings or {},
         "classification": classification,
         "athlete_context": athlete_context or {},
         "import_instructions": import_instructions or "Not provided.",

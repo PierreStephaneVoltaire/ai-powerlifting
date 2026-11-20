@@ -775,7 +775,7 @@
   {
     "name": "template_update",
     "domain": "templates",
-    "description": "Replace editable content of an owned template while preserving metadata and publication state.",
+    "description": "Update supplied editable fields of an owned template. Omitted fields, ownership and publication state are preserved.",
     "handler": "services.templates.template_update.handler",
     "input_schema": {
       "type": "object",
@@ -872,7 +872,7 @@
   {
     "name": "template_patch",
     "domain": "templates",
-    "description": "Apply structured edits to a template: replace, re-prescribe, remove or add exercises, optionally limited to weeks and days. apply=false returns a preview of every change; apply=true writes it.",
+    "description": "Apply structured edits to a template, including setting session weekdays by their 1-based position in template_get sessions, or replacing, re-prescribing, removing or adding exercises. apply=false previews every change; apply=true writes it.",
     "handler": "services.templates.template_patch.handler",
     "input_schema": {
       "type": "object",
@@ -899,7 +899,8 @@
                   "replace_exercise",
                   "set_prescription",
                   "remove_exercise",
-                  "add_exercise"
+                  "add_exercise",
+                  "set_session_weekdays"
                 ]
               },
               "from": {
@@ -929,6 +930,17 @@
               },
               "day_of_week": {
                 "type": "string"
+              },
+              "weekdays": {
+                "type": "object",
+                "description": "Map of 1-based positions in the full template_get sessions array to weekday names.",
+                "minProperties": 1,
+                "propertyNames": {
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "additionalProperties": {
+                  "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                }
               },
               "sets": {
                 "type": [
@@ -970,6 +982,19 @@
             },
             "additionalProperties": false,
             "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "const": "set_session_weekdays"
+                    }
+                  }
+                },
+                "then": {
+                  "required": ["weekdays"],
+                  "maxProperties": 2
+                }
+              },
               {
                 "if": {
                   "properties": {

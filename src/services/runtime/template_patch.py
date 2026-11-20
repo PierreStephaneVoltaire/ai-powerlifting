@@ -6,6 +6,8 @@ from typing import Callable
 from services.runtime.exercise_names import normalize
 
 PRESCRIPTION_FIELDS = ("sets", "reps", "load_type", "load_value", "rpe_target", "notes")
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+SET_SESSION_WEEKDAYS = "set_session_weekdays"
 Resolver = Callable[[str], dict | None]
 
 
@@ -41,12 +43,31 @@ def _rename(exercise: dict, name: str, resolve: Resolver) -> None:
         exercise.pop("glossary_id", None)
 
 
+def _set_session_weekdays(sessions: list[dict], weekdays: dict[str, str], operation_index: int) -> list[dict]:
+    changes = []
+    for position, weekday in weekdays.items():
+        index = int(position) - 1
+        if not 0 <= index < len(sessions):
+            raise ValueError(f"Session {position} does not exist in this template")
+        session = sessions[index]
+        before = {key: session.get(key) for key in ("day_of_week", "day_index")}
+        after = {"day_of_week": weekday, "day_index": WEEKDAYS.index(weekday) + 1}
+        if before != after:
+            session.update(after)
+            changes.append({"op": operation_index, "session_position": index + 1, "week": session.get("week_number"),
+                            "day": weekday, "before": before, "after": after})
+    return changes
+
+
 def apply_operations(template: dict, operations: list[dict], resolve: Resolver) -> tuple[dict, list[dict], list[dict]]:
     patched = copy.deepcopy(template)
     changes: list[dict] = []
     unmatched: list[dict] = []
     for index, operation in enumerate(operations):
         kind = operation.get("op")
+        if kind == SET_SESSION_WEEKDAYS:
+            changes.extend(_set_session_weekdays(patched.get("sessions") or [], operation["weekdays"], index))
+            continue
         touched = 0
         for session in patched.get("sessions") or []:
             if not _in_scope(session, operation):

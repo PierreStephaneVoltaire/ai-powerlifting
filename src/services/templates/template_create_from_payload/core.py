@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+from services.runtime.template_name import imported_template_name
+
 _store = None
 def _get_store():
     import os
@@ -117,7 +120,6 @@ def _prepare_template_payload(template):
                     unresolved.add(name)
     if not max_week:
         max_week = max([int(s.get("week_number") or 1) for s in sessions if isinstance(s, dict)] or [0])
-    meta.setdefault("name", "Imported Template")
     meta.setdefault("description", "")
     meta.setdefault("estimated_weeks", max_week)
     meta.setdefault("days_per_week", _template_days_per_week(sessions))
@@ -134,6 +136,8 @@ def _prepare_template_payload(template):
 async def template_create_from_payload(template, actor_pk=None, author=None, published=False, import_job_id=None):
     resolved_actor = _template_actor(actor_pk)
     prepared = _prepare_template_payload(template)
+    meta = prepared["meta"]
+    meta["name"] = imported_template_name(meta.get("name"), meta.get("source_filename"), import_job_id or str(uuid.uuid4()))
     ts = _get_template_store()
     sk = await ts.put_template(prepared, actor_pk=resolved_actor, author=_template_author(author, resolved_actor), published=published, import_job_id=import_job_id)
     return {"status": "created", "sk": sk}

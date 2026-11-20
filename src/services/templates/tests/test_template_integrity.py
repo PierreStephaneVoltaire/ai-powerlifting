@@ -72,6 +72,61 @@ def test_update_with_stale_revision_still_applies():
     assert "revision" not in result.table.items[(result.pk, "template#1")]["meta"]
 
 
+def test_sessions_only_update_keeps_description_and_phases(monkeypatch):
+    from services.templates.template_update import core
+
+    result = store()
+    original = template("Candito")
+    original["meta"]["description"] = "Original description"
+    original["phases"] = [{"name": "Strength"}]
+    seed(result, item=original)
+    monkeypatch.setattr(core, "_get_template_store", lambda: result)
+
+    asyncio.run(core.template_update("template#1", {"sessions": [{"day_of_week": "Thursday"}]}, "alice"))
+
+    saved = result.get_template_sync("template#1", actor_pk="alice")
+    assert saved["meta"]["name"] == "Candito"
+    assert saved["meta"]["description"] == "Original description"
+    assert saved["phases"] == [{"name": "Strength"}]
+    assert saved["sessions"][0]["day_index"] == 4
+
+
+def test_weekday_patch_uses_position_when_imported_ids_and_days_repeat(monkeypatch):
+    from services.runtime.contract import load_operations
+    from services.runtime.dispatch import dispatch
+    from services.templates.template_patch import core
+
+    result = store()
+    original = template("Candito")
+    original["phases"] = [{"name": "Strength"}]
+    original["sessions"] = [
+        {"id": "imported-1-1", "week_number": 1, "day_of_week": "Monday", "day_index": 1,
+         "exercises": [{"name": exercise}]}
+        for exercise in ("Squat", "Bench Press")
+    ]
+    seed(result, item=original)
+    monkeypatch.setattr(core, "_get_template_store", lambda: result)
+    arguments = {"sk": "template#1", "pk": "alice", "_person_pk": "alice",
+                 "operations": [{"op": "set_session_weekdays", "weekdays": {"2": "Thursday"}}]}
+    operation = load_operations("templates")["template_patch"]
+    assert dispatch(operation, arguments)["applied"] is False
+    assert result.get_template_sync("template#1", actor_pk="alice")["sessions"] == original["sessions"]
+    assert dispatch(operation, {**arguments, "apply": True})["applied"] is True
+
+    saved = result.get_template_sync("template#1", actor_pk="alice")
+    assert saved["meta"]["name"] == "Candito"
+    assert saved["phases"] == original["phases"]
+    assert saved["sessions"] == [
+        original["sessions"][0],
+        {**original["sessions"][1], "day_of_week": "Thursday", "day_index": 4},
+    ]
+    with pytest.raises(ValueError, match="Session 3"):
+        dispatch(operation, {**arguments, "apply": True, "operations": [
+            {"op": "set_session_weekdays", "weekdays": {"1": "Tuesday", "3": "Friday"}},
+        ]})
+    assert result.get_template_sync("template#1", actor_pk="alice") == saved
+
+
 def test_private_copy_cannot_be_replayed_or_retrieved_by_other_person():
     result = store()
     seed(result, item=template("Private", author="alice", published=False))
