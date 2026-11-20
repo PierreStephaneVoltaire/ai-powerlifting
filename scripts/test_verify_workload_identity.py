@@ -10,6 +10,16 @@ class DenialClassificationTests(unittest.TestCase):
     def test_wrong_audience_invalid_token_is_expected(self):
         self.assertTrue(expected_denial("InvalidIdentityToken", "audience claim is invalid", wrong_audience=True))
 
+    def test_wrong_audience_live_sts_validation_error_is_expected(self):
+        self.assertTrue(
+            expected_denial(
+                "InvalidIdentityToken",
+                "The web identity token provided could not be validated. See the "
+                "AssumeRoleWithWebIdentity documentation for requirements.",
+                wrong_audience=True,
+            )
+        )
+
     def test_wrong_audience_requires_specific_invalid_token_reason(self):
         self.assertFalse(expected_denial("AccessDenied", "not trusted", wrong_audience=True))
 

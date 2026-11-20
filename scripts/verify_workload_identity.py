@@ -54,7 +54,15 @@ def assume(role_arn, jwt, region):
 
 def expected_denial(code, message, wrong_audience=False):
     if wrong_audience:
-        return code == "InvalidIdentityToken" and "audience" in message.lower()
+        message = message.lower()
+        return code == "InvalidIdentityToken" and (
+            "audience" in message
+            or message
+            == (
+                "the web identity token provided could not be validated. see the "
+                "assumerolewithwebidentity documentation for requirements."
+            )
+        )
     if code in {"AccessDenied", "AccessDeniedException"}:
         return True
     return False

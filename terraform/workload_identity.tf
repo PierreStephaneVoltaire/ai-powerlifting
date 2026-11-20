@@ -84,8 +84,11 @@ locals {
     "pl-coach"                 = "lifetime/*/latest.md"
   }
   workload_identity_list_prefixes = {
-    "pl-analytics" = "analysis/*"
-    "pl-rankings"  = "datasets/openpowerlifting-*"
+    "pl-analytics"        = "analysis/*"
+    "pl-rankings"         = "datasets/openpowerlifting-*"
+    "pl-analytics-ai"     = "analysis-reports/*"
+    "pl-analytics-export" = "lifetime/*"
+    "pl-coach"            = "lifetime/*/latest.md"
   }
   workload_identity_accounts = toset(concat(keys(local.workload_identity_tables), keys(local.workload_identity_s3), ["pl-assistant", "ecr-refresher"]))
 }
@@ -199,6 +202,15 @@ resource "aws_iam_role_policy" "workload_identity" {
         Action   = [for action in lookup(local.workload_identity_dynamo_actions, each.key, []) : "dynamodb:${action}"]
         Resource = flatten([for table in lookup(local.workload_identity_tables, each.key, []) : ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/${table}", "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/${table}/index/*"]])
       }] : [],
+      flatten([for enabled in(contains(["pl-export", "pl-imports", "pl-lift-profiles", "pl-templates", "pl-videos"], each.key) ? [true] : []) : [{
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:Scan"]
+        Resource = ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/if-user"]
+        }, {
+        Effect   = "Allow"
+        Action   = ["dynamodb:Query"]
+        Resource = ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/if-powerlifting-requests", "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/if-powerlifting-user-competitions"]
+      }]]),
       contains(keys(local.workload_identity_list_prefixes), each.key) ? [{
         Effect    = "Allow", Action = ["s3:ListBucket"]
         Resource  = [for bucket in lookup(local.workload_identity_s3, each.key, []) : "arn:aws:s3:::${bucket}"]
