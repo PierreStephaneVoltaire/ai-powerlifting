@@ -212,7 +212,7 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
             sessions = parsed.get("sessions") if isinstance(parsed.get("sessions"), list) else []
             template = _prepare_template({
                 "meta": {
-                    "name": imported_template_name(parsed.get("program_name"), pending.get("source_filename"), import_id),
+                    "name": parsed.get("program_name"),
                     "description": "",
                     "program_context": "",
                     "source_filename": pending.get("source_filename"),
@@ -221,6 +221,7 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
                 "phases": parsed.get("phases", []),
                 "sessions": sessions,
             }, glossary=await asyncio.to_thread(_glossary, pk))
+            template["meta"]["name"] = imported_template_name(template["meta"])
             target_sk = await _get_template_store().put_template(
                 template,
                 actor_pk=actor,

@@ -68,6 +68,14 @@ class TemplateContractTests(unittest.TestCase):
         self.assertEqual(body, {"status": "created", "sk": "template#1"})
         self.assertEqual(store.templates["template#1"]["meta"]["name"], "Strength")
 
+    def test_payload_creation_uses_description_when_title_is_missing(self):
+        core = importlib.import_module("services.templates.template_create_from_payload.core")
+        store = FakeTemplateStore()
+        payload = {"meta": {"description": "Six weeks of bench specialization"}}
+        with patch.object(core, "_get_template_store", return_value=store):
+            asyncio.run(core.template_create_from_payload(payload, actor_pk="alice"))
+        self.assertEqual(store.templates["template#1"]["meta"]["name"], "Six weeks of bench specialization")
+
     def test_apply_handler_writes_template_lineage(self):
         apply_core = importlib.import_module("services.templates.template_apply_confirm.core")
         apply_handler = importlib.import_module("services.templates.template_apply_confirm.handler")

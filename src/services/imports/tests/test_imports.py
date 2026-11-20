@@ -173,7 +173,7 @@ def test_apply_session_offsets_dates_and_preserves_program_write(monkeypatch):
     ("Candito 6 Week", "block.csv", "Candito 6 Week"),
     ("Imported Template", "block.csv", "block"),
     (None, "block.csv", "block"),
-    (None, "Imported_Template.csv", "Training program import-2"),
+    (None, "Imported_Template.csv", "1-Week Training Program"),
 ])
 def test_apply_template_writes_owned_template_with_import_lineage(monkeypatch, parsed_name, source_filename, expected_name):
     apply = importlib.import_module("services.imports.import_apply.core")

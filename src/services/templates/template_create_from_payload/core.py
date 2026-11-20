@@ -137,7 +137,7 @@ async def template_create_from_payload(template, actor_pk=None, author=None, pub
     resolved_actor = _template_actor(actor_pk)
     prepared = _prepare_template_payload(template)
     meta = prepared["meta"]
-    meta["name"] = imported_template_name(meta.get("name"), meta.get("source_filename"), import_job_id or str(uuid.uuid4()))
+    meta["name"] = imported_template_name(meta)
     ts = _get_template_store()
     sk = await ts.put_template(prepared, actor_pk=resolved_actor, author=_template_author(author, resolved_actor), published=published, import_job_id=import_job_id)
     return {"status": "created", "sk": sk}
