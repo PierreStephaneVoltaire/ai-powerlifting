@@ -1,6 +1,7 @@
 import React from 'react'
 import { Stack, Title, Grid, Card, Text, Group } from '@mantine/core'
 import { LoadTypeBadge } from '../shared/LoadTypeBadge'
+import { templatePrescription } from '../../utils/templatePrescription'
 
 interface Props {
   data: any
@@ -34,13 +35,13 @@ export const TemplatePreview: React.FC<Props> = ({ data }) => {
                       <Group key={eIdx} justify="space-between">
                         <Group gap="xs">
                           <Text size="sm">{ex.name}</Text>
-                          <LoadTypeBadge source={ex.load_type} />
+                          {ex.duration_minutes == null && <LoadTypeBadge source={ex.load_type} />}
                         </Group>
                         <Text size="xs" c="dimmed">
-                          {ex.sets}x{ex.reps}
-                          {ex.load_type === 'rpe' ? ` @ RPE ${ex.load_value || ex.rpe_target || '?'}` : 
-                           ex.load_type === 'percentage' ? ` (${((ex.load_value || 0) * 100).toFixed(0)}%)` :
-                           ex.load_value ? ` ${ex.load_value}kg` : ''}
+                          {templatePrescription(ex)}
+                          {ex.duration_minutes == null && ex.load_type === 'rpe' ? ` @ RPE ${ex.load_value || ex.rpe_target || '?'}` :
+                           ex.duration_minutes == null && ex.load_type === 'percentage' ? ` (${((ex.load_value || 0) * 100).toFixed(0)}%)` :
+                           ex.duration_minutes == null && ex.load_type === 'absolute' && ex.load_value ? ` ${ex.load_value}kg` : ''}
                         </Text>
                       </Group>
                     ))}

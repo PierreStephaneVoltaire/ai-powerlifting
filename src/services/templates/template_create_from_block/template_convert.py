@@ -63,11 +63,15 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
             rpe = ex.get("rpe_target") or ex.get("rpe")
             e1rm = e1rm_map.get(name)
             load_source = ex.get("load_source", "absolute")
+            rep_mode = ex.get("rep_mode")
+            duration_minutes = ex.get("duration_minutes")
             
-            if load_source == "rpe" or (kg == 0 and rpe):
+            if duration_minutes is not None and not kg:
+                tpl_ex_fields = {"load_type": "unresolvable", "load_value": None, "rpe_target": None}
+            elif load_source == "rpe" or (kg == 0 and rpe):
                 tpl_ex_fields = {
                     "load_type": "rpe",
-                    "load_value": None,
+                    "load_value": rpe,
                     "rpe_target": rpe
                 }
             elif kg > 0 and e1rm and e1rm > 0:
@@ -89,14 +93,21 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
                     "rpe_target": None
                 }
                 
-            tpl_exercises.append({
+            exercise = {
                 "name": name,
                 "glossary_id": ex.get("glossary_id"),
                 "sets": ex.get("sets"),
                 "reps": ex.get("reps"),
                 "notes": ex.get("notes", ""),
                 **tpl_ex_fields
-            })
+            }
+            if rep_mode == "amrap":
+                exercise["rep_mode"] = "amrap"
+                exercise["reps"] = None
+            if duration_minutes is not None:
+                exercise["duration_minutes"] = duration_minutes
+                exercise["reps"] = None
+            tpl_exercises.append(exercise)
             
         sessions.append({
             "id": f"tpl_{uuid.uuid4()}",

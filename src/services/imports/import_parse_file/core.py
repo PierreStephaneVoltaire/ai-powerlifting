@@ -11,6 +11,7 @@ import os
 import re
 from datetime import date, datetime
 
+from .glossary import compatible_variation, create_missing_exercises
 
 def _get_program_store(pk):
     from services.runtime.program_store import ProgramStore
@@ -213,8 +214,10 @@ async def _dispatch(args):
     if is_template:
         rows = _normalize_template_rows(rows)
     pk = args["pk"]
+    glossary = _get_glossary_store(pk)
+    exercises = await glossary.get_glossary()
     if is_template:
-        context = {}
+        context = {"glossary": [{"id": item["id"], "name": item["name"]} for item in exercises if item.get("id") and item.get("name")]}
     else:
         try:
             program = await _get_program_store(pk).get_program()
@@ -240,8 +243,6 @@ async def _dispatch(args):
     if not parsed.get("sessions"):
         raise ValueError("No training sessions were found in the uploaded file")
     _normalize_exercise_names(parsed)
-    glossary = _get_glossary_store(pk)
-    exercises = await glossary.get_glossary()
     names = {
         exercise.get("name")
         for session in parsed.get("sessions", [])
@@ -253,10 +254,42 @@ async def _dispatch(args):
         glossary_id = await glossary.fuzzy_resolve(name, threshold=0.92, exercises=exercises)
         if glossary_id:
             resolved[name] = glossary_id
+    glossary_by_id = {str(item["id"]): item for item in exercises if item.get("id") and item.get("name")}
+    glossary_by_name = {item["name"].casefold(): item for item in glossary_by_id.values()}
     for session in parsed.get("sessions", []):
         for exercise in session.get("exercises", []):
-            if exercise.get("name") in resolved:
-                exercise["glossary_id"] = resolved[exercise["name"]]
+            name = str(exercise.get("name") or "").strip()
+            suggested = exercise.pop("glossary_id", None)
+            if not is_template:
+                if name in resolved:
+                    exercise["glossary_id"] = resolved[name]
+                continue
+            entry = glossary_by_name.get(name.casefold())
+            if not entry:
+                for candidate_id in (suggested, resolved.get(name)):
+                    candidate = glossary_by_id.get(str(candidate_id))
+                    if candidate and compatible_variation(name, candidate["name"]):
+                        entry = candidate
+                        break
+            if entry:
+                exercise["glossary_id"] = entry["id"]
+                exercise["name"] = entry["name"]
+                if name.casefold() != entry["name"].casefold():
+                    exercise["notes"] = f"{exercise['notes']} Imported as {name}.".strip()
+    if args.get("template_import"):
+        missing = {
+            exercise["name"]
+            for session in parsed.get("sessions", [])
+            for exercise in session.get("exercises", [])
+            if exercise.get("name") and not exercise.get("glossary_id")
+        }
+        if missing:
+            current_exercises = await glossary.get_glossary()
+            created = await asyncio.to_thread(create_missing_exercises, missing, parsed.get("new_exercises") or [], current_exercises, pk)
+            for session in parsed.get("sessions", []):
+                for exercise in session.get("exercises", []):
+                    if exercise.get("name") in created and not exercise.get("glossary_id"):
+                        exercise["glossary_id"] = created[exercise["name"]]
     import_id = await _get_import_store(pk).stage_import({
         "import_type": "template" if classification == "template" else "session_import",
         "source_filename": filename,

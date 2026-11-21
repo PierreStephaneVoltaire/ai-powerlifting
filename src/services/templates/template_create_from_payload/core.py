@@ -112,7 +112,7 @@ def _prepare_template_payload(template):
                 gid = str(gid)
                 exercise["glossary_id"] = gid
                 resolved.add(gid)
-                if exercise["load_type"] in {"percentage", "rpe"}:
+                if exercise["load_type"] == "percentage":
                     required_maxes.add(gid)
             else:
                 name = str(exercise.get("name") or "").strip()

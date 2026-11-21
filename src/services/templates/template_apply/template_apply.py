@@ -16,7 +16,12 @@ def check_max_resolution_gate(
     glossary_exercises: list[dict[str, Any]]
 ) -> list[str]:
 
-    required_ids = template.get("required_maxes", [])
+    required_ids = {
+        exercise.get("glossary_id")
+        for session in template.get("sessions", [])
+        for exercise in session.get("exercises", [])
+        if exercise.get("load_type") == "percentage" and exercise.get("glossary_id")
+    }
     missing = []
     
     glossary_map = {ex["id"]: ex for ex in glossary_exercises}
@@ -110,16 +115,14 @@ def concretize(
                     load_source = "unresolvable"
             elif load_type == "absolute":
                 kg = load_value
-            elif load_type == "rpe":
+            elif load_type == "rpe" and tpl_ex.get("rep_mode") != "amrap" and tpl_ex.get("duration_minutes") is None:
                 e1rm = _get_e1rm(gid, current_maxes, glossary_map)
                 pct = rpe_to_percent(tpl_ex.get("reps"), rpe_target)
                 if e1rm and pct:
                     kg = round_to_2_5(e1rm * pct)
                     load_source = "rpe_estimate"
-                else:
-                    load_source = "unresolvable"
                 
-            exercises.append({
+            exercise = {
                 "name": tpl_ex["name"],
                 "glossary_id": gid,
                 "sets": tpl_ex.get("sets"),
@@ -128,7 +131,12 @@ def concretize(
                 "rpe_target": rpe_target,
                 "load_source": load_source,
                 "notes": tpl_ex.get("notes", "")
-            })
+            }
+            if tpl_ex.get("rep_mode") == "amrap":
+                exercise["rep_mode"] = "amrap"
+            if tpl_ex.get("duration_minutes") is not None:
+                exercise["duration_minutes"] = tpl_ex["duration_minutes"]
+            exercises.append(exercise)
             
         concrete_sessions.append({
             "date": sess_date.isoformat(),

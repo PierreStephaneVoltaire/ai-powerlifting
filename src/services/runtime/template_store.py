@@ -5,6 +5,7 @@ import asyncio
 import copy
 import hashlib
 import logging
+import math
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -13,6 +14,27 @@ from typing import Any
 from services.runtime.aws import dynamodb_resource
 
 logger = logging.getLogger(__name__)
+
+def _normalize_prescriptions(sessions):
+    for session in sessions:
+        for exercise in session.get("exercises") or []:
+            mode = exercise.get("rep_mode")
+            minutes = exercise.get("duration_minutes")
+            if mode not in (None, "amrap"):
+                raise ValueError("Unknown template rep mode")
+            if minutes is not None:
+                if isinstance(minutes, str):
+                    try:
+                        minutes = float(minutes)
+                    except ValueError:
+                        raise ValueError("Cardio minutes must be a positive number") from None
+                if isinstance(minutes, bool) or not isinstance(minutes, (int, float, Decimal)) or not math.isfinite(minutes) or minutes <= 0:
+                    raise ValueError("Cardio minutes must be a positive number")
+                exercise["duration_minutes"] = minutes
+                if mode:
+                    raise ValueError("A timed exercise cannot also prescribe AMRAP")
+            if (mode or minutes is not None) and exercise.get("reps") is not None:
+                raise ValueError("AMRAP and timed prescriptions require an open rep count")
 
 class TemplateNotFoundError(Exception):
     """Raised when a template is not found or not visible to the actor."""
@@ -181,6 +203,7 @@ class TemplateStore:
         now = self._now()
         new_sk = sk or self._new_template_sk()
         template_item = copy.deepcopy(template)
+        _normalize_prescriptions(template_item.get("sessions") or [])
         template_item.pop("is_owner", None)
         meta = template_item.setdefault("meta", {})
 
@@ -235,6 +258,8 @@ class TemplateStore:
 
         now = self._now()
         template_item = copy.deepcopy({**existing, **template})
+        if "sessions" in template:
+            _normalize_prescriptions(template_item.get("sessions") or [])
         template_item.pop("is_owner", None)
         existing_meta = existing.get("meta") if isinstance(existing.get("meta"), dict) else {}
         incoming_meta = template_item["meta"] = {**existing_meta, **template.get("meta", {})}

@@ -118,7 +118,7 @@ class TemplateContractTests(unittest.TestCase):
 
         ai = ModuleType("template_evaluate_ai")
         ai.generate_template_evaluate_report = evaluate
-        with patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.dict(sys.modules, {"services.templates.template_evaluate.template_evaluate_ai": ai}):
+        with patch.object(core, "call_domain", return_value=[{"title": "Qualifying total", "target_total_kg": 575}]), patch.object(core, "_get_template_store", return_value=template_store), patch.object(core, "_get_program_store", return_value=program_store), patch.object(core, "_get_glossary", return_value=[]), patch.dict(sys.modules, {"services.templates.template_evaluate.template_evaluate_ai": ai}):
             report = core.template_evaluate({"pk": "athlete-1", "actor_pk": "person-1", "sk": "template#1", **extra})
         return captured, template_store, report
 
@@ -128,6 +128,7 @@ class TemplateContractTests(unittest.TestCase):
             "current_maxes": {"squat": 200, "bench": 150, "deadlift": 250},
         }
         captured, store, report = self._evaluate(program, [], context="Overreach with separate lift progressions")
+        self.assertEqual(captured["goals"][0]["target_total_kg"], 575)
         self.assertNotIn("dots_score", captured)
         self.assertNotIn("timeline", captured)
         self.assertEqual(captured["context"], "Overreach with separate lift progressions")

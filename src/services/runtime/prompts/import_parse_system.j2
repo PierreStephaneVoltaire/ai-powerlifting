@@ -8,13 +8,16 @@ OUTPUT RULES:
 - If a set has kg values that are clearly absolute weights (not percentages),
   use load_type "absolute" — this is a warning condition for templates.
 - Do not invent exercises, phases, or sessions not present in the source.
-- If a field is genuinely absent, use null — do not guess.
+- For template lifting exercises with prescribed sets and reps or AMRAP and no load, use RPE 8. Preserve explicit loads and RPE. For timed cardio preserve duration_minutes and do not assign a lifting RPE. Use rep_mode "amrap" with null reps for AMRAP sets.
+- If another field is genuinely absent, use null — do not guess.
 - Weeks must be relative integers (1, 2, 3...) for templates.
   For session imports, use ISO date strings (YYYY-MM-DD).
 - For template imports, ignore all calendar dates and competition dates. Use relative week labels and weekdays only; set every session date to null and do not mention calendar dates, competition timing, or timeline calculations in parse_notes.
 - In template spreadsheets, treat `_relative_week` and `week_N` fields as relative week numbers and `_day_of_week` as the training weekday.
 - Treat import_instructions as guidance for interpreting the file, but never invent values that are not supported by its contents.
 - For template imports, set program_name from an explicit name in import_instructions first, then the program title in sheet_headings or the spreadsheet rows. If there is no explicit title, infer a short descriptive title from the program description in import_instructions or the training content. Use the filename without its extension if it meaningfully describes the program. Keep the program's author, duration, and variant when present in the title. Use null if no meaningful title can be inferred. Never use "Imported Template" or add a unique identifier.
+- For template imports, use athlete_context.glossary to match exercises by meaning and reuse its exact name and id. Map 45-degree back extension to Back Extension when present. Preserve meaningful variations and leave glossary_id null when uncertain.
+- For each genuinely new exercise absent from the glossary, provide an entry in new_exercises with its exact name, category, fatigue_category, equipment, primary_muscles, secondary_muscles, tertiary_muscles, fatigue_profile and fatigue_profile_reasoning. Category must be one of squat, bench, deadlift, back, chest, arm, legs, core, lower_back. Equipment must be one of barbell, dumbbell, cable, machine, bodyweight, hex_bar, bands, kettlebell. Fatigue category must be one of primary_axial, primary_upper, secondary, accessory. Fatigue axes axial, neural, peripheral and systemic must each be numbers from 0 to 1. Use only these muscle names: quads, hamstrings, glutes, calves, tibialis_anterior, hip_flexors, adductors, chest, triceps, front_delts, side_delts, rear_delts, lats, traps, rhomboids, teres_major, biceps, forearms, erectors, lower_back, core, obliques, serratus. Use one to four primary muscles, at most five secondary and five tertiary, with no repeats across groups. Provide brief fatigue reasoning.
 - Use canonical glossary names for competition lifts. For example, parse "Bench heavy single" as name "Bench Press" with "Heavy single" in notes; put prescription adjectives and set labels in notes, not in the exercise name. Preserve real variations such as "Paused Bench Press" as separate exercise names.
 
 WARNINGS to include in output:
@@ -44,8 +47,11 @@ Return schema:
       "exercises": [
         {
           "name": "string",
+          "glossary_id": "string | null",
           "sets": number,
-          "reps": number,
+          "reps": number | null,
+          "rep_mode": "amrap" | null,
+          "duration_minutes": number | null,
           "load_type": "string",
           "load_value": number | null,
           "rpe_target": number | null,
@@ -54,6 +60,7 @@ Return schema:
       ]
     }
   ],
+  "new_exercises": [{"name": "string", "category": "string", "fatigue_category": "string", "equipment": "string", "primary_muscles": ["string"], "secondary_muscles": ["string"], "tertiary_muscles": ["string"], "fatigue_profile": {"axial": 0.0, "neural": 0.0, "peripheral": 0.0, "systemic": 0.0}, "fatigue_profile_reasoning": "string"}],
   "warnings": [
     { "type": "string", "exercises": ["string"], "message": "string" }
   ],

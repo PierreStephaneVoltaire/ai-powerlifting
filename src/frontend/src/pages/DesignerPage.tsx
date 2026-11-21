@@ -155,7 +155,7 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
 
   const changeRepsMode = (next: RepsMode) => {
     setRepsMode(next)
-    const repsMaxFor = (reps: number) => next === 'range' ? reps : null
+    const repsMaxFor = (reps: number | null) => next === 'range' ? reps : null
     onPatch(ex.id, {
       reps_max: repsMaxFor(ex.reps),
       ...(plan.length ? { set_plan: plan.map((set) => ({ ...set, reps_max: repsMaxFor(set.reps) })) } : {}),

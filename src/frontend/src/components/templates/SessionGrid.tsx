@@ -2,6 +2,7 @@ import React from 'react'
 import { SimpleGrid, Paper, Text, Stack, Group, Badge } from '@mantine/core'
 import { Template } from '@powerlifting/types'
 import { LoadTypeBadge } from '../shared/LoadTypeBadge'
+import { templatePrescription } from '../../utils/templatePrescription'
 
 interface Props {
   template: Template
@@ -34,13 +35,13 @@ export const SessionGrid: React.FC<Props> = ({ template }) => {
                         <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
                           <Text size="sm" truncate>{ex.name}</Text>
                           <Text size="xs" c="dimmed">
-                            {ex.sets}x{ex.reps}
-                            {ex.load_type === 'rpe' && ex.rpe_target != null && ` @ RPE ${ex.rpe_target}`}
-                            {ex.load_type === 'percentage' && ex.load_value != null && ` (${(ex.load_value * 100).toFixed(0)}%)`}
-                            {ex.load_type === 'absolute' && ex.load_value != null ? ` ${ex.load_value}kg` : ''}
+                            {templatePrescription(ex)}
+                            {ex.duration_minutes == null && ex.load_type === 'rpe' && ex.rpe_target != null && ` @ RPE ${ex.rpe_target}`}
+                            {ex.duration_minutes == null && ex.load_type === 'percentage' && ex.load_value != null && ` (${(ex.load_value * 100).toFixed(0)}%)`}
+                            {ex.duration_minutes == null && ex.load_type === 'absolute' && ex.load_value != null ? ` ${ex.load_value}kg` : ''}
                           </Text>
                         </Stack>
-                        {ex.load_type && <LoadTypeBadge source={ex.load_type} />}
+                        {ex.duration_minutes == null && ex.load_type && <LoadTypeBadge source={ex.load_type} />}
                       </Group>
                     ))}
                   </Stack>

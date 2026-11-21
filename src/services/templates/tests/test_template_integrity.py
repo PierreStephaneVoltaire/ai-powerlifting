@@ -7,6 +7,8 @@ import pytest
 
 from services.runtime.template_store import TemplateStore
 from services.templates.template_apply_confirm.core import _new_sessions
+from services.templates.template_apply.template_apply import check_max_resolution_gate, concretize
+from services.templates.template_create_from_block.template_convert import convert_block_to_template
 
 
 class PlainTable:
@@ -55,6 +57,27 @@ def test_creating_the_same_template_twice_makes_two_templates():
     second = result.put_template_sync(template("New"), actor_pk="alice", published=False)
     assert first != second
     assert sorted(item["sk"] for item in result.list_templates_sync(actor_pk="alice")) == sorted([first, second])
+
+
+@pytest.mark.parametrize("exercise", [
+    {"duration_minutes": value} for value in (0, -5, "fifteen", float("nan"), True)
+] + [{"duration_minutes": 15, "rep_mode": "amrap"}, {"rep_mode": "amrap", "reps": 8}, {"rep_mode": "unknown"}])
+def test_invalid_prescriptions_do_not_create_or_overwrite_a_template(exercise):
+    result = store()
+    seed(result)
+    incoming = {"sessions": [{"exercises": [exercise]}]}
+    with pytest.raises(ValueError):
+        result.put_template_sync(incoming, actor_pk="alice")
+    with pytest.raises(ValueError):
+        result.update_template_sync("template#1", incoming, actor_pk="alice")
+    assert result.get_template_sync("template#1", actor_pk="alice")["sessions"] == []
+
+
+def test_existing_cardio_duration_can_be_saved_from_a_legacy_client():
+    result = store()
+    seed(result)
+    result.update_template_sync("template#1", {"sessions": [{"exercises": [{"duration_minutes": "15"}]}]}, actor_pk="alice")
+    assert result.get_template_sync("template#1", actor_pk="alice")["sessions"][0]["exercises"][0]["duration_minutes"] == 15
 
 
 def test_index_keeps_templates_created_by_different_people():
@@ -141,6 +164,43 @@ def test_template_applications_get_fresh_session_ids():
     assert first[0]["id"] == first[0]["session_id"]
     assert first[0]["id"] != second[0]["id"]
     assert blueprint[0]["id"] == "blueprint-session"
+
+
+def test_template_apply_preserves_amrap_and_duration_without_inventing_loads():
+    sessions = concretize({"sessions": [{"week_number": 1, "day_of_week": "Monday", "exercises": [
+        {"name": "Leg Curl", "sets": 2, "reps": None, "rep_mode": "amrap", "load_type": "rpe", "rpe_target": 8, "notes": "finish safely"},
+        {"name": "Air Bike", "sets": 1, "reps": None, "duration_minutes": 15, "load_type": "unresolvable", "notes": "easy"},
+        {"name": "Timed Load", "sets": 2, "reps": None, "duration_minutes": 5, "load_type": "absolute", "load_value": 20},
+    ]}]}, {}, [], __import__("datetime").date(2026, 8, 31))
+    amrap, cardio, timed_load = sessions[0]["planned_exercises"]
+    assert (amrap["rep_mode"], amrap["reps"], amrap["kg"], amrap["rpe_target"], amrap["notes"]) == ("amrap", None, None, 8, "finish safely")
+    assert (cardio["duration_minutes"], cardio["reps"], cardio["kg"], cardio["rpe_target"]) == (15, None, None, None)
+    assert (timed_load["duration_minutes"], timed_load["kg"]) == (5, 20)
+
+
+def test_max_resolution_gate_requires_only_percentages():
+    template = {"required_maxes": ["lift-rpe", "lift-percent"], "sessions": [{"exercises": [
+        {"glossary_id": "lift-rpe", "load_type": "rpe"},
+        {"glossary_id": "lift-amrap", "load_type": "rpe", "rep_mode": "amrap"},
+        {"glossary_id": "lift-time", "load_type": "unresolvable", "duration_minutes": 15},
+        {"glossary_id": "lift-percent", "load_type": "percentage"},
+    ]}]}
+    assert check_max_resolution_gate(template, {}, [
+        {"id": "lift-rpe"}, {"id": "lift-amrap"}, {"id": "lift-time"}, {"id": "lift-percent"},
+    ]) == ["lift-percent"]
+
+
+def test_block_conversion_preserves_amrap_and_duration_without_fabricating_reps():
+    converted = convert_block_to_template({"meta": {}, "sk": "program#1", "sessions": [{
+        "date": "2026-09-01", "day": "Tuesday", "planned_exercises": [
+            {"name": "Leg Curl", "sets": 2, "reps": None, "rep_mode": "amrap", "kg": None, "load_source": "unresolvable", "notes": "to failure"},
+            {"name": "Stair Stepper", "sets": 1, "reps": None, "duration_minutes": 15, "kg": None, "load_source": "unresolvable"},
+            {"name": "Loaded Bike", "sets": 1, "reps": None, "duration_minutes": 5, "kg": 20, "load_source": "absolute"},
+        ]}]}, {})
+    amrap, cardio, timed_load = converted["sessions"][0]["exercises"]
+    assert (amrap["rep_mode"], amrap["reps"], amrap["notes"]) == ("amrap", None, "to failure")
+    assert (cardio["duration_minutes"], cardio["reps"], cardio["load_type"], cardio["load_value"]) == (15, None, "unresolvable", None)
+    assert (timed_load["duration_minutes"], timed_load["reps"], timed_load["load_type"], timed_load["load_value"]) == (5, None, "absolute", 20)
 
 
 def test_template_apply_confirm_starts_one_new_block_and_keeps_existing_sessions(monkeypatch):

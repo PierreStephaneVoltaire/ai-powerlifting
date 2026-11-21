@@ -103,10 +103,15 @@ def _prepare_template(template, glossary=None):
             exercise["notes"] = notes
             exercise.setdefault("sets", None)
             exercise.setdefault("reps", None)
+            if exercise.get("duration_minutes") is not None and exercise["sets"] is None:
+                exercise["sets"] = 1
             load_type = str(exercise.get("load_type") or "unresolvable").lower()
             if load_type not in {"rpe", "percentage", "absolute", "unresolvable"}:
                 load_type = "unresolvable"
             exercise["load_type"] = load_type
+            if load_type == "rpe":
+                target = exercise.get("rpe_target") or exercise.get("load_value")
+                exercise["rpe_target"] = exercise["load_value"] = target
             if load_type == "percentage":
                 try:
                     value = float(exercise.get("load_value"))
@@ -114,11 +119,14 @@ def _prepare_template(template, glossary=None):
                 except (TypeError, ValueError):
                     exercise["load_type"] = "unresolvable"
                     exercise["load_value"] = None
-            if exercise["load_type"] == "unresolvable" or exercise.get("load_value") in (None, ""):
+            missing_load = exercise["load_type"] == "unresolvable" or exercise.get("load_value") in (None, "")
+            has_lifting_reps = exercise.get("reps") or exercise.get("rep_mode") == "amrap"
+            if missing_load and has_lifting_reps and exercise.get("sets") and exercise.get("duration_minutes") is None:
                 exercise["load_type"] = "rpe"
-                exercise["load_value"] = USER_SELECTED_RPE
-                exercise["rpe_target"] = exercise.get("rpe_target") or USER_SELECTED_RPE
-                note = f"Lifter selects the load at RPE {USER_SELECTED_RPE}."
+                target = exercise.get("rpe_target") or USER_SELECTED_RPE
+                exercise["load_value"] = target
+                exercise["rpe_target"] = target
+                note = f"Lifter selects the load at RPE {target}."
                 exercise["notes"] = f"{exercise['notes']} {note}".strip() if note not in str(exercise["notes"]) else exercise["notes"]
             load_type = exercise["load_type"]
             if glossary and canonical != name:
@@ -134,7 +142,7 @@ def _prepare_template(template, glossary=None):
                 glossary_id = str(glossary_id)
                 exercise["glossary_id"] = glossary_id
                 resolved.add(glossary_id)
-                if load_type in {"rpe", "percentage"}:
+                if load_type == "percentage":
                     required_maxes.add(glossary_id)
             elif str(exercise.get("name") or "").strip():
                 unresolved.add(str(exercise["name"]).strip())

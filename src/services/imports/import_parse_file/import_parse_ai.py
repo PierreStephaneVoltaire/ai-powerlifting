@@ -23,6 +23,7 @@ _TOOL_SCHEMA = {
                 "phases": {"type": "array", "items": {"type": "object"}},
                 "sessions": {"type": "array", "items": {"type": "object"}},
                 "warnings": {"type": "array", "items": {"type": "object"}},
+                "new_exercises": {"type": "array", "items": {"type": "object"}},
                 "parse_notes": {"type": "string"},
             },
             "required": ["program_name", "phases", "sessions", "warnings", "parse_notes"],

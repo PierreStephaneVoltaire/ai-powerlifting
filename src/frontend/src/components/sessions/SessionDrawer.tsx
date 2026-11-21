@@ -365,7 +365,7 @@ function SortableExerciseItem({
       )}
 
       <Box p={16}>
-        <Group justify="flex-end" mb="xs">
+        {exercise.duration_minutes == null && <Group justify="flex-end" mb="xs">
           <SegmentedControl
             size="xs"
             value={layout}
@@ -376,9 +376,13 @@ function SortableExerciseItem({
             ]}
             data-testid={`exercise-layout-${index}`}
           />
-        </Group>
+        </Group>}
 
-        {layout === 'straight' ? (
+        {exercise.duration_minutes != null ? (
+          <DraftNumberInput label="Minutes per bout" value={exercise.duration_minutes}
+            onValueChange={(next) => next != null && onUpdate(index, 'duration_minutes', next)}
+            isValid={(value) => value > 0} nullable={false} commitOnlyValid disabled={disabled} />
+        ) : layout === 'straight' ? (
           <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" mb="xs">
             <Box>
               <Text className="if-small-label">Sets</Text>
@@ -395,7 +399,7 @@ function SortableExerciseItem({
               />
             </Box>
             <Box>
-              <Text className="if-small-label">Reps</Text>
+              <Text className="if-small-label">{exercise.rep_mode === 'amrap' ? 'AMRAP reps completed' : 'Reps'}</Text>
               <DraftNumberInput
                 value={straight.reps}
                 onValueChange={(next) => onUpdateStraight(index, 'reps', next)}
@@ -453,7 +457,7 @@ function SortableExerciseItem({
             </Box>
             <SimpleGrid cols={4} spacing="xs">
               <Text className="if-small-label">Set</Text>
-              <Text className="if-small-label">Reps</Text>
+              <Text className="if-small-label">{exercise.rep_mode === 'amrap' ? 'AMRAP reps completed' : 'Reps'}</Text>
               <Text className="if-small-label">{unit}</Text>
               <Text className="if-small-label">RPE</Text>
             </SimpleGrid>
@@ -547,7 +551,11 @@ function editableSession(session: Session): Session {
       sets: pe.sets,
       reps: pe.reps,
       kg: pe.kg,
-      notes: '',
+      rep_mode: pe.rep_mode,
+      duration_minutes: pe.duration_minutes,
+      glossary_id: pe.glossary_id,
+      rpe_target: pe.rpe_target,
+      notes: pe.notes ?? '',
       set_statuses: Array(pe.sets).fill('pending'),
       failed_set_reasons: Array.from({ length: pe.sets }, () => []),
     }))

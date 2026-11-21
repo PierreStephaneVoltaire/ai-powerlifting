@@ -30,6 +30,8 @@ function loadLabel(set: Pick<PlannedSet, 'kg' | 'rpe_target'>, formatLoad: (kg: 
 }
 
 export function formatPlannedExercise(exercise: PlannedExercise, formatLoad: (kg: number) => string): string {
+  if (exercise.duration_minutes != null) return exercise.sets > 1 ? `${exercise.sets} × ${exercise.duration_minutes} min` : `${exercise.duration_minutes} min`
+  if (exercise.rep_mode === 'amrap') return `${exercise.sets} × AMRAP${loadLabel(exercise, formatLoad)}`
   if (!exercise.set_plan?.length) {
     return `${exercise.sets}x${repsLabel(exercise.reps, exercise.reps_max)}${loadLabel(exercise, formatLoad)}`
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react'
 import {
-  Modal, Stack, Group, Button, TextInput, Select, Autocomplete, ActionIcon, Text, Divider,
+  Modal, Stack, Group, Button, TextInput, Select, Autocomplete, ActionIcon, Text, Divider, SegmentedControl,
 } from '@mantine/core'
 import type { TemplateSession, TemplateExercise, GlossaryExercise } from '@powerlifting/types'
 
@@ -21,7 +21,11 @@ const LOAD_TYPE_OPTIONS = [
 ]
 
 function blankExercise(): TemplateExercise {
-  return { name: '', sets: 3, reps: 5, load_type: 'rpe', load_value: null, rpe_target: 8, notes: '', glossary_id: undefined }
+  return { name: '', sets: 3, reps: 5, load_type: 'rpe', load_value: 8, rpe_target: 8, notes: '' }
+}
+
+function prescriptionMode(ex: TemplateExercise) {
+  return ex.duration_minutes != null ? 'minutes' : ex.rep_mode === 'amrap' ? 'amrap' : 'reps'
 }
 
 export function TemplateSessionModal({ session, glossary, onSave, onClose, disabled }: Props) {
@@ -185,32 +189,56 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose, disab
                   onChange={(e) => updateExercise(i, { sets: Number(e.currentTarget.value) || 1 })}
                   disabled={disabled}
                 />
-                <TextInput
-                  type="number"
-                  label="Reps"
-                  value={ex.reps}
-                  onChange={(e) => updateExercise(i, { reps: Number(e.currentTarget.value) || 1 })}
-                  disabled={disabled}
-                />
+                <Stack gap={4} style={{ flex: 1 }}>
+                  <Text size="sm" fw={500}>Prescription</Text>
+                  <SegmentedControl
+                    value={prescriptionMode(ex)}
+                    data={[{ label: 'Reps', value: 'reps' }, { label: 'AMRAP', value: 'amrap' }, { label: 'Minutes', value: 'minutes' }]}
+                    onChange={(value) => updateExercise(i, value === 'minutes'
+                      ? { reps: null, rep_mode: undefined, duration_minutes: ex.duration_minutes ?? 15, load_type: 'unresolvable', load_value: null, rpe_target: null }
+                      : {
+                        reps: value === 'reps' ? ex.reps ?? 1 : null,
+                        rep_mode: value === 'amrap' ? 'amrap' : undefined,
+                        duration_minutes: undefined,
+                        ...(ex.duration_minutes != null ? { load_type: 'rpe', load_value: 8, rpe_target: 8 } : {}),
+                      })}
+                    disabled={disabled}
+                    size="xs"
+                  />
+                  {prescriptionMode(ex) === 'minutes' ? (
+                    <TextInput type="number" label="Minutes" min={1} value={ex.duration_minutes ?? ''}
+                      onChange={(e) => updateExercise(i, { duration_minutes: Math.max(1, Number(e.currentTarget.value) || 1) })} disabled={disabled} />
+                  ) : prescriptionMode(ex) === 'reps' ? (
+                    <TextInput type="number" label="Reps" min={1} value={ex.reps ?? ''}
+                      onChange={(e) => updateExercise(i, { reps: Math.max(1, Number(e.currentTarget.value) || 1) })} disabled={disabled} />
+                  ) : <Text size="sm">As many reps as possible</Text>}
+                </Stack>
                 <Select
                   label="Load Type"
                   value={ex.load_type}
-                  onChange={(v) => updateExercise(i, { load_type: (v as TemplateExercise['load_type']) ?? 'rpe' })}
+                  onChange={(v) => {
+                    const mode = (v as TemplateExercise['load_type']) ?? 'rpe'
+                    const target = mode === 'rpe' ? ex.rpe_target ?? 8 : null
+                    updateExercise(i, { load_type: mode, rpe_target: target, load_value: target })
+                  }}
                   data={LOAD_TYPE_OPTIONS}
                   allowDeselect={false}
-                  disabled={disabled}
+                  disabled={disabled || prescriptionMode(ex) === 'minutes'}
                 />
-                {ex.load_type === 'rpe' && (
+                {prescriptionMode(ex) !== 'minutes' && ex.load_type === 'rpe' && (
                   <TextInput
                     type="number"
                     label="RPE Target"
                     value={ex.rpe_target ?? ''}
-                    onChange={(e) => updateExercise(i, { rpe_target: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })}
+                    onChange={(e) => {
+                      const rpe = e.currentTarget.value === '' ? null : Number(e.currentTarget.value)
+                      updateExercise(i, { rpe_target: rpe, load_value: rpe })
+                    }}
                     step={0.5}
                     disabled={disabled}
                   />
                 )}
-                {(ex.load_type === 'absolute' || ex.load_type === 'percentage') && (
+                {prescriptionMode(ex) !== 'minutes' && (ex.load_type === 'absolute' || ex.load_type === 'percentage') && (
                   <TextInput
                     type="number"
                     label={ex.load_type === 'absolute' ? 'Load (kg)' : 'Load (%)'}

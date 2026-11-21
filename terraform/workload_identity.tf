@@ -202,6 +202,11 @@ resource "aws_iam_role_policy" "workload_identity" {
         Action   = [for action in lookup(local.workload_identity_dynamo_actions, each.key, []) : "dynamodb:${action}"]
         Resource = flatten([for table in lookup(local.workload_identity_tables, each.key, []) : ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/${table}", "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/${table}/index/*"]])
       }] : [],
+      each.key == "pl-templates" ? [{
+        Effect   = "Allow"
+        Action   = ["dynamodb:Query"]
+        Resource = ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/if-sessions"]
+      }] : [],
       flatten([for enabled in(contains(["pl-export", "pl-imports", "pl-lift-profiles", "pl-templates", "pl-videos"], each.key) ? [true] : []) : [{
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:Scan"]
