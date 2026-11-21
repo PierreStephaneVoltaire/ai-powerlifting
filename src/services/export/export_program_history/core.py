@@ -1,8 +1,6 @@
 """Lambda core for export_program_history — replicates tools/health/tool.py dispatcher.
 
 Exports the full training program to an Excel (.xlsx) or Markdown (.md) file.
-AI section calls (program_evaluation) are intentionally omitted from the
-analysis bundle; correlation uses cached DynamoDB values only.
 """
 from __future__ import annotations
 
@@ -79,8 +77,6 @@ def _get_versioned_item_sync(table_name: str, pk: str, sk: str) -> dict | None:
 
 
 def _build_sectioned_analysis(
-    program: dict,
-    sessions: list[dict],
     *,
     weeks: int = 1,
     block: str = "current",
@@ -91,8 +87,6 @@ def _build_sectioned_analysis(
     week_end: int | None = None,
 ) -> dict:
     return analytics_client.weekly_analysis(
-        program,
-        sessions,
         weeks=weeks,
         block=block,
         window_start=window_start,
@@ -146,13 +140,7 @@ def _export_window(args: dict) -> dict:
 
 
 def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, session_block: str = ACTIVE, window: dict | None = None) -> dict:
-    """Assemble the analysis bundle threaded into the XLSX export.
-
-    Uses the pure weekly_analysis
-    function. Missing pieces degrade gracefully.
-
-    NOTE: program_evaluation AI call is omitted in the lambda (AI-excluded).
-    """
+    """Assemble the analysis bundle for the export."""
     from .config import IF_HEALTH_TABLE_NAME
     from .prompt_context import summarize_lift_profiles
 
@@ -224,12 +212,13 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
     else:
         effective_weeks = 1
 
+    access = getattr(store, 'export_access', None)
     try:
-        if window:
+        if access and 'analytics:read' not in access.get('permissions', []):
+            pass
+        elif window:
             bundle["weekly"] = _build_sectioned_analysis(
-                program,
-                sessions,
-                weeks=effective_weeks,
+                weeks=max(1, window['week_end'] - window['week_start'] + 1) if 'week_start' in window and 'week_end' in window else effective_weeks,
                 block=session_block,
                 window_start=window.get("window_start"),
                 window_end=window.get("window_end"),
@@ -240,8 +229,6 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
         else:
             weeks = [int(s["week_number"]) for s in sessions if s.get("week_number")]
             bundle["weekly"] = _build_sectioned_analysis(
-                program,
-                sessions,
                 weeks=effective_weeks,
                 block=session_block,
                 week_start=min(weeks, default=1),
@@ -251,8 +238,21 @@ def _build_analysis_bundle(program: dict, sessions: list[dict], store, *, sessio
     except Exception as e:
         logger.warning("export: weekly_analysis failed: %s", e)
 
+    if session_block == ACTIVE and (not access or 'analytics:read' in access.get('permissions', [])) and window:
+        selected_weeks = int(window.get('week_end', 0)) - int(window.get('week_start', 1)) + 1
+        reports = []
+        if selected_weeks >= 4:
+            reports.append(('correlation', 'analytics.correlation'))
+        if window.get('window_key') == 'block' and sum(bool(s.get('completed')) and (s.get('block') or 'current') == 'current' for s in sessions) >= 4:
+            reports.append(('program_evaluation', 'analytics.block_evaluation'))
+        for field, operation in reports:
+            try:
+                report = analytics_client.call(operation, {'pk': active_pk, 'blockKey': 'current', 'cacheOnly': True, 'refresh': False}, domain='analytics-ai')
+                if isinstance(report, dict) and not report.get('cache_miss'):
+                    bundle[field] = report
+            except Exception as e:
+                logger.warning('export: cached %s unavailable: %s', field, e)
 
-    access = getattr(store, 'export_access', None)
     if access:
         allowed = set(access['permissions'])
         for field, domain in {'weekly': 'analytics', 'correlation': 'analytics', 'program_evaluation': 'analytics', 'glossary': 'glossary', 'federation_library': 'federation', 'weight_log': 'weight-log', 'max_history': 'performance', 'lift_profiles': 'lift-profiles'}.items():

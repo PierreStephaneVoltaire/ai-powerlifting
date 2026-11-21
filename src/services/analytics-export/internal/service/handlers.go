@@ -15,6 +15,36 @@ import (
 
 const currentBlockKey = "current"
 
+func hasPermission(access map[string]any, permission string) bool {
+	return containsPermission(access["permissions"], permission)
+}
+
+func containsPermission(raw any, permission string) bool {
+	permissions, _ := raw.([]any)
+	for _, value := range permissions {
+		if value == permission {
+			return true
+		}
+	}
+	return false
+}
+
+func permittedSessions(raw any, includeBodyweight bool) []map[string]any {
+	sessions, _ := raw.([]map[string]any)
+	result := make([]map[string]any, 0, len(sessions))
+	for _, session := range sessions {
+		copy := make(map[string]any, len(session))
+		for key, value := range session {
+			if !includeBodyweight && (key == "body_weight_kg" || key == "body_weight_lb") {
+				continue
+			}
+			copy[key] = value
+		}
+		result = append(result, copy)
+	}
+	return result
+}
+
 func envelope(content []byte, contentType, filename string) map[string]any {
 	return map[string]any{
 		"content_base64":      base64.StdEncoding.EncodeToString(content),
@@ -23,7 +53,7 @@ func envelope(content []byte, contentType, filename string) map[string]any {
 	}
 }
 
-func (s *Service) blockExport(ctx context.Context, arguments map[string]any, caller auth.Caller) (map[string]any, error) {
+func (s *Service) blockExport(ctx context.Context, arguments map[string]any, caller auth.Caller, access map[string]any) (map[string]any, error) {
 	blockKey, _ := arguments["blockKey"].(string)
 	format, _ := arguments["format"].(string)
 	if format != "xlsx" && format != "markdown" {
@@ -45,8 +75,25 @@ func (s *Service) blockExport(ctx context.Context, arguments map[string]any, cal
 	if render.BlockIsCurrent(bundle) {
 		return nil, apperr.BadRequest("Use the existing current-block program export for current analysis.")
 	}
-	if sessions, err := s.bundles.Sessions(ctx, caller); err == nil {
-		bundle["sessions"] = sessions
+	for _, key := range []string{"sessions", "weightLog", "dietNotes", "measurements", "liftProfiles", "athleteSex"} {
+		delete(bundle, key)
+	}
+	bundle["athleteSex"] = access["athlete_sex"]
+	if snapshot, err := s.bundles.Snapshot(ctx, caller); err == nil {
+		isSelf, _ := access["is_self"].(bool)
+		if hasPermission(access, "sessions:read") && (isSelf || containsPermission(access["granted_permissions"], "sessions:read")) {
+			bundle["sessions"] = permittedSessions(snapshot["sessions"], hasPermission(access, "weight-log:read"))
+		}
+		if hasPermission(access, "weight-log:read") {
+			bundle["weightLog"] = snapshot["weightLog"]
+		}
+		program, _ := snapshot["program"].(map[string]any)
+		if hasPermission(access, "program:read") {
+			bundle["dietNotes"], bundle["measurements"] = program["diet_notes"], program["meta"]
+		}
+		if hasPermission(access, "lift-profiles:read") {
+			bundle["liftProfiles"] = program["lift_profiles"]
+		}
 	}
 	if s.ai != nil {
 		if evaluation, err := s.ai.BlockEvaluation(ctx, blockKey, caller); err == nil && evaluation != nil {
@@ -71,7 +118,7 @@ func notFoundBundle(blockKey string) error {
 	return apperr.NotFound("No block analysis found for %s. Open or generate the past block analysis before exporting.", blockKey)
 }
 
-func (s *Service) lifetimeExport(ctx context.Context, arguments map[string]any, _ auth.Caller) (map[string]any, error) {
+func (s *Service) lifetimeExport(ctx context.Context, arguments map[string]any, _ auth.Caller, _ map[string]any) (map[string]any, error) {
 	athlete, _ := arguments["pk"].(string)
 	format, _ := arguments["format"].(string)
 	extension, contentType := "md", render.MarkdownType

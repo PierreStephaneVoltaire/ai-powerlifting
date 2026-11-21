@@ -158,10 +158,17 @@ resource "kubectl_manifest" "service_callers" {
     spec = {
       targetRefs = [{ group = "", kind = "Service", name = each.value.service }]
       action     = "ALLOW"
-      rules = [{
+      rules = concat([{
         from = [{ source = { principals = [for caller in local.mesh_callers[each.key] : "cluster.local/ns/${var.namespace}/sa/${caller}"] } }]
         to   = [{ operation = { ports = [for port in each.value.ports : tostring(port)] } }]
-      }]
+        }], [for caller in(each.key == "pl-analytics-ai" ? ["pl-export"] : []) : {
+        from = [{ source = { principals = ["cluster.local/ns/${var.namespace}/sa/${caller}"] } }]
+        to = [{ operation = {
+          ports   = ["8000"]
+          methods = ["POST"]
+          paths   = ["/operations/analytics.correlation", "/operations/analytics.block_evaluation"]
+        } }]
+      }])
     }
   })
 

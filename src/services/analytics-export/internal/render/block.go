@@ -121,6 +121,17 @@ func (b block) tables() []Table {
 		{"Lift Metrics", "Lift Metrics", b.liftMetricRows()},
 	}
 	optional := []Table{
+		{"e1RM Progression and DOTS Trend", "e1RM and DOTS", b.scoreTrendRows()},
+		{"Body Weight Trend", "Body Weight", b.bodyweightRows()},
+		{"Nutrition and Sleep", "Nutrition and Sleep", b.nutritionRows()},
+		{"Athlete Measurements", "Measurements", b.measurementRows()},
+		{"Lift Style Profiles", "Lift Profiles", b.profileRows()},
+		{"Banister Fitness and Fatigue", "Banister", b.banisterRows()},
+		{"Peaking Timeline", "Peaking Timeline", b.timelineRows()},
+		{"Peaking Specificity", "Peaking Specificity", b.timelineSpecificityRows()},
+		{"Fatigue Decoupling", "Decoupling", b.decouplingRows()},
+		{"Taper Quality", "Taper Quality", b.taperRows()},
+		{"Volume Landmarks", "Volume Landmarks", b.landmarkRows()},
 		{"Sessions", "Sessions", b.sessionRows()},
 		{"Stimulus-Adjusted INOL", "INOL", b.inolRows()},
 		{"EWMA ACWR", "ACWR", b.acwrRows()},
@@ -210,7 +221,7 @@ func competitionRows(value any) []Row {
 		{"Metric", "Value"},
 		{"Competition", outcome["competitionName"]},
 		{"Date", outcome["competitionDate"]},
-		{"Bodyweight", formatKg(outcome["bodyweightKg"])},
+		{"Bodyweight", formatBodyweight(outcome["bodyweightKg"])},
 		{"Actual total", formatKg(results["total_kg"])},
 		{"DOTS", formatNumber(outcome["dots"], 2)},
 		{"IPF GL", formatNumber(outcome["ipfGl"], 2)},
@@ -441,6 +452,9 @@ func (b block) sessionRows() []Row {
 	rows := []Row{{"Date", "Day", "Status", "Exercise", "Prescription", "Load", "RPE", "Notes"}}
 	for _, session := range sortedSessions(sessionList(b.bundle["sessions"])) {
 		date := text(session["date"])
+		if block, sessionBlock := text(b.meta["block"]), text(session["block"]); block != "" && sessionBlock != block {
+			continue
+		}
 		if start != "" && date < start {
 			continue
 		}
@@ -555,6 +569,9 @@ func correlationRows(correlation map[string]any) []Row {
 		return []Row{headers, {"No cached ROI correlation report for this block.", "", "", "", "", ""}}
 	}
 	rows := []Row{headers}
+	if summary := text(correlation["summary"]); summary != "" {
+		rows = append(rows, Row{"Summary", "", "", "", summary, ""})
+	}
 	findings := list(correlation["findings"])
 	if len(findings) == 0 {
 		message := firstText(correlation["summary"], correlation["insufficient_data_reason"], "No findings.")

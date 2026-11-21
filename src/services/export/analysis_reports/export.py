@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 from datetime import date, datetime
 from decimal import Decimal
@@ -15,7 +16,9 @@ from typing import Any
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from services.runtime.lift_calculations import calculate_ipf_gl, estimate_set_e1rm
 from services.runtime.lift_profiles import technique_text
+from .weekly_tables import analysis_tables
 
 _HEADER_FONT = Font(bold=True, size=11)
 _SECTION_FONT = Font(bold=True, size=11, color="1F3864")
@@ -64,6 +67,14 @@ def _num(v: Any) -> Any:
     if isinstance(v, (dict, list)):
         return str(v)
     return v
+
+def _display_bodyweight(v: Any) -> Any:
+    if _is_blank(v):
+        return v
+    try:
+        return round(float(v), 2)
+    except (TypeError, ValueError):
+        return v
 
 def _is_blank(v: Any) -> bool:
     return v is None or v == ""
@@ -419,13 +430,15 @@ def _build_program_workbook(
 
     if analysis is not None:
         _write_weekly_analysis_sheet(wb, analysis.get("weekly") or {})
-        _write_trends_sheet(wb, prepared_sessions, weight_log, diet_notes, sex, meta)
+        _write_trends_sheet(wb, sessions, weight_log, diet_notes, sex)
         _write_per_lift_metrics_sheet(wb, analysis.get("weekly") or {})
+        for title, headers, rows in analysis_tables(analysis.get("weekly") or {}, diet_notes, meta):
+            _write_sheet(wb.create_sheet(title), headers, rows)
         _write_correlation_sheet(wb, analysis.get("correlation"))
         _write_program_evaluation_sheet(wb, analysis.get("program_evaluation"))
     else:
         _write_weekly_analysis_sheet(wb, {})
-        _write_trends_sheet(wb, prepared_sessions, weight_log, diet_notes, sex, meta)
+        _write_trends_sheet(wb, sessions, weight_log, diet_notes, sex)
         _write_per_lift_metrics_sheet(wb, {})
         _write_correlation_sheet(wb, None)
         _write_program_evaluation_sheet(wb, None)
@@ -513,7 +526,7 @@ def build_program_markdown(
         _md_weight_log(weight_log),
         _md_supplements(supplements, supplement_phases),
         _md_lift_profiles(lift_profiles),
-        _md_analysis(analysis, prepared_sessions, weight_log, diet_notes, sex, meta),
+        _md_analysis(analysis, sessions_raw, weight_log, diet_notes, sex, meta),
         _md_notes(meta, phases, prepared_sessions, competitions, diet_notes, supplement_phases),
     ]
 
@@ -576,7 +589,8 @@ def _md_overview(meta: dict, creator: str, version_token: str, sex: str, competi
     if meta.get("equipment"):
         details.append(f"**Equipment:** {meta['equipment']}")
     bw = _first_non_blank(meta.get("current_body_weight_kg"), meta.get("bodyweight_kg"))
-    if bw:
+    if not _is_blank(bw):
+        bw = _display_bodyweight(bw)
         details.append(f"**Current BW:** {bw} kg")
     sex_label = "Male" if sex == "male" else "Female" if sex == "female" else sex.title()
     details.append(f"**Sex:** {sex_label}")
@@ -664,7 +678,7 @@ def _md_max_history(max_history: list[dict], sex: str, meta: dict) -> str:
         bw = _first_non_blank(entry.get("bodyweight_kg"), meta.get("current_body_weight_kg"), meta.get("bodyweight_kg"))
         total = _first_non_blank(entry.get("total_kg"), "")
         dots = _calculate_dots_value(total, bw, sex) if not _is_blank(total) else ""
-        rows.append([entry.get("date", ""), entry.get("squat_kg", ""), entry.get("bench_kg", ""), entry.get("deadlift_kg", ""), total, bw, dots, entry.get("context", "")])
+        rows.append([entry.get("date", ""), entry.get("squat_kg", ""), entry.get("bench_kg", ""), entry.get("deadlift_kg", ""), total, _display_bodyweight(bw), dots, entry.get("context", "")])
 
     return "## Max History\n\n" + _md_table(headers, rows)
 
@@ -746,7 +760,7 @@ def _md_sessions(sessions: list[dict]) -> str:
             if status:
                 parts.append(f"({status})")
             if not _is_blank(bw):
-                parts.append(f"BW: {bw} kg")
+                parts.append(f"BW: {_display_bodyweight(bw)} kg")
             if not _is_blank(session_rpe):
                 parts.append(f"Session RPE: {session_rpe}")
             lines.append(" | ".join(parts))
@@ -985,9 +999,9 @@ def _md_weight_log(weight_log: list[dict]) -> str:
     if kg_values:
         latest_date, latest_kg = kg_values[-1]
         oldest_date, oldest_kg = kg_values[0]
-        change = round(float(latest_kg) - float(oldest_kg), 1)
+        change = round(float(latest_kg) - float(oldest_kg), 2)
         direction = "gain" if change > 0.25 else "loss" if change < -0.25 else "stable"
-        lines.append(f"Started {oldest_kg} kg on {oldest_date}. Current: {latest_kg} kg ({'+' if change > 0 else ''}{change} kg, {direction}). {len(kg_values)} entries.")
+        lines.append(f"Started {_display_bodyweight(oldest_kg)} kg on {oldest_date}. Current: {_display_bodyweight(latest_kg)} kg ({'+' if change > 0 else ''}{_display_bodyweight(change)} kg, {direction}). {len(kg_values)} entries.")
         lines.append("")
 
         headers = ["Date", "Weight (kg)", "Change", "Notes"]
@@ -998,11 +1012,11 @@ def _md_weight_log(weight_log: list[dict]) -> str:
             delta = ""
             if prev is not None and not _is_blank(kg):
                 try:
-                    d = round(float(kg) - float(prev), 1)
+                    d = round(float(kg) - float(prev), 2)
                     delta = f"+{d}" if d > 0 else str(d)
                 except (TypeError, ValueError):
                     delta = ""
-            rows.append([entry.get("date", ""), kg, delta, entry.get("notes", "")])
+            rows.append([entry.get("date", ""), _display_bodyweight(kg), delta, entry.get("notes", "")])
             prev = kg if not _is_blank(kg) else prev
         lines.append(_md_table(headers, rows))
     else:
@@ -1078,8 +1092,8 @@ def _md_analysis(
     correlation = (analysis or {}).get("correlation")
     evaluation = (analysis or {}).get("program_evaluation")
 
-    has_trends = bool(sessions)
-    if not weekly and not correlation and not evaluation and not has_trends:
+    tables = analysis_tables(weekly, diet_notes, meta)
+    if not (weekly or correlation or evaluation or sessions or weight_log or tables):
         return ""
 
     lines = ["## Analysis", ""]
@@ -1088,12 +1102,15 @@ def _md_analysis(
         lines.extend(_md_weekly_analysis(weekly))
         lines.append("")
 
-    dots_rows = _build_dots_trend_rows(sessions, weight_log, sex, meta)
+    for title, headers, rows in tables:
+        lines.extend([f"### {title}", "", _md_table(headers, rows), ""])
+
+    dots_rows = _build_dots_trend_rows(sessions, weight_log, sex)
     if dots_rows:
         lines.extend(_md_dots_trend(dots_rows))
         lines.append("")
 
-    bw_section = _md_weight_trend_analysis(sessions, weight_log, meta)
+    bw_section = _md_weight_trend_analysis(sessions, weight_log)
     if bw_section:
         lines.extend(bw_section)
         lines.append("")
@@ -1145,7 +1162,7 @@ def _md_weekly_analysis(weekly: dict) -> list[str]:
 
     fatigue = weekly.get("fatigue_index")
     if not _is_blank(fatigue):
-        lines.append(f"Fatigue index: {fatigue}/10.")
+        lines.append(f"Fatigue index: {float(fatigue):.0%}.")
 
     readiness = weekly.get("readiness_score")
     if isinstance(readiness, dict):
@@ -1159,7 +1176,9 @@ def _md_weekly_analysis(weekly: dict) -> list[str]:
         lines.append("")
         lines.append("**Alerts:**")
         for alert in alerts:
-            lines.append(f"- {alert}")
+            message = alert.get("message") if isinstance(alert, dict) else alert
+            if message:
+                lines.append(f"- {message}")
 
     lifts = weekly.get("lifts") or {}
     if lifts:
@@ -1209,7 +1228,7 @@ def _md_dots_trend(trend_rows: list[dict]) -> list[str]:
         lines.append(f"DOTS {direction}{dots_change} over {span} tracked weeks ({direction}{round(dots_change / max(1, span - 1), 2)}/week).")
         lines.append("")
 
-    headers = ["Week", "Squat", "Bench", "Deadlift", "Total", "BW", "DOTS"]
+    headers = ["Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode"]
     rows = []
     for r in trend_rows:
         rows.append([
@@ -1218,56 +1237,36 @@ def _md_dots_trend(trend_rows: list[dict]) -> list[str]:
             r.get("bench", "") or "",
             r.get("deadlift", "") or "",
             r.get("total", "") or "",
-            r.get("bodyweight", "") or "",
+            _display_bodyweight(r.get("bodyweight", "")),
             r.get("dots", "") or "",
+            r.get("ipf_gl"),
+            r.get("ipf_gl_mode"),
         ])
     lines.append(_md_table(headers, rows))
     lines.append("")
-    lines.append("_Estimated 1RM via Epley formula. DOTS uses nearest bodyweight._")
+    lines.append("_Estimated 1RM uses the RPE table. IPF GL uses Classic Powerlifting for full SBD weeks and Classic Bench for bench-only weeks._")
 
     return lines
 
-def _md_weight_trend_analysis(sessions: list[dict], weight_log: list[dict], meta: dict) -> list[str]:
-    points: list[tuple[str, float]] = []
-    if weight_log:
-        for entry in sorted(weight_log, key=lambda e: str(e.get("date", ""))):
-            kg = entry.get("kg")
-            if not _is_blank(kg):
-                points.append((str(entry.get("date", "")), float(kg)))
-    else:
-        for session in sessions:
-            if not session.get("completed"):
-                continue
-            bw = session.get("body_weight_kg")
-            if not _is_blank(bw):
-                points.append((str(session.get("date", "")), float(bw)))
-
-    if len(points) < 2:
+def _md_weight_trend_analysis(sessions: list[dict], weight_log: list[dict]) -> list[str]:
+    points = _bodyweight_points(sessions, weight_log)
+    if not points:
         return []
 
     lines = ["### Body Weight Trend", ""]
 
     oldest_date, oldest_kg = points[0]
     latest_date, latest_kg = points[-1]
-    change = round(latest_kg - oldest_kg, 1)
+    change = round(latest_kg - oldest_kg, 2)
     direction = "gain" if change > 0.25 else "loss" if change < -0.25 else "stable"
 
-    lines.append(f"**{latest_kg} kg** ({'+' if change > 0 else ''}{change} kg over {len(points)} entries, {direction}). Started at {oldest_kg} kg on {oldest_date}.")
+    lines.append(f"**{_display_bodyweight(latest_kg)} kg** ({'+' if change > 0 else ''}{_display_bodyweight(change)} kg over {len(points)} entries, {direction}). Started at {_display_bodyweight(oldest_kg)} kg on {oldest_date}.")
     lines.append("")
 
-    if len(points) > 2:
-        shown = points[-12:]
-        headers = ["Date", "Weight (kg)", "Change"]
-        rows = []
-        prev = None
-        for d, kg in shown:
-            delta = ""
-            if prev is not None:
-                d_val = round(kg - prev, 1)
-                delta = f"+{d_val}" if d_val > 0 else str(d_val)
-            rows.append([d, kg, delta])
-            prev = kg
-        lines.append(_md_table(headers, rows))
+    headers = ["Date", "Weight (kg)", "Change (kg)"]
+    rows = [[day, _display_bodyweight(kg), _display_bodyweight(kg - points[index - 1][1]) if index else None]
+            for index, (day, kg) in enumerate(points)]
+    lines.append(_md_table(headers, rows))
 
     return lines
 
@@ -1845,16 +1844,6 @@ def _calculate_dots_value(total_kg: Any, bodyweight_kg: Any, sex: str) -> Any:
     except Exception:
         return ""
 
-def _epley_1rm(weight_kg: Any, reps: Any) -> float:
-    try:
-        weight = float(weight_kg)
-        reps_val = float(reps)
-    except (TypeError, ValueError):
-        return 0.0
-    if weight <= 0 or reps_val <= 0:
-        return 0.0
-    return round(weight * (1 + reps_val / 30.0), 1)
-
 def _resolve_total_kg(payload: dict[str, Any]) -> Any:
     total = payload.get("total_kg")
     if not _is_blank(total):
@@ -1943,7 +1932,7 @@ def _write_meta_sheet(
         ["Practicing For", meta.get("practicing_for", "")],
         ["Weight Class (kg)", meta.get("weight_class_kg", "")],
         ["Weight Class Confirm By", meta.get("weight_class_confirm_by", "")],
-        ["Current Body Weight (kg)", _first_non_blank(meta.get("current_body_weight_kg"), meta.get("bodyweight_kg"))],
+        ["Current Body Weight (kg)", _display_bodyweight(_first_non_blank(meta.get("current_body_weight_kg"), meta.get("bodyweight_kg")))],
         ["Current Body Weight (lb)", meta.get("current_body_weight_lb", "")],
         ["Target Squat (kg)", meta.get("target_squat_kg", "")],
         ["Target Bench (kg)", meta.get("target_bench_kg", "")],
@@ -1986,7 +1975,7 @@ def _write_goals_sheet(
         ["Explicit Goals Recorded", len(goals)],
         ["Primary Goals", ", ".join(primary_goals) if primary_goals else ""],
         ["Current Weight Class (kg)", meta.get("weight_class_kg", "")],
-        ["Current Body Weight (kg)", target_bodyweight],
+        ["Current Body Weight (kg)", _display_bodyweight(target_bodyweight)],
         ["Program Target Total (kg)", program_target_total],
         ["Program Target DOTS", _calculate_dots_value(program_target_total, target_bodyweight, sex)],
         ["Attempt Pct", _serialize_json(meta.get("attempt_pct", {}))],
@@ -2237,7 +2226,7 @@ def _write_max_history_sheet(
             entry.get("bench_kg", ""),
             entry.get("deadlift_kg", ""),
             total,
-            bw,
+            _display_bodyweight(bw),
             _calculate_dots_value(total, bw, sex),
             entry.get("context", ""),
         ])
@@ -2285,7 +2274,7 @@ def _write_sessions_sheet(wb: Workbook, sessions: list[dict[str, Any]]) -> None:
             session.get("day", ""),
             session.get("status", ""),
             session.get("completed", ""),
-            session.get("body_weight_kg", ""),
+            _display_bodyweight(session.get("body_weight_kg", "")),
             session.get("body_weight_source", ""),
             session.get("session_rpe", ""),
             wellness.get("sleep", ""),
@@ -2405,7 +2394,7 @@ def _write_competitions_sheet(
             comp.get("location", ""),
             comp.get("hotel_required", ""),
             comp.get("weight_class_kg", ""),
-            bodyweight,
+            _display_bodyweight(bodyweight),
             bw_source,
             targets.get("squat_kg", ""),
             targets.get("bench_kg", ""),
@@ -2649,7 +2638,6 @@ def _write_trends_sheet(
     weight_log: list[dict[str, Any]],
     diet_notes: list[dict[str, Any]],
     sex: str,
-    meta: dict[str, Any],
 ) -> None:
     ws = wb.create_sheet("Trends")
     row = 1
@@ -2657,27 +2645,15 @@ def _write_trends_sheet(
     _write_section_label(ws, row, "Bodyweight Trend", width=6)
     row += 1
     bw_rows: list[list[Any]] = []
-    bw_points: list[tuple[str, Any]] = []
-    source_log = sorted(weight_log, key=lambda e: str(e.get("date", "")))
-    if source_log:
-        for entry in source_log:
-            if not _is_blank(entry.get("kg")):
-                bw_points.append((str(entry.get("date", "")), entry.get("kg")))
-    else:
-        for session in sessions:
-            if not session.get("completed"):
-                continue
-            if not _is_blank(session.get("body_weight_kg")):
-                bw_points.append((str(session.get("date", "")), session.get("body_weight_kg")))
-    bw_points.sort(key=lambda item: item[0])
+    bw_points = _bodyweight_points(sessions, weight_log)
     if bw_points:
         latest = _num(bw_points[-1][1])
         oldest = _num(bw_points[0][1])
-        change = round(latest - oldest, 1)
+        change = round(latest - oldest, 2)
         direction = "gain" if change > 0.25 else "loss" if change < -0.25 else "stable"
         bw_rows = [
-            ["Latest", latest],
-            ["Oldest", oldest],
+            ["Latest", _display_bodyweight(latest)],
+            ["Oldest", _display_bodyweight(oldest)],
             ["Change", change],
             ["Direction", direction],
             ["Entries", len(bw_points)],
@@ -2697,9 +2673,9 @@ def _write_trends_sheet(
             cell.font = _HEADER_FONT
             cell.fill = _HEADER_FILL
         row += 1
-        for date_str, kg in bw_points[-12:]:
+        for date_str, kg in bw_points:
             ws.cell(row=row, column=1, value=date_str)
-            ws.cell(row=row, column=2, value=_num(kg))
+            ws.cell(row=row, column=2, value=_display_bodyweight(_num(kg)))
             row += 1
         row += 1
 
@@ -2752,8 +2728,8 @@ def _write_trends_sheet(
 
     _write_section_label(ws, row, "DOTS Trend", width=6)
     row += 1
-    trend_rows = _build_dots_trend_rows(sessions, weight_log, sex, meta)
-    headers = ["Week", "Squat", "Bench", "Deadlift", "Total", "Bodyweight", "DOTS"]
+    trend_rows = _build_dots_trend_rows(sessions, weight_log, sex)
+    headers = ["Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode"]
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=row, column=col_idx, value=header)
         cell.font = _HEADER_FONT
@@ -2766,58 +2742,90 @@ def _write_trends_sheet(
             ws.cell(row=row, column=3, value=item.get("bench", ""))
             ws.cell(row=row, column=4, value=item.get("deadlift", ""))
             ws.cell(row=row, column=5, value=item.get("total", ""))
-            ws.cell(row=row, column=6, value=item.get("bodyweight", ""))
+            ws.cell(row=row, column=6, value=_display_bodyweight(item.get("bodyweight", "")))
             ws.cell(row=row, column=7, value=item.get("dots", ""))
+            ws.cell(row=row, column=8, value=item.get("ipf_gl"))
+            ws.cell(row=row, column=9, value=item.get("ipf_gl_mode"))
             row += 1
     else:
         ws.cell(row=row, column=1, value="No DOTS trend data available")
 
     _autosize_columns(ws, max_cols=10, max_width=60)
 
+def _bodyweight_points(sessions: list[dict], weight_log: list[dict]) -> list[tuple[str, float]]:
+    by_date: dict[str, float] = {}
+    observations = [(entry.get("date"), entry.get("kg")) for entry in weight_log]
+    observations.extend((session.get("date"), session.get("body_weight_kg")) for session in sessions if session.get("status") != "skipped")
+    for day, value in observations:
+        kg = _num(value)
+        if isinstance(day, str) and len(day) == 10 and _parse_date(day) and isinstance(kg, (int, float)) and math.isfinite(kg) and kg > 0:
+            by_date[day] = kg
+    return sorted(by_date.items())
+
+
 def _build_dots_trend_rows(
     sessions: list[dict[str, Any]],
     weight_log: list[dict[str, Any]],
     sex: str,
-    meta: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    current_block_sessions = [
-        s for s in sessions
-        if s.get("completed") or s.get("status") in ("logged", "completed")
-    ]
-    by_week: dict[Any, dict[str, Any]] = {}
-    for session in current_block_sessions:
-        week = session.get("week_number") or session.get("week") or 0
-        bucket = by_week.setdefault(week, {"squat": 0.0, "bench": 0.0, "deadlift": 0.0, "bodyweight": 0.0})
-        bodyweight = session.get("body_weight_kg")
-        if not _is_blank(bodyweight) and float(bodyweight) > float(bucket["bodyweight"]):
-            bucket["bodyweight"] = float(bodyweight)
+    bodyweight_points = _bodyweight_points(sessions, weight_log)
+    by_week: dict[int, dict[str, Any]] = {}
+    for session in sessions:
+        if not session.get("completed") and session.get("status") not in ("logged", "completed"):
+            continue
+        week = session.get("week_number") or session.get("week")
+        if not str(week).isdigit() or int(week) < 1:
+            continue
+        bucket = by_week.setdefault(int(week), {"squat": 0.0, "bench": 0.0, "deadlift": 0.0, "bodyweight": 0.0, "date": ""})
+        day = session.get("date") or ""
+        if day and (not bucket["date"] or day < bucket["date"]):
+            bucket["date"] = day
+        bodyweight = _num(session.get("body_weight_kg"))
+        if isinstance(bodyweight, (int, float)) and math.isfinite(bodyweight) and bodyweight > bucket["bodyweight"]:
+            bucket["bodyweight"] = bodyweight
         for ex in session.get("exercises") or []:
             name = str(ex.get("name", "")).lower()
-            weight = ex.get("kg")
-            reps = ex.get("reps")
-            if _is_blank(weight) or _is_blank(reps):
+            statuses = ex.get("set_statuses")
+            if statuses and not any(status in ("completed", "failed") for status in statuses):
                 continue
-            e1rm = _epley_1rm(weight, reps)
+            if not statuses and not (ex.get("sets") or 0):
+                continue
+            rpe = ex.get("rpe") if ex.get("rpe") is not None else session.get("session_rpe")
+            e1rm = estimate_set_e1rm(_num(ex.get("kg")), _num(ex.get("reps")), _num(rpe))
+            if e1rm is None:
+                continue
             if "squat" in name and "hack" not in name and "split" not in name:
                 bucket["squat"] = max(bucket["squat"], e1rm)
-            elif "bench" in name:
+            elif name in ("bench", "bench press"):
                 bucket["bench"] = max(bucket["bench"], e1rm)
             elif "deadlift" in name and "romanian" not in name and "rdl" not in name:
                 bucket["deadlift"] = max(bucket["deadlift"], e1rm)
 
     rows: list[dict[str, Any]] = []
-    for week in sorted(by_week.keys(), key=lambda w: int(w) if str(w).isdigit() else str(w)):
-        bucket = by_week[week]
-        total = round(bucket["squat"] + bucket["bench"] + bucket["deadlift"], 1)
-        bodyweight = bucket["bodyweight"] or _first_non_blank(meta.get("current_body_weight_kg"), meta.get("bodyweight_kg"), _nearest_weight_log_value(None, weight_log))
-        dots = _calculate_dots_value(total, bodyweight, sex) if total and bodyweight else ""
+    for week, bucket in sorted(by_week.items()):
+        squat, bench, deadlift = (bucket[lift] for lift in ("squat", "bench", "deadlift"))
+        total = round(squat + bench + deadlift, 1)
+        if not total:
+            continue
+        bodyweight = bucket["bodyweight"] or next((kg for day, kg in reversed(bodyweight_points) if day <= bucket["date"]), 0)
+        dots = _calculate_dots_value(total, bodyweight, sex) if bodyweight else None
+        full_sbd = squat and bench and deadlift
+        bench_only = bench and not squat and not deadlift
+        ipf_gl, mode_label = None, None
+        if full_sbd or bench_only:
+            mode = "classic_powerlifting" if full_sbd else "classic_bench"
+            ipf_gl = calculate_ipf_gl(total, bodyweight, sex, mode)
+            if ipf_gl is not None:
+                mode_label = "Classic" if full_sbd else "Bench"
         rows.append({
             "week": week,
-            "squat": round(bucket["squat"], 1) if bucket["squat"] else "",
-            "bench": round(bucket["bench"], 1) if bucket["bench"] else "",
-            "deadlift": round(bucket["deadlift"], 1) if bucket["deadlift"] else "",
-            "total": total if total else "",
-            "bodyweight": _num(bodyweight) if bodyweight else "",
+            "squat": squat or None,
+            "bench": bench or None,
+            "deadlift": deadlift or None,
+            "total": total,
+            "bodyweight": bodyweight or None,
             "dots": dots,
+            "ipf_gl": ipf_gl,
+            "ipf_gl_mode": mode_label,
         })
     return rows

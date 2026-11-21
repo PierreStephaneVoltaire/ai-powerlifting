@@ -27,14 +27,17 @@ type profileHit struct {
 
 type profile struct {
 	*httptest.Server
-	mu     sync.Mutex
-	hits   []profileHit
-	status int
+	mu          sync.Mutex
+	hits        []profileHit
+	status      int
+	permissions []string
+	isSelf      bool
+	granted     []string
 }
 
 func newProfile(t *testing.T, status int) *profile {
 	t.Helper()
-	p := &profile{status: status}
+	p := &profile{status: status, isSelf: true}
 	p.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -46,7 +49,7 @@ func newProfile(t *testing.T, status int) *profile {
 			return
 		}
 		w.WriteHeader(p.status)
-		_, _ = w.Write([]byte(`{"settings_pk":"person_1"}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{"settings_pk": "person_1", "is_self": p.isSelf, "permissions": p.permissions, "granted_permissions": p.granted})
 	}))
 	t.Cleanup(p.Close)
 	return p
@@ -59,9 +62,10 @@ func (p *profile) count() int {
 }
 
 type fakeBundles struct {
-	bundle map[string]any
-	err    error
-	calls  []string
+	bundle   map[string]any
+	err      error
+	calls    []string
+	snapshot map[string]any
 }
 
 func (f *fakeBundles) BlockBundle(_ context.Context, caller auth.Caller, blockKey string) (map[string]any, error) {
@@ -69,8 +73,68 @@ func (f *fakeBundles) BlockBundle(_ context.Context, caller auth.Caller, blockKe
 	return f.bundle, f.err
 }
 
-func (f *fakeBundles) Sessions(context.Context, auth.Caller) ([]map[string]any, error) {
-	return nil, nil
+func (f *fakeBundles) Snapshot(context.Context, auth.Caller) (map[string]any, error) {
+	return f.snapshot, nil
+}
+
+func TestSnapshotSectionsRespectPermissions(t *testing.T) {
+	e := newEnv(t, 200)
+	e.bundles.bundle["block"] = map[string]any{"label": "Block One", "blockKey": "block_1", "weekCount": 6.0, "startDate": "2025-01-01", "endDate": "2025-01-31"}
+	e.bundles.snapshot = map[string]any{
+		"weightLog": []any{map[string]any{"date": "2025-01-02", "kg": 82.456}, map[string]any{"date": "2025-02-01", "kg": 99.0}},
+		"sessions":  []map[string]any{{"date": "2025-01-02", "body_weight_kg": 83.125, "body_weight_lb": 183.0, "session_comments": "session visible"}},
+		"program":   map[string]any{"meta": map[string]any{"height_cm": 180.0}, "diet_notes": []any{map[string]any{"date": "2025-01-03", "avg_daily_calories": 2000.0, "avg_sleep_hours": 8.0}, map[string]any{"date": "2025-01-04", "avg_daily_calories": 9999.0, "private": true}}, "lift_profiles": []any{map[string]any{"lift": "squat", "volume_tolerance": "high"}}},
+	}
+	content := func() string {
+		response := e.do("POST", "/operations/analytics.export", `{"blockKey":"block_1","format":"markdown"}`, identity)
+		if response.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", response.Code, response.Body)
+		}
+		var result map[string]string
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(result["content_base64"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(decoded)
+	}
+	denied := content()
+	for _, value := range []string{"82.46 kg", "2000", "Height", "Volume tolerance"} {
+		if strings.Contains(denied, value) {
+			t.Errorf("unauthorized export contains %q", value)
+		}
+	}
+	e.profile.permissions = []string{"sessions:read"}
+	sessionsOnly := content()
+	if strings.Contains(sessionsOnly, "83.13 kg") || strings.Contains(sessionsOnly, "## Body Weight Trend") {
+		t.Error("session bodyweight leaked without weight-log permission")
+	}
+	if !strings.Contains(sessionsOnly, "session visible") {
+		t.Error("authorized session missing")
+	}
+	e.profile.isSelf = false
+	if strings.Contains(content(), "session visible") {
+		t.Error("public viewer received past sessions")
+	}
+	e.profile.granted = []string{"sessions:read"}
+	if !strings.Contains(content(), "session visible") {
+		t.Error("delegated viewer missing granted sessions")
+	}
+	e.profile.isSelf = true
+	e.profile.permissions = []string{"weight-log:read", "sessions:read", "program:read", "lift-profiles:read"}
+	allowed := content()
+	for _, value := range []string{"83.13 kg", "2000", "Height", "Volume tolerance"} {
+		if !strings.Contains(allowed, value) {
+			t.Errorf("authorized export missing %q", value)
+		}
+	}
+	for _, value := range []string{"99 kg", "9999"} {
+		if strings.Contains(allowed, value) {
+			t.Errorf("export contains out-of-scope value %q", value)
+		}
+	}
 }
 
 type env struct {
