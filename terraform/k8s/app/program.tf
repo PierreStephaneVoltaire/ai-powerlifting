@@ -74,14 +74,12 @@ resource "kubernetes_deployment_v1" "program" {
             value = local.service_env.PL_SERVICE_URL_TEMPLATE
           }
 
-          env {
-            name  = "AWS_SHARED_CREDENTIALS_FILE"
-            value = "/secrets/aws/credentials"
-          }
-
-          env {
-            name  = "AWS_CONFIG_FILE"
-            value = "/secrets/aws/config"
+          dynamic "env" {
+            for_each = module.workload_aws["pl-program"].env
+            content {
+              name  = env.key
+              value = env.value
+            }
           }
 
           env {
@@ -122,7 +120,7 @@ resource "kubernetes_deployment_v1" "program" {
 
           volume_mount {
             name       = "aws"
-            mount_path = "/secrets/aws"
+            mount_path = module.workload_aws["pl-program"].mount_path
             read_only  = true
           }
         }
@@ -130,8 +128,14 @@ resource "kubernetes_deployment_v1" "program" {
         volume {
           name = "aws"
 
-          secret {
-            secret_name = "pl-aws-credentials"
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-program"].token_path
+              }
+            }
           }
         }
       }

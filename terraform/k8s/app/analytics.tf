@@ -65,14 +65,12 @@ resource "kubernetes_deployment_v1" "analytics" {
             value = var.dataset_bucket
           }
 
-          env {
-            name  = "AWS_SHARED_CREDENTIALS_FILE"
-            value = "/secrets/aws/credentials"
-          }
-
-          env {
-            name  = "AWS_CONFIG_FILE"
-            value = "/secrets/aws/config"
+          dynamic "env" {
+            for_each = module.workload_aws["pl-analytics"].env
+            content {
+              name  = env.key
+              value = env.value
+            }
           }
 
           env_from {
@@ -109,7 +107,7 @@ resource "kubernetes_deployment_v1" "analytics" {
 
           volume_mount {
             name       = "aws"
-            mount_path = "/secrets/aws"
+            mount_path = module.workload_aws["pl-analytics"].mount_path
             read_only  = true
           }
         }
@@ -117,8 +115,14 @@ resource "kubernetes_deployment_v1" "analytics" {
         volume {
           name = "aws"
 
-          secret {
-            secret_name = "pl-aws-credentials"
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-analytics"].token_path
+              }
+            }
           }
         }
       }

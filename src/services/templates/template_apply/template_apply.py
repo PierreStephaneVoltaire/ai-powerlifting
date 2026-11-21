@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from .training_weeks import WEEKDAY_INDEX, normalize_week_start_day, week_start_date
+from services.runtime.prescription import is_timed, normalize_prescription
 
 def round_to_2_5(kg: float) -> float:
     """Round a weight to the nearest 2.5kg (standard plate increment)."""
@@ -16,7 +17,12 @@ def check_max_resolution_gate(
     glossary_exercises: list[dict[str, Any]]
 ) -> list[str]:
 
-    required_ids = template.get("required_maxes", [])
+    required_ids = {
+        exercise.get("glossary_id")
+        for session in template.get("sessions", [])
+        for exercise in session.get("exercises", [])
+        if exercise.get("load_type") == "percentage" and exercise.get("glossary_id")
+    }
     missing = []
     
     glossary_map = {ex["id"]: ex for ex in glossary_exercises}
@@ -93,11 +99,14 @@ def concretize(
             continue
         
         exercises = []
-        for tpl_ex in tpl_sess.get("exercises", []):
+        for original in tpl_sess.get("exercises", []):
+            tpl_ex = normalize_prescription(dict(original))
             gid = tpl_ex.get("glossary_id")
             load_type = tpl_ex.get("load_type", "unresolvable")
             load_value = tpl_ex.get("load_value")
             rpe_target = tpl_ex.get("rpe_target")
+            if rpe_target is None and load_type == "rpe":
+                rpe_target = load_value
             
             kg = None
             load_source = load_type
@@ -110,16 +119,14 @@ def concretize(
                     load_source = "unresolvable"
             elif load_type == "absolute":
                 kg = load_value
-            elif load_type == "rpe":
+            elif load_type == "rpe" and tpl_ex.get("rep_mode") != "amrap" and not is_timed(tpl_ex):
                 e1rm = _get_e1rm(gid, current_maxes, glossary_map)
                 pct = rpe_to_percent(tpl_ex.get("reps"), rpe_target)
                 if e1rm and pct:
                     kg = round_to_2_5(e1rm * pct)
                     load_source = "rpe_estimate"
-                else:
-                    load_source = "unresolvable"
                 
-            exercises.append({
+            exercise = {
                 "name": tpl_ex["name"],
                 "glossary_id": gid,
                 "sets": tpl_ex.get("sets"),
@@ -128,7 +135,12 @@ def concretize(
                 "rpe_target": rpe_target,
                 "load_source": load_source,
                 "notes": tpl_ex.get("notes", "")
-            })
+            }
+            if tpl_ex.get("rep_mode") == "amrap":
+                exercise["rep_mode"] = "amrap"
+            if tpl_ex.get("rep_unit") is not None:
+                exercise["rep_unit"] = tpl_ex["rep_unit"]
+            exercises.append(exercise)
             
         concrete_sessions.append({
             "date": sess_date.isoformat(),

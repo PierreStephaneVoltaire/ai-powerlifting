@@ -281,6 +281,40 @@ authorized redirect to a signed CDN URL; avatars retain their authorized
 API endpoints. The two retained AWS Lambdas generate video
 thumbnails and copy master competition/federation updates to athlete directories.
 
+### AWS workload identity
+
+k3s signs the service-account tokens that NoLift pods use to access AWS. The
+issuer is the regional HTTPS endpoint of a dedicated S3 bucket in
+`ca-central-1`. The bucket exposes the OIDC discovery document at
+`/.well-known/openid-configuration` and the JSON Web Key Set
+(JWKS) at `/openid/v1/jwks`. The signing key stays on the cluster.
+
+1. Kubernetes projects a rotating, one-hour token into each AWS-using workload
+   at `/secrets/aws/web-identity-token`. Its audience is `sts.amazonaws.com`.
+2. The AWS SDK reads `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` and calls
+   regional STS `AssumeRoleWithWebIdentity`. IAM trusts the registered issuer
+   and requires an exact match on both the audience and the subject
+   `system:serviceaccount:<namespace>:<service-account>`.
+3. STS returns temporary credentials for `nolift-<service-account>`. The
+   role's policy determines which AWS calls succeed. For example,
+   `pl-templates` can query `if-sessions` when evaluating an athlete's draft.
+   The SDK refreshes credentials while the workload runs.
+
+Authentik identifies the Person signing in to the portal. Istio mTLS identifies
+the caller on service-to-service requests. GitHub Actions uses GitHub-issued
+OIDC tokens for its AWS CI roles. Registry image pulls use the `ecr-registry`
+Secret, which the `ecr-refresher` service account renews using its own AWS role.
+
+The deployment pipeline publishes the k3s public signing keys and discovery
+document and provisions the IAM provider and roles. The in-cluster runner
+configures the issuer and deploys the workloads with projected tokens. After
+rollout, CI verifies that STS accepts the `pl-rankings` service account and
+rejects a wrong audience or an unrelated service account. See the
+[deployment workflow](../.github/workflows/build-images.yml),
+[IAM policy definitions](../terraform/workload_identity.tf), the
+[shared workload settings](../terraform/k8s/modules/workload-aws/main.tf) and
+[ADR 0010](adr/0010-aws-workload-identity-and-network-hardening.md).
+
 ### Mesh, monitoring and deployment
 
 Istio Ambient supplies workload identity and strict mTLS through `ztunnel`.
@@ -319,7 +353,8 @@ Terraform, with separate states for each scope:
 
 | Location | Scope |
 | --- | --- |
-| `terraform/` | AWS and Cloudflare resources, applied by CI |
+| `terraform/` | AWS and Cloudflare resources, including the public k3s issuer documents, IAM OIDC provider and workload roles |
+| `terraform/ci-access` | Permissions the existing CI role needs to manage AWS resources, including workload identity |
 | `terraform/k8s/core` | Namespaces, secrets, runner, Authentik, CNPG Postgres, monitoring |
 | `terraform/k8s/perms` | Kubernetes service accounts and RBAC |
 | `terraform/k8s/network` | NGINX Gateway, HTTP routes, Cloudflare tunnel |
@@ -327,9 +362,9 @@ Terraform, with separate states for each scope:
 | `terraform/k8s/app` | Portal, domain services, caches, OAuth2 Proxy, waypoint and service policies |
 | `terraform/coach` | Coach, Discord bot and persistent state |
 
-The in-cluster runner applies the Kubernetes stacks and the separate Coach
-state after their images are published. See
-[`terraform/k8s/README.md`](../terraform/k8s/README.md) for the deployment flow.
+The in-cluster runner applies the core, permissions, network, mesh and app
+stacks in order. The same job applies the separate Coach state when a Coach
+image builds successfully or the workflow selects Kubernetes changes.
 
 ## Analysis page: the four computation paths
 

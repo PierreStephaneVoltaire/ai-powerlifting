@@ -9,7 +9,9 @@ use super::fatigue::{self, FatigueWindow};
 use super::weeks::{infer_program_start, week_start_for};
 use super::{Computed, Dims, Env, Sessions, e1rm};
 use crate::constants;
-use crate::model::{Competition, Lift, Maxes, NARROW_TRANSFER, ProgramData, Session};
+use crate::model::{
+    Competition, Lift, Maxes, NARROW_TRANSFER, ProgramData, Session, timed_exercise,
+};
 use crate::util::{
     clamp, int_of, median, num, num_of, ols_slope, parse_date, present, round, truthy_of,
 };
@@ -567,7 +569,11 @@ fn future_planned(
             continue;
         }
         let day = daily.entry(date).or_default();
-        for item in planned.iter().filter_map(Value::as_object) {
+        for item in planned
+            .iter()
+            .filter(|item| !timed_exercise(item))
+            .filter_map(Value::as_object)
+        {
             let sets = int_of(num_of(item.get("sets")));
             let reps = int_of(num_of(item.get("reps")));
             if sets <= 0 || reps <= 0 {

@@ -11,7 +11,7 @@ export function executedSets(ex: Pick<Exercise, 'sets' | 'set_statuses'>): numbe
 
 export function exerciseVolume(ex: Exercise): number {
   const sets = executedSets(ex)
-  if (!ex.kg || !sets || !ex.reps) return 0
+  if (ex.duration_minutes != null || (ex.rep_unit && ex.rep_unit !== 'reps') || !ex.kg || !sets || !ex.reps) return 0
   return sets * ex.reps * ex.kg
 }
 

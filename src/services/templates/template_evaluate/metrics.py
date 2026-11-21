@@ -6,6 +6,7 @@ from services.runtime import analytics_client
 from services.runtime.dispatch import OperationError
 from services.runtime.exercise_names import GLOSSARY_NAMES, competition_lift, normalize as _normalize
 from services.runtime.lift_calculations import RPE_PERCENT
+from services.runtime.prescription import is_timed, normalize_prescription
 
 USER_SELECTED_RPE = 8
 FATIGUE_DIMENSIONS = ("axial", "neural", "peripheral", "systemic")
@@ -42,6 +43,8 @@ class Glossary:
 
 
 def load_mode(exercise: dict) -> tuple[str, float | None]:
+    if is_timed(exercise):
+        return "timed", None
     load_type = str(exercise.get("load_type") or "").lower()
     value = _number(exercise.get("load_value"))
     if load_type == "absolute" and value:
@@ -95,6 +98,7 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
     today = date.today()
     start = today - timedelta(days=today.weekday())
     sessions, exercises = [], {}
+    weekly_prescriptions = {}
     missing_from_glossary, load_not_computable = set(), set()
     top_sets: dict[int, dict[str, float]] = defaultdict(dict)
 
@@ -102,8 +106,10 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
         week = int(_number(session.get("week_number")) or 0)
         if week <= 0:
             continue
+        workload = weekly_prescriptions.setdefault(str(week), {"lifting_sets": 0, "amrap_sets": 0, "cardio_minutes": 0, "muscle_sets": {}})
         planned = []
-        for exercise in session.get("exercises") or []:
+        for original in session.get("exercises") or []:
+            exercise = normalize_prescription(dict(original))
             sets = _number(exercise.get("sets")) or 0
             reps = _number(exercise.get("reps")) or 0
             if sets <= 0:
@@ -116,21 +122,37 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
             canonical = GLOSSARY_NAMES[lift] if lift else ((entry or {}).get("name") or name)
             mode, value = load_mode(exercise)
             kg, load_source = _planned_kg(exercise, entry, lift, maxes)
+            if mode == "timed":
+                duration = _number(exercise["reps"]) or 0
+                workload["cardio_minutes"] += sets * (duration / 60 if exercise["rep_unit"] == "seconds" else duration)
+            else:
+                workload["lifting_sets"] += sets
+                if exercise.get("rep_mode") == "amrap":
+                    workload["amrap_sets"] += sets
+                for field, multiplier in (("primary_muscles", 1), ("secondary_muscles", 0.5), ("tertiary_muscles", 0.25)):
+                    for muscle in (entry or {}).get(field) or []:
+                        muscle_sets = workload["muscle_sets"]
+                        muscle_sets[muscle] = muscle_sets.get(muscle, 0) + sets * multiplier
             if canonical.lower().strip() not in glossary_profiles:
                 missing_from_glossary.add(name)
-            if kg and reps > 0:
+            if mode != "timed" and kg and reps > 0:
                 planned.append({"name": canonical, "kg": _round(kg, 2), "reps": int(reps), "sets": sets, "rpe": value if mode in ("rpe", "user_selected") else None})
                 if lift:
                     top_sets[week][lift] = max(kg, top_sets[week].get(lift, 0.0))
-            else:
+            elif mode != "timed":
                 load_not_computable.add(name)
             summary = exercises.setdefault(name, {
                 "glossary_match": (entry or {}).get("name"),
+                "fatigue_profile": (entry or {}).get("fatigue_profile"),
                 "role": "competition_lift" if lift else ("variation" if variation else "accessory"),
                 "lift": lift or variation,
                 "load_modes": set(), "planned_load_sources": set(), "weeks": set(),
             })
             summary["load_modes"].add(mode)
+            if mode == "timed" and exercise.get("load_type") in ("rpe", "percentage", "absolute"):
+                summary["timed_load_type"] = exercise["load_type"]
+                summary["timed_load_value"] = exercise.get("load_value")
+                summary["timed_rpe_target"] = exercise.get("rpe_target")
             if load_source:
                 summary["planned_load_sources"].add(load_source)
             summary["weeks"].add(week)
@@ -171,6 +193,7 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
             str(week): {lift: _round(kg / maxes[lift] * 100) for lift, kg in sorted(lifts.items()) if maxes.get(lift)}
             for week, lifts in sorted(top_sets.items())
         },
+        "weekly_prescriptions": weekly_prescriptions,
         "missing_from_glossary": sorted(missing_from_glossary),
         "load_not_computable": sorted(load_not_computable),
     }
@@ -196,7 +219,7 @@ def template_metrics(template: dict, glossary_exercises: list[dict], current_max
             "analysis is the app's weekly analysis report computed on this template alone, as if every planned session were completed as written. No logged training is included.",
             "Planned kg comes from the prescription, or the percent or RPE table applied to the current max (competition lifts) or the glossary e1RM (other exercises).",
             "missing_from_glossary exercises fall back to the app's default fatigue profile; load_not_computable exercises have no kg and are excluded from load-based metrics.",
-            f"Exercises without a prescribed load are user-selected and counted at RPE {USER_SELECTED_RPE}.",
+            f"Unloaded resistance work defaults to RPE {USER_SELECTED_RPE}. Weekly muscle sets count primary muscles at 1, secondary at 0.5 and tertiary at 0.25 per prescribed set. Cardio minutes are recorded separately.",
         ],
     }
 

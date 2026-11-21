@@ -123,7 +123,11 @@ function normalizeFailedSetReasons(
 
 function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
   const sets = Math.max(0, Math.round(Number(exercise.sets) || 0))
-  const reps = Math.max(0, Math.round(Number(exercise.reps) || 0))
+  const unit = exercise.rep_unit ?? (exercise.duration_minutes != null ? 'minutes' : 'reps')
+  const timed = unit === 'minutes' || unit === 'seconds'
+  const quantity = Number(exercise.reps ?? exercise.duration_minutes)
+  const reps = exercise.rep_mode === 'amrap' && exercise.reps == null ? null
+    : Math.max(0, Number.isFinite(quantity) ? (timed ? quantity : Math.round(quantity)) : 0)
   const rawKg = (exercise as { kg?: unknown }).kg
   const kg = rawKg === null || rawKg === undefined || rawKg === ''
     ? null
@@ -134,6 +138,9 @@ function sanitizeExercise(exercise: Exercise, completed = false): Exercise {
     name: String(exercise.name || '').slice(0, 160),
     sets,
     reps,
+    rep_unit: unit,
+    rep_mode: exercise.rep_mode,
+    glossary_id: exercise.glossary_id,
     kg: typeof kg === 'number' && Number.isFinite(kg) ? kg : null,
     notes: String(exercise.notes || '').slice(0, 4000),
     set_statuses,
@@ -149,13 +156,18 @@ function sanitizeProposedExercises(
   exerciseIndex: number,
 ): Exercise[] | null {
   if (!Array.isArray(rawProposed)) return null
-  const base = (session.exercises || []).map((exercise) => sanitizeExercise(exercise, session.completed))
+  const base = [...(session.exercises || [])]
   const rawSelected = rawProposed[exerciseIndex]
   if (!rawSelected || typeof rawSelected !== 'object') return null
 
   const current = base[exerciseIndex]
   if (!current) return null
   const proposed = sanitizeExercise({ ...current, ...(rawSelected as Partial<Exercise>) }, session.completed)
+  proposed.notes = current.notes
+  proposed.id = current.id
+  proposed.rpe = current.rpe
+  proposed.set_ids = current.set_ids
+  proposed.sets_data = current.sets_data
   const currentStatuses = normalizeSetStatuses(current, session.completed)
   const currentReasons = normalizeFailedSetReasons(current, currentStatuses)
   const locked = currentStatuses

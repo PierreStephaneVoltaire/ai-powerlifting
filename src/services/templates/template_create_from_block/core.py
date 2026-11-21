@@ -50,7 +50,7 @@ def _prepare_template_payload(template):
             if not isinstance(ex,dict): continue
             ex.setdefault("notes",""); ex.setdefault("sets",None); ex.setdefault("reps",None)
             lt=str(ex.get("load_type") or "unresolvable").lower()
-            if lt not in {"rpe","percentage","absolute","unresolvable"}: lt="unresolvable"
+            if lt not in {"rpe","percentage","absolute","unresolvable","duration"}: lt="unresolvable"
             ex["load_type"]=lt
             if lt=="percentage":
                 try:
@@ -61,7 +61,7 @@ def _prepare_template_payload(template):
             gid=ex.get("glossary_id")
             if gid:
                 gid=str(gid); ex["glossary_id"]=gid; resolved.add(gid)
-                if ex["load_type"] in {"percentage","rpe"}: required_maxes.add(gid)
+                if ex["load_type"] == "percentage": required_maxes.add(gid)
             else:
                 nm=str(ex.get("name") or "").strip()
                 if nm: unresolved.add(nm)

@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from services.templates.template_evaluate.core import _get_template_store, template_actor
-from services.runtime.template_patch import Resolver, apply_operations, patch_hash
+from services.runtime.template_patch import SET_SESSION_WEEKDAYS, Resolver, apply_operations, patch_hash
 
 
 def _resolver(args: dict) -> Resolver:
@@ -29,7 +29,9 @@ async def _dispatch(args: dict) -> dict:
     template = await store.get_template(sk, actor_pk=actor_pk)
     if not template:
         raise ValueError(f"Template not found: {sk}")
-    resolve = await asyncio.to_thread(_resolver, args)
+    resolve = await asyncio.to_thread(_resolver, args) if any(
+        operation["op"] != SET_SESSION_WEEKDAYS for operation in operations
+    ) else lambda _: None
     patched, changes, unmatched = await asyncio.to_thread(apply_operations, template, operations, resolve)
     applied = bool(args.get("apply")) and bool(changes)
     if applied:

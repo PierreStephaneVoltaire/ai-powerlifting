@@ -9,7 +9,7 @@ use super::index::fingerprint;
 use super::strength::canonical_lift;
 use super::types::BlockEntry;
 use crate::js::{coerce_number, iso_date, number};
-use crate::model::{ProgramData, Session};
+use crate::model::{ProgramData, Session, timed_exercise};
 
 pub fn copy_session(session: &Session) -> Session {
     Session::from_value(session.raw.clone())
@@ -406,6 +406,7 @@ pub fn exercise_volume(session: &Session) -> f64 {
         .map_or(0.0, |items| {
             items
                 .iter()
+                .filter(|exercise| !timed_exercise(exercise))
                 .map(|exercise| {
                     coerce_number(exercise.get("sets"))
                         * coerce_number(exercise.get("reps"))

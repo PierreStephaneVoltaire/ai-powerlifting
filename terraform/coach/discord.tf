@@ -69,14 +69,12 @@ resource "kubernetes_deployment_v1" "coach_discord" {
           }
 
 
-          env {
-            name  = "AWS_SHARED_CREDENTIALS_FILE"
-            value = "/secrets/aws/credentials"
-          }
-
-          env {
-            name  = "AWS_CONFIG_FILE"
-            value = "/secrets/aws/config"
+          dynamic "env" {
+            for_each = module.workload_aws["pl-coach-discord"].env
+            content {
+              name  = env.key
+              value = env.value
+            }
           }
 
           port {
@@ -99,7 +97,7 @@ resource "kubernetes_deployment_v1" "coach_discord" {
 
           volume_mount {
             name       = "aws"
-            mount_path = "/secrets/aws"
+            mount_path = module.workload_aws["pl-coach-discord"].mount_path
             read_only  = true
           }
         }
@@ -107,8 +105,14 @@ resource "kubernetes_deployment_v1" "coach_discord" {
         volume {
           name = "aws"
 
-          secret {
-            secret_name = var.aws_credentials_secret_name
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-coach-discord"].token_path
+              }
+            }
           }
         }
       }

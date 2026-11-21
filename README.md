@@ -295,6 +295,8 @@ flowchart LR
   end
 
   subgraph AWS["AWS"]
+    STS["STS<br/>workload role sessions"]
+    Discovery["S3 OIDC issuer<br/>discovery + public keys"]
     DDB[("DynamoDB")]
     S3[("S3<br/>videos, media, dataset")]
     CDN["CloudFront<br/>signed media"]
@@ -325,6 +327,9 @@ flowchart LR
   Assistant -->|"model calls + MCP tools"| LiteLLM
   Coach -->|"model calls"| LiteLLM
   Tunnel -->|"llm host"| LiteLLM
+  Services -->|"projected service-account token"| STS
+  STS -->|"verify issuer and keys"| Discovery
+  STS -->|"temporary role credentials"| Services
   Services --> DDB
   Services --> S3
   Rankings --> S3
@@ -352,12 +357,17 @@ Logins go through Authentik with Discord as the identity source, backed by a
 CNPG Postgres cluster in the same k3s node. Prometheus, Loki and Grafana watch
 the cluster; Grafana is reached by port-forward on `localhost:3000`.
 
-Infrastructure is Terraform, split into a few stacks: AWS and Cloudflare in
-`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`
-(applied by a runner inside the cluster; `core` holds namespaces, secrets, the
-Actions runner, Authentik, Postgres and monitoring),
-and the Coach in `terraform/coach`. See
-[`terraform/k8s/README.md`](terraform/k8s/README.md).
+AWS-using workloads receive a projected Kubernetes service-account token and
+exchange it with AWS STS for a dedicated IAM role session. IAM trusts the
+service account's namespace, name and STS audience. AWS reads the k3s issuer's
+public OIDC discovery document and signing keys from S3. The deployment pipeline
+publishes these documents and configures the issuer before rolling out workloads.
+See [AWS workload identity](docs/ARCHITECTURE.md#aws-workload-identity)
+and [ADR 0010](docs/adr/0010-aws-workload-identity-and-network-hardening.md).
+
+CI applies the AWS and Cloudflare resources in `terraform/`. An in-cluster
+runner applies the Kubernetes stacks in `terraform/k8s/` and the separate
+Coach state in `terraform/coach/` through the [deployment workflow](.github/workflows/build-images.yml).
 
 For more on the request flow, data model and caching, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

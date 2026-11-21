@@ -79,14 +79,12 @@ resource "kubernetes_deployment_v1" "profile" {
             }
           }
 
-          env {
-            name  = "AWS_SHARED_CREDENTIALS_FILE"
-            value = "/secrets/aws/credentials"
-          }
-
-          env {
-            name  = "AWS_CONFIG_FILE"
-            value = "/secrets/aws/config"
+          dynamic "env" {
+            for_each = module.workload_aws["pl-profile"].env
+            content {
+              name  = env.key
+              value = env.value
+            }
           }
 
           env {
@@ -122,7 +120,7 @@ resource "kubernetes_deployment_v1" "profile" {
 
           volume_mount {
             name       = "aws"
-            mount_path = "/secrets/aws"
+            mount_path = module.workload_aws["pl-profile"].mount_path
             read_only  = true
           }
         }
@@ -130,8 +128,14 @@ resource "kubernetes_deployment_v1" "profile" {
         volume {
           name = "aws"
 
-          secret {
-            secret_name = "pl-aws-credentials"
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-profile"].token_path
+              }
+            }
           }
         }
       }

@@ -9,12 +9,13 @@ type DraftNumberInputProps = Omit<TextInputProps, 'value' | 'onChange' | 'error'
   commitOnlyValid?: boolean
   toDisplay?: (value: number) => number
   fromDisplay?: (value: number) => number
+  preservePrecision?: boolean
 }
 
-function formatValue(value: number | null | undefined, toDisplay?: (value: number) => number): string {
+function formatValue(value: number | null | undefined, toDisplay?: (value: number) => number, preservePrecision = false): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return ''
   const shown = toDisplay ? toDisplay(value) : value
-  return String(Math.round(shown * 100) / 100)
+  return String(preservePrecision ? shown : Math.round(shown * 100) / 100)
 }
 
 export default function DraftNumberInput({
@@ -25,19 +26,20 @@ export default function DraftNumberInput({
   commitOnlyValid = false,
   toDisplay,
   fromDisplay,
+  preservePrecision = false,
   ...inputProps
 }: DraftNumberInputProps) {
-  const [draft, setDraft] = useState(() => formatValue(value, toDisplay))
+  const [draft, setDraft] = useState(() => formatValue(value, toDisplay, preservePrecision))
   const lastEmitted = useRef<number | null | undefined>(value)
-  const lastFormatted = useRef(formatValue(value, toDisplay))
+  const lastFormatted = useRef(formatValue(value, toDisplay, preservePrecision))
 
   useEffect(() => {
-    const formatted = formatValue(value, toDisplay)
+    const formatted = formatValue(value, toDisplay, preservePrecision)
     if (value === lastEmitted.current && formatted === lastFormatted.current) return
     lastEmitted.current = value
     lastFormatted.current = formatted
     setDraft(formatted)
-  }, [value, toDisplay])
+  }, [value, toDisplay, preservePrecision])
 
   const trimmed = draft.trim()
   const parsed = Number(trimmed)
@@ -47,7 +49,7 @@ export default function DraftNumberInput({
 
   const emit = (next: number | null) => {
     lastEmitted.current = next
-    lastFormatted.current = formatValue(next, toDisplay)
+    lastFormatted.current = formatValue(next, toDisplay, preservePrecision)
     onValueChange(next)
   }
 

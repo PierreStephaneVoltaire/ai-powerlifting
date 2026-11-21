@@ -4,8 +4,11 @@ import json
 from typing import Callable
 
 from services.runtime.exercise_names import normalize
+from services.runtime.prescription import normalize_prescription
 
-PRESCRIPTION_FIELDS = ("sets", "reps", "load_type", "load_value", "rpe_target", "notes")
+PRESCRIPTION_FIELDS = ("sets", "reps", "rep_unit", "rep_mode", "load_type", "load_value", "rpe_target", "notes")
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+SET_SESSION_WEEKDAYS = "set_session_weekdays"
 Resolver = Callable[[str], dict | None]
 
 
@@ -41,12 +44,45 @@ def _rename(exercise: dict, name: str, resolve: Resolver) -> None:
         exercise.pop("glossary_id", None)
 
 
+def _set_prescription(exercise: dict, operation: dict) -> None:
+    normalize_prescription(exercise)
+    changes = {key: operation[key] for key in PRESCRIPTION_FIELDS if key in operation}
+    if changes.get("rep_mode") == "amrap":
+        changes.setdefault("reps", None)
+        changes.setdefault("rep_unit", "reps")
+    elif changes.get("rep_unit") in ("minutes", "seconds") or ("reps" in changes and changes["reps"] is not None):
+        changes.setdefault("rep_mode", None)
+    if changes.get("rep_unit") == "reps" and exercise.get("load_type") == "duration" and "load_type" not in changes:
+        changes["load_type"] = "unresolvable"
+    exercise.update(changes)
+    normalize_prescription(exercise)
+
+
+def _set_session_weekdays(sessions: list[dict], weekdays: dict[str, str], operation_index: int) -> list[dict]:
+    changes = []
+    for position, weekday in weekdays.items():
+        index = int(position) - 1
+        if not 0 <= index < len(sessions):
+            raise ValueError(f"Session {position} does not exist in this template")
+        session = sessions[index]
+        before = {key: session.get(key) for key in ("day_of_week", "day_index")}
+        after = {"day_of_week": weekday, "day_index": WEEKDAYS.index(weekday) + 1}
+        if before != after:
+            session.update(after)
+            changes.append({"op": operation_index, "session_position": index + 1, "week": session.get("week_number"),
+                            "day": weekday, "before": before, "after": after})
+    return changes
+
+
 def apply_operations(template: dict, operations: list[dict], resolve: Resolver) -> tuple[dict, list[dict], list[dict]]:
     patched = copy.deepcopy(template)
     changes: list[dict] = []
     unmatched: list[dict] = []
     for index, operation in enumerate(operations):
         kind = operation.get("op")
+        if kind == SET_SESSION_WEEKDAYS:
+            changes.extend(_set_session_weekdays(patched.get("sessions") or [], operation["weekdays"], index))
+            continue
         touched = 0
         for session in patched.get("sessions") or []:
             if not _in_scope(session, operation):
@@ -56,6 +92,7 @@ def apply_operations(template: dict, operations: list[dict], resolve: Resolver) 
             if kind == "add_exercise":
                 added = {"name": operation["name"], **{key: operation[key] for key in PRESCRIPTION_FIELDS if key in operation}}
                 _rename(added, operation["name"], resolve)
+                normalize_prescription(added)
                 exercises.append(added)
                 changes.append({**where, "before": None, "after": _snapshot(added)})
                 touched += 1
@@ -68,7 +105,7 @@ def apply_operations(template: dict, operations: list[dict], resolve: Resolver) 
                 if kind == "replace_exercise":
                     _rename(exercise, operation["to"], resolve)
                 elif kind == "set_prescription":
-                    exercise.update({key: operation[key] for key in PRESCRIPTION_FIELDS if key in operation})
+                    _set_prescription(exercise, operation)
                 elif kind == "remove_exercise":
                     exercises.remove(exercise)
                     changes.append({**where, "before": before, "after": None})

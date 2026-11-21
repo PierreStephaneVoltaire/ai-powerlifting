@@ -42,27 +42,6 @@ resource "kubernetes_secret_v1" "profile" {
   }
 }
 
-data "aws_ssm_parameter" "pod_credentials" {
-  name            = "/powerlifting/k8s/aws-credentials"
-  with_decryption = true
-}
-
-locals {
-  pod_credentials = jsondecode(data.aws_ssm_parameter.pod_credentials.value)
-}
-
-resource "kubernetes_secret_v1" "aws_credentials" {
-  metadata {
-    name      = "pl-aws-credentials"
-    namespace = kubernetes_namespace_v1.powerlifting.metadata[0].name
-  }
-
-  data = {
-    credentials = "[default]\naws_access_key_id = ${local.pod_credentials.aws_access_key_id}\naws_secret_access_key = ${local.pod_credentials.aws_secret_access_key}\n"
-    config      = "[default]\nregion = ${var.region}\n"
-  }
-}
-
 data "aws_ssm_parameter" "tunnel_token" {
   name            = "/powerlifting/k8s/tunnel-token"
   with_decryption = true

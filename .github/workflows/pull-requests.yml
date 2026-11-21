@@ -15,6 +15,9 @@ on:
       - 'src/tsconfig.json'
       - 'scripts/image_tag.py'
       - 'scripts/migrate_identity_pointers.py'
+      - 'scripts/verify_workload_identity.py'
+      - 'scripts/verify_network_canary.py'
+      - 'scripts/test_verify_*.py'
       - '.github/workflows/**'
       - '.github/image-filters.yml'
       - '!**/*.md'
@@ -107,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        directory: [terraform, terraform/security, terraform/k8s/core, terraform/k8s/perms, terraform/k8s/network, terraform/k8s/mesh, terraform/k8s/app, terraform/coach]
+        directory: [terraform, terraform/ci-access, terraform/security, terraform/k8s/core, terraform/k8s/perms, terraform/k8s/network, terraform/k8s/mesh, terraform/k8s/app, terraform/k8s/modules/workload-aws, terraform/coach]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -117,6 +120,8 @@ jobs:
         run: terraform init -backend=false -input=false
       - working-directory: ${{ matrix.directory }}
         run: terraform validate
+      - if: ${{ matrix.directory == 'terraform' }}
+        run: python3 -m unittest discover -s scripts -p 'test_verify_*.py'
 
   lambda:
     needs: changes

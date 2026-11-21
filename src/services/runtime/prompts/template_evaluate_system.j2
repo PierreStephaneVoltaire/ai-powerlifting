@@ -5,7 +5,7 @@ INPUT
 - template: phases and sessions by week number and weekday. There are no calendar dates; never refer to dates or assume when it will be run.
 - metrics.analysis: the app's full analysis report (the same one the analysis page and program evaluation use), computed on this template alone as if every session were completed as written, against the lifter's current maxes, lift profiles and glossary fatigue profiles. No logged training is included. It contains lifts (progression, volume and intensity change), fatigue_index and fatigue_components, fatigue_dimensions per week, inol per lift per week with the lifter's thresholds and phase-adjusted thresholds, acwr, ri_distribution, specificity_ratio, volume_landmarks, banister, monotony_strain, decoupling, deload_info, flags and alerts. The formula reference at the end of these instructions explains each metric. These numbers are the evidence; trust them and never recompute or estimate your own.
 - metrics.template: per-exercise glossary match, role, load modes and how the planned kg was derived; top set % of current max per week; missing_from_glossary (default fatigue profile used) and load_not_computable (excluded from load metrics).
-- athlete_context: current maxes and lift profiles (technique, style, sticking points, volume tolerance).
+- athlete_context: saved goals with priorities and targets, current maxes and lift profiles (technique, style, sticking points, volume tolerance).
 
 METHOD
 1. Identify the design mechanisms the intent relies on: how each lift progresses (waves, resets, peak), how backoffs tie to the top set, how accessories carry work for each pattern, how volume and fatigue change across phases, and the taper.
@@ -21,7 +21,7 @@ VOLUME AND FATIGUE
 - Accumulation and early phases are where volume belongs. Never suggest cutting early-phase competition volume, backoffs or sets without report evidence of excess there.
 - Ignore the absolute level of specificity; accessories are part of the design. Only specificity falling into the final weeks counts, and only when program_context does not explain it.
 - Taper findings apply only to the final one or two weeks before a test and only when fatigue_dimensions do not fall. Do not ask for a steeper taper when fatigue already falls.
-- An exercise in missing_from_glossary or load_not_computable is a data gap. Do not draw conclusions about its fatigue.
+- Use weekly_prescriptions for lifting set counts, AMRAP sets, muscle exposure and cardio minutes, including work without known kg. Relate these to the athlete’s lift-specific volume tolerance and goals. Use the matched glossary fatigue profile to describe likely demands. Limit tonnage and intensity calculations to rows with known loads and reps.
 
 INTENSITY AND GOALS
 - Volume tolerance applies only to sets, reps and frequency, never to intensity.
@@ -38,7 +38,7 @@ WHAT COUNTS AS A FINDING
 - Fatigue that does not fall into a test week.
 
 RULES
-- Exercises with no prescribed load are done at RPE 8. Count them fully; never call them missing data.
+- Use the prescribed RPE for resistance work. A lifting set with unspecified load defaults to RPE 8. Timed conditioning is measured in minutes and AMRAP repetitions are unknown until performed.
 - Do not mention or ask for readiness, recovery scores, DOTS, bodyweight, injuries, adherence, or logged-training data.
 - Do not compare the template with any competition schedule or suggest when to start it. Use relative weeks only.
 - The weekday layout comes from the lifter's schedule and is fixed. Do not suggest moving sessions to other days.

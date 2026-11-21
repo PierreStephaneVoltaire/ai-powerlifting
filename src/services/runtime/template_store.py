@@ -11,8 +11,15 @@ from decimal import Decimal
 from typing import Any
 
 from services.runtime.aws import dynamodb_resource
+from services.runtime.prescription import normalize_prescription
 
 logger = logging.getLogger(__name__)
+
+def _normalize_prescriptions(sessions):
+    for session in sessions:
+        for exercise in session.get("exercises") or []:
+            normalize_prescription(exercise)
+
 
 class TemplateNotFoundError(Exception):
     """Raised when a template is not found or not visible to the actor."""
@@ -161,6 +168,7 @@ class TemplateStore:
         item["sk"] = item.get("sk", sk)
         if not include_hidden and not self._visible(item, actor_pk):
             return None
+        _normalize_prescriptions(item.get("sessions") or [])
         return item
 
     async def get_template(self, sk: str, actor_pk: str | None = None, include_hidden: bool = False) -> dict | None:
@@ -181,6 +189,7 @@ class TemplateStore:
         now = self._now()
         new_sk = sk or self._new_template_sk()
         template_item = copy.deepcopy(template)
+        _normalize_prescriptions(template_item.get("sessions") or [])
         template_item.pop("is_owner", None)
         meta = template_item.setdefault("meta", {})
 
@@ -234,10 +243,12 @@ class TemplateStore:
         self._assert_owner(existing, actor_pk)
 
         now = self._now()
-        template_item = copy.deepcopy(template)
+        template_item = copy.deepcopy({**existing, **template})
+        if "sessions" in template:
+            _normalize_prescriptions(template_item.get("sessions") or [])
         template_item.pop("is_owner", None)
-        incoming_meta = template_item.setdefault("meta", {})
         existing_meta = existing.get("meta") if isinstance(existing.get("meta"), dict) else {}
+        incoming_meta = template_item["meta"] = {**existing_meta, **template.get("meta", {})}
 
         incoming_meta["created_at"] = existing_meta.get("created_at", now)
         incoming_meta["updated_at"] = now

@@ -7,6 +7,8 @@ import pytest
 
 from services.runtime.template_store import TemplateStore
 from services.templates.template_apply_confirm.core import _new_sessions
+from services.templates.template_apply.template_apply import check_max_resolution_gate, concretize
+from services.templates.template_create_from_block.template_convert import convert_block_to_template
 
 
 class PlainTable:
@@ -57,6 +59,28 @@ def test_creating_the_same_template_twice_makes_two_templates():
     assert sorted(item["sk"] for item in result.list_templates_sync(actor_pk="alice")) == sorted([first, second])
 
 
+@pytest.mark.parametrize("exercise", [
+    {"duration_minutes": value} for value in (0, -5, "fifteen", float("nan"), True)
+] + [{"rep_unit": "seconds", "reps": 0}, {"rep_unit": "hours", "reps": 1}, {"rep_unit": "minutes", "reps": 15, "rep_mode": "amrap"}, {"duration_minutes": 15, "rep_mode": "amrap"}, {"rep_mode": "amrap", "reps": 8}, {"rep_mode": "unknown"}])
+def test_invalid_prescriptions_do_not_create_or_overwrite_a_template(exercise):
+    result = store()
+    seed(result)
+    incoming = {"sessions": [{"exercises": [exercise]}]}
+    with pytest.raises(ValueError):
+        result.put_template_sync(incoming, actor_pk="alice")
+    with pytest.raises(ValueError):
+        result.update_template_sync("template#1", incoming, actor_pk="alice")
+    assert result.get_template_sync("template#1", actor_pk="alice")["sessions"] == []
+
+
+def test_existing_cardio_duration_can_be_saved_from_a_legacy_client():
+    result = store()
+    seed(result)
+    result.update_template_sync("template#1", {"sessions": [{"exercises": [{"duration_minutes": "15"}]}]}, actor_pk="alice")
+    exercise = result.get_template_sync("template#1", actor_pk="alice")["sessions"][0]["exercises"][0]
+    assert (exercise["reps"], exercise["rep_unit"], exercise["load_type"]) == (15, "minutes", "duration")
+
+
 def test_index_keeps_templates_created_by_different_people():
     result = store()
     first = result.put_template_sync(template("One"), actor_pk="alice")
@@ -70,6 +94,61 @@ def test_update_with_stale_revision_still_applies():
     result.update_template_sync("template#1", template("Changed"), actor_pk="alice")
     assert result.table.items[(result.pk, "template#1")]["meta"]["name"] == "Changed"
     assert "revision" not in result.table.items[(result.pk, "template#1")]["meta"]
+
+
+def test_sessions_only_update_keeps_description_and_phases(monkeypatch):
+    from services.templates.template_update import core
+
+    result = store()
+    original = template("Candito")
+    original["meta"]["description"] = "Original description"
+    original["phases"] = [{"name": "Strength"}]
+    seed(result, item=original)
+    monkeypatch.setattr(core, "_get_template_store", lambda: result)
+
+    asyncio.run(core.template_update("template#1", {"sessions": [{"day_of_week": "Thursday"}]}, "alice"))
+
+    saved = result.get_template_sync("template#1", actor_pk="alice")
+    assert saved["meta"]["name"] == "Candito"
+    assert saved["meta"]["description"] == "Original description"
+    assert saved["phases"] == [{"name": "Strength"}]
+    assert saved["sessions"][0]["day_index"] == 4
+
+
+def test_weekday_patch_uses_position_when_imported_ids_and_days_repeat(monkeypatch):
+    from services.runtime.contract import load_operations
+    from services.runtime.dispatch import dispatch
+    from services.templates.template_patch import core
+
+    result = store()
+    original = template("Candito")
+    original["phases"] = [{"name": "Strength"}]
+    original["sessions"] = [
+        {"id": "imported-1-1", "week_number": 1, "day_of_week": "Monday", "day_index": 1,
+         "exercises": [{"name": exercise}]}
+        for exercise in ("Squat", "Bench Press")
+    ]
+    seed(result, item=original)
+    monkeypatch.setattr(core, "_get_template_store", lambda: result)
+    arguments = {"sk": "template#1", "pk": "alice", "_person_pk": "alice",
+                 "operations": [{"op": "set_session_weekdays", "weekdays": {"2": "Thursday"}}]}
+    operation = load_operations("templates")["template_patch"]
+    assert dispatch(operation, arguments)["applied"] is False
+    assert result.get_template_sync("template#1", actor_pk="alice")["sessions"] == original["sessions"]
+    assert dispatch(operation, {**arguments, "apply": True})["applied"] is True
+
+    saved = result.get_template_sync("template#1", actor_pk="alice")
+    assert saved["meta"]["name"] == "Candito"
+    assert saved["phases"] == original["phases"]
+    assert saved["sessions"] == [
+        original["sessions"][0],
+        {**original["sessions"][1], "day_of_week": "Thursday", "day_index": 4},
+    ]
+    with pytest.raises(ValueError, match="Session 3"):
+        dispatch(operation, {**arguments, "apply": True, "operations": [
+            {"op": "set_session_weekdays", "weekdays": {"1": "Tuesday", "3": "Friday"}},
+        ]})
+    assert result.get_template_sync("template#1", actor_pk="alice") == saved
 
 
 def test_private_copy_cannot_be_replayed_or_retrieved_by_other_person():
@@ -86,6 +165,43 @@ def test_template_applications_get_fresh_session_ids():
     assert first[0]["id"] == first[0]["session_id"]
     assert first[0]["id"] != second[0]["id"]
     assert blueprint[0]["id"] == "blueprint-session"
+
+
+def test_template_apply_preserves_amrap_and_duration_without_inventing_loads():
+    sessions = concretize({"sessions": [{"week_number": 1, "day_of_week": "Monday", "exercises": [
+        {"name": "Leg Curl", "sets": 2, "reps": None, "rep_mode": "amrap", "load_type": "rpe", "rpe_target": 8, "notes": "finish safely"},
+        {"name": "Air Bike", "sets": 1, "reps": None, "duration_minutes": 15, "load_type": "unresolvable", "notes": "easy"},
+        {"name": "Timed Load", "sets": 2, "reps": None, "duration_minutes": 5, "load_type": "absolute", "load_value": 20},
+    ]}]}, {}, [], __import__("datetime").date(2026, 8, 31))
+    amrap, cardio, timed_load = sessions[0]["planned_exercises"]
+    assert (amrap["rep_mode"], amrap["reps"], amrap["kg"], amrap["rpe_target"], amrap["notes"]) == ("amrap", None, None, 8, "finish safely")
+    assert (cardio["rep_unit"], cardio["reps"], cardio["kg"], cardio["load_source"]) == ("minutes", 15, None, "duration")
+    assert (timed_load["rep_unit"], timed_load["reps"], timed_load["kg"]) == ("minutes", 5, 20)
+
+
+def test_max_resolution_gate_requires_only_percentages():
+    template = {"required_maxes": ["lift-rpe", "lift-percent"], "sessions": [{"exercises": [
+        {"glossary_id": "lift-rpe", "load_type": "rpe"},
+        {"glossary_id": "lift-amrap", "load_type": "rpe", "rep_mode": "amrap"},
+        {"glossary_id": "lift-time", "load_type": "unresolvable", "duration_minutes": 15},
+        {"glossary_id": "lift-percent", "load_type": "percentage"},
+    ]}]}
+    assert check_max_resolution_gate(template, {}, [
+        {"id": "lift-rpe"}, {"id": "lift-amrap"}, {"id": "lift-time"}, {"id": "lift-percent"},
+    ]) == ["lift-percent"]
+
+
+def test_block_conversion_preserves_amrap_and_duration_without_fabricating_reps():
+    converted = convert_block_to_template({"meta": {}, "sk": "program#1", "sessions": [{
+        "date": "2026-09-01", "day": "Tuesday", "planned_exercises": [
+            {"name": "Leg Curl", "sets": 2, "reps": None, "rep_mode": "amrap", "kg": None, "load_source": "unresolvable", "notes": "to failure"},
+            {"name": "Stair Stepper", "sets": 1, "reps": None, "duration_minutes": 15, "kg": None, "load_source": "unresolvable"},
+            {"name": "Loaded Bike", "sets": 1, "reps": None, "duration_minutes": 5, "kg": 20, "load_source": "absolute"},
+        ]}]}, {})
+    amrap, cardio, timed_load = converted["sessions"][0]["exercises"]
+    assert (amrap["rep_mode"], amrap["reps"], amrap["notes"]) == ("amrap", None, "to failure")
+    assert (cardio["rep_unit"], cardio["reps"], cardio["load_type"], cardio["load_value"]) == ("minutes", 15, "duration", None)
+    assert (timed_load["rep_unit"], timed_load["reps"], timed_load["load_type"], timed_load["load_value"]) == ("minutes", 5, "absolute", 20)
 
 
 def test_template_apply_confirm_starts_one_new_block_and_keeps_existing_sessions(monkeypatch):
@@ -120,3 +236,54 @@ def test_template_apply_confirm_starts_one_new_block_and_keeps_existing_sessions
     assert body["block_id"] == "block-next" and "revision" not in body
     assert store.transitions == 1
     assert any(item["id"] == "external-session" for item in store.program["sessions"])
+
+
+def test_timed_seconds_and_rpe_survive_template_apply_and_block_conversion():
+    for load_type, load_value, kg, rpe in (("duration", None, None, None), ("rpe", 7, None, 7), ("absolute", 20, 20, None), ("percentage", 0.5, 50, None)):
+        source = {"name": "Carry", "glossary_id": "carry", "sets": 3, "reps": 45,
+                  "rep_unit": "seconds", "load_type": load_type, "load_value": load_value,
+                  "rpe_target": rpe, "notes": "user note"}
+        glossary = [{"id": "carry", "e1rm_estimate": {"value_kg": 100}}]
+        sessions = concretize({"sessions": [{"week_number": 1, "day_of_week": "Tuesday", "exercises": [source]}]},
+                              {}, glossary, __import__("datetime").date(2026, 8, 31))
+        planned = sessions[0]["planned_exercises"][0]
+        assert (planned["reps"], planned["rep_unit"], planned["kg"], planned["rpe_target"], planned["notes"]) == (45, "seconds", kg, rpe, "user note")
+        assert planned["load_source"] == load_type
+        converted = convert_block_to_template({"meta": {}, "sk": "block", "sessions": sessions}, {"Carry": 100})
+        result = converted["sessions"][0]["exercises"][0]
+        assert (result["reps"], result["rep_unit"], result["load_type"], result["load_value"], result["notes"]) == (45, "seconds", load_type, load_value, "user note")
+
+
+def test_template_patch_preserves_user_notes_and_converts_timed_units_and_amrap():
+    from services.runtime.template_patch import apply_operations
+
+    original = {"sessions": [{"week_number": 1, "day_of_week": "Tuesday", "exercises": [
+        {"name": "Bike", "sets": 1, "reps": None, "duration_minutes": 15,
+         "load_type": "unresolvable", "rpe_target": 6, "notes": "my note"}
+    ]}]}
+    resolver = lambda name: None
+    patched, changes, unmatched = apply_operations(original, [
+        {"op": "set_prescription", "exercise": "Bike", "rep_unit": "seconds", "reps": 90},
+        {"op": "add_exercise", "name": "Carry", "sets": 2, "rep_unit": "minutes", "reps": 2, "load_type": "absolute", "load_value": 20},
+    ], resolver)
+    bike, carry = patched["sessions"][0]["exercises"]
+    assert (bike["rep_unit"], bike["reps"], bike["load_type"], bike["load_value"], bike["notes"]) == ("seconds", 90, "rpe", 6, "my note")
+    assert (carry["rep_unit"], carry["reps"], carry["load_type"], carry["load_value"]) == ("minutes", 2, "absolute", 20)
+    assert changes[0]["after"]["rep_unit"] == "seconds" and not unmatched
+    patched, _, _ = apply_operations(patched, [{"op": "set_prescription", "exercise": "Bike", "rep_mode": "amrap"}], resolver)
+    bike = patched["sessions"][0]["exercises"][0]
+    assert (bike["rep_unit"], bike["rep_mode"], bike["reps"], bike["notes"]) == ("reps", "amrap", None, "my note")
+    patched, _, _ = apply_operations(patched, [{"op": "set_prescription", "exercise": "Bike", "rep_unit": "reps", "reps": 8}], resolver)
+    bike = patched["sessions"][0]["exercises"][0]
+    assert (bike["rep_mode"], bike["reps"], bike["load_type"], bike["notes"]) == (None, 8, "rpe", "my note")
+
+
+@pytest.mark.parametrize("exercise", [
+    {"rep_unit": "seconds", "reps": 45, "duration_minutes": 15},
+    {"rep_unit": "minutes", "reps": 15, "duration_minutes": -1},
+    {"rep_unit": "reps", "reps": 15, "load_type": "duration"},
+])
+def test_invalid_or_conflicting_timed_units_are_rejected(exercise):
+    result = store()
+    with pytest.raises(ValueError):
+        result.put_template_sync({"sessions": [{"exercises": [exercise]}]}, actor_pk="alice")

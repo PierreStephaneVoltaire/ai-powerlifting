@@ -6,6 +6,9 @@ import os
 import uuid
 from datetime import date, datetime, timezone
 
+from services.runtime.template_name import imported_template_name
+from services.runtime.prescription import is_timed, normalize_prescription
+
 from .._import_store import ImportStore
 
 
@@ -92,19 +95,23 @@ def _prepare_template(template, glossary=None):
             if not isinstance(exercise, dict):
                 continue
             name = str(exercise.get("name") or "").strip()
-            canonical, prescription = canonicalize_competition_lift(name)
+            canonical, _ = canonicalize_competition_lift(name)
             if canonical != name:
                 exercise["name"] = canonical
-            notes = str(exercise.get("notes") or "").strip()
-            if prescription and prescription.casefold() not in notes.casefold():
-                notes = f"{notes} {prescription}".strip()
-            exercise["notes"] = notes
+            exercise.setdefault("notes", "")
             exercise.setdefault("sets", None)
             exercise.setdefault("reps", None)
+            normalize_prescription(exercise)
+            timed = is_timed(exercise)
+            if timed and exercise["sets"] is None:
+                exercise["sets"] = 1
             load_type = str(exercise.get("load_type") or "unresolvable").lower()
-            if load_type not in {"rpe", "percentage", "absolute", "unresolvable"}:
+            if load_type not in {"rpe", "percentage", "absolute", "duration", "unresolvable"}:
                 load_type = "unresolvable"
             exercise["load_type"] = load_type
+            if load_type == "rpe":
+                target = exercise.get("rpe_target") or exercise.get("load_value")
+                exercise["rpe_target"] = exercise["load_value"] = target
             if load_type == "percentage":
                 try:
                     value = float(exercise.get("load_value"))
@@ -112,12 +119,13 @@ def _prepare_template(template, glossary=None):
                 except (TypeError, ValueError):
                     exercise["load_type"] = "unresolvable"
                     exercise["load_value"] = None
-            if exercise["load_type"] == "unresolvable" or exercise.get("load_value") in (None, ""):
+            missing_load = exercise["load_type"] == "unresolvable" or exercise.get("load_value") in (None, "")
+            has_lifting_reps = exercise.get("reps") or exercise.get("rep_mode") == "amrap"
+            if missing_load and has_lifting_reps and exercise.get("sets") and not timed:
                 exercise["load_type"] = "rpe"
-                exercise["load_value"] = USER_SELECTED_RPE
-                exercise["rpe_target"] = exercise.get("rpe_target") or USER_SELECTED_RPE
-                note = f"Lifter selects the load at RPE {USER_SELECTED_RPE}."
-                exercise["notes"] = f"{exercise['notes']} {note}".strip() if note not in str(exercise["notes"]) else exercise["notes"]
+                target = exercise.get("rpe_target") or USER_SELECTED_RPE
+                exercise["load_value"] = target
+                exercise["rpe_target"] = target
             load_type = exercise["load_type"]
             if glossary and canonical != name:
                 entry = glossary_entry_for(exercise.get("name", ""), glossary)
@@ -132,11 +140,10 @@ def _prepare_template(template, glossary=None):
                 glossary_id = str(glossary_id)
                 exercise["glossary_id"] = glossary_id
                 resolved.add(glossary_id)
-                if load_type in {"rpe", "percentage"}:
+                if load_type == "percentage":
                     required_maxes.add(glossary_id)
             elif str(exercise.get("name") or "").strip():
                 unresolved.add(str(exercise["name"]).strip())
-    metadata.setdefault("name", "Imported Template")
     metadata.setdefault("description", "")
     metadata.setdefault("estimated_weeks", max_week)
     metadata.setdefault("days_per_week", _days_per_week(sessions))
@@ -211,7 +218,7 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
             sessions = parsed.get("sessions") if isinstance(parsed.get("sessions"), list) else []
             template = _prepare_template({
                 "meta": {
-                    "name": "Imported Template",
+                    "name": parsed.get("program_name"),
                     "description": "",
                     "program_context": "",
                     "source_filename": pending.get("source_filename"),
@@ -220,6 +227,7 @@ async def import_apply(args, merge_strategy="append", conflict_resolutions=None,
                 "phases": parsed.get("phases", []),
                 "sessions": sessions,
             }, glossary=await asyncio.to_thread(_glossary, pk))
+            template["meta"]["name"] = imported_template_name(template["meta"])
             target_sk = await _get_template_store().put_template(
                 template,
                 actor_pk=actor,

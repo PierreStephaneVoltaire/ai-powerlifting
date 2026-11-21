@@ -98,7 +98,7 @@ function withTopLevelFromPlan(plan: PlannedSet[]): Partial<PlannedExercise> {
   return {
     set_plan: plan,
     sets: plan.length,
-    reps: first?.reps ?? 0,
+    reps: first?.reps ?? null,
     reps_max: first?.reps_max ?? null,
     kg: first?.kg ?? null,
     rpe_target: first?.rpe_target ?? null,
@@ -155,7 +155,7 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
 
   const changeRepsMode = (next: RepsMode) => {
     setRepsMode(next)
-    const repsMaxFor = (reps: number) => next === 'range' ? reps : null
+    const repsMaxFor = (reps: number | null) => next === 'range' ? reps : null
     onPatch(ex.id, {
       reps_max: repsMaxFor(ex.reps),
       ...(plan.length ? { set_plan: plan.map((set) => ({ ...set, reps_max: repsMaxFor(set.reps) })) } : {}),
@@ -206,14 +206,14 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
     <DraftNumberInput
       value={reps}
       onValueChange={(next) => next !== null && onChange({ reps: next })}
-      isValid={isPositiveInteger}
+      isValid={ex.rep_unit === 'minutes' || ex.rep_unit === 'seconds' ? (value) => value > 0 : isPositiveInteger}
       nullable={false}
       commitOnlyValid
       size="xs"
       w={48}
-      placeholder="Reps"
+      placeholder={ex.rep_unit === 'minutes' ? 'min' : ex.rep_unit === 'seconds' ? 'sec' : 'Reps'}
       disabled={readOnly}
-      aria-label={`${label} reps`}
+      aria-label={`${label} ${ex.rep_unit === 'minutes' ? 'minutes' : ex.rep_unit === 'seconds' ? 'seconds' : 'reps'}`}
     />
   )
 
@@ -223,7 +223,7 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
     onChange: (patch: { kg?: number | null; rpe_target?: number | null }) => void,
     label: string,
   ) => {
-    if (ex.load_source === 'unresolvable') return <span className="if-designer-at">—</span>
+    if (ex.load_source === 'duration' || ex.load_source === 'unresolvable') return <span className="if-designer-at">—</span>
     if (ex.load_source === 'rpe') {
       return (
         <DraftNumberInput
@@ -325,6 +325,40 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
         />
         <SegmentedControl
           size="xs"
+          value={ex.rep_mode === 'amrap' ? 'amrap' : ex.rep_unit ?? (ex.duration_minutes != null ? 'minutes' : 'reps')}
+          onChange={(value) => {
+            const timed = value === 'minutes' || value === 'seconds'
+            const oldUnit = ex.rep_unit ?? (ex.duration_minutes != null ? 'minutes' : 'reps')
+            const oldAmount = ex.rep_unit ? ex.reps : ex.duration_minutes ?? ex.reps
+            const amount = timed && (oldUnit === 'minutes' || oldUnit === 'seconds') && oldUnit !== value
+              ? (value === 'seconds' ? (oldAmount ?? 1) * 60 : (oldAmount ?? 1) / 60)
+              : oldAmount ?? (timed ? 15 : 1)
+            const patch = { rep_unit: timed ? value as 'minutes' | 'seconds' : 'reps' as const, rep_mode: value === 'amrap' ? 'amrap' as const : undefined, duration_minutes: undefined, reps: value === 'amrap' ? null : amount, reps_max: null }
+            setRepsMode('fixed')
+            onPatch(ex.id, { ...patch, ...(timed && (!ex.load_source || ex.load_source === 'unresolvable') ? { load_source: ex.kg != null ? 'absolute' : ex.rpe_target != null ? 'rpe' : 'duration' } : {}), ...(!timed && ex.load_source === 'duration' ? { load_source: 'rpe', rpe_target: 8 } : {}), ...(plan.length ? { set_plan: plan.map(set => ({ ...set, reps: value === 'amrap' ? null : timed && (oldUnit === 'minutes' || oldUnit === 'seconds') && oldUnit !== value && set.reps != null ? (value === 'seconds' ? set.reps * 60 : set.reps / 60) : set.reps ?? amount, reps_max: null })) } : {}) })
+          }}
+          data={[{ label: 'Reps', value: 'reps' }, { label: 'AMRAP', value: 'amrap' }, { label: 'Minutes', value: 'minutes' }, { label: 'Seconds', value: 'seconds' }]}
+          disabled={readOnly}
+        />
+        {(ex.rep_unit === 'minutes' || ex.rep_unit === 'seconds' || ex.duration_minutes != null) && (
+          <Select
+            aria-label={`${ex.name} load type`}
+            size="xs"
+            w={130}
+            value={ex.load_source === 'rpe' ? 'rpe' : ex.load_source === 'percentage' ? 'percentage' : ex.load_source === 'absolute' || ex.kg != null ? 'absolute' : 'duration'}
+            data={[{ value: 'duration', label: 'Duration' }, { value: 'rpe', label: 'RPE' }, { value: 'absolute', label: 'Weight' }, ...(ex.load_source === 'percentage' ? [{ value: 'percentage', label: 'Percentage' }] : [])]}
+            onChange={(value) => {
+              if (value === 'duration') onPatch(ex.id, { load_source: 'duration', kg: null, rpe_target: null })
+              if (value === 'rpe') onPatch(ex.id, { load_source: 'rpe', rpe_target: ex.rpe_target ?? 8 })
+              if (value === 'absolute') onPatch(ex.id, { load_source: 'absolute', kg: ex.kg ?? 0 })
+            }}
+            allowDeselect={false}
+            disabled={readOnly}
+          />
+        )}
+        {(!ex.rep_unit || ex.rep_unit === 'reps') && !ex.duration_minutes && ex.rep_mode !== 'amrap' && (
+        <SegmentedControl
+          size="xs"
           value={repsMode}
           onChange={(next) => changeRepsMode(next as RepsMode)}
           data={[
@@ -333,13 +367,16 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
           ]}
           disabled={readOnly}
         />
+        )}
       </Group>
 
       {layout === 'straight' ? (
         <Group gap={6} wrap="wrap" align="center">
           {setsInput}
           <span className="if-designer-at">x</span>
-          {renderReps(ex.reps, ex.reps_max, (patch) => onPatch(ex.id, patch), ex.name)}
+          {ex.rep_mode === 'amrap' ? <span>AMRAP</span> : renderReps(ex.reps ?? ex.duration_minutes, ex.reps_max, (patch) => onPatch(ex.id, { ...patch, ...(ex.duration_minutes != null ? { rep_unit: 'minutes', duration_minutes: undefined } : {}) }), ex.name)}
+          {(ex.rep_unit === 'minutes' || ex.duration_minutes != null) && <span>min</span>}
+          {ex.rep_unit === 'seconds' && <span>sec</span>}
           <span className="if-designer-at">@</span>
           {renderLoad(ex.kg, ex.rpe_target, (patch) => onPatch(ex.id, patch), ex.name)}
         </Group>
@@ -352,7 +389,9 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
           {plan.map((set, setIndex) => (
             <Group key={setIndex} gap={6} wrap="nowrap" align="center">
               <span className="if-designer-at" style={{ width: 40 }}>Set {setIndex + 1}</span>
-              {renderReps(set.reps, set.reps_max, (patch) => updateSet(setIndex, patch), `Set ${setIndex + 1}`)}
+              {ex.rep_mode === 'amrap' ? <span>AMRAP</span> : renderReps(set.reps, set.reps_max, (patch) => updateSet(setIndex, patch), `Set ${setIndex + 1}`)}
+              {ex.rep_unit === 'minutes' && <span>min</span>}
+              {ex.rep_unit === 'seconds' && <span>sec</span>}
               <span className="if-designer-at">@</span>
               {renderLoad(set.kg, set.rpe_target, (patch) => updateSet(setIndex, patch), `Set ${setIndex + 1}`)}
             </Group>

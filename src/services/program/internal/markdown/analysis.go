@@ -172,6 +172,9 @@ func (d sectionData) dotsTrendRows() []dotsRow {
 			}
 		}
 		for _, exercise := range maps(session["exercises"]) {
+			if timedExercise(exercise) {
+				continue
+			}
 			name := strings.ToLower(str(getd(exercise, "name", "")))
 			weight, reps := exercise["kg"], exercise["reps"]
 			if blank(weight) || blank(reps) {

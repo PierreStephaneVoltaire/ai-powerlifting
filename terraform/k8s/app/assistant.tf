@@ -103,22 +103,15 @@ resource "kubernetes_deployment_v1" "assistant" {
 
           env {
             name  = "PL_REFERENCE_BUCKET"
-            value = "powerlifting-reference-documents-429310424269-ca-central-1"
+            value = local.reference_bucket
           }
 
-          env {
-            name  = "AWS_REGION"
-            value = var.region
-          }
-
-          env {
-            name  = "AWS_SHARED_CREDENTIALS_FILE"
-            value = "/secrets/aws/credentials"
-          }
-
-          env {
-            name  = "AWS_CONFIG_FILE"
-            value = "/secrets/aws/config"
+          dynamic "env" {
+            for_each = module.workload_aws["pl-assistant"].env
+            content {
+              name  = env.key
+              value = env.value
+            }
           }
 
           env {
@@ -212,7 +205,7 @@ resource "kubernetes_deployment_v1" "assistant" {
 
           volume_mount {
             name       = "aws"
-            mount_path = "/secrets/aws"
+            mount_path = module.workload_aws["pl-assistant"].mount_path
             read_only  = true
           }
         }
@@ -220,8 +213,14 @@ resource "kubernetes_deployment_v1" "assistant" {
         volume {
           name = "aws"
 
-          secret {
-            secret_name = "pl-aws-credentials"
+          projected {
+            sources {
+              service_account_token {
+                audience           = "sts.amazonaws.com"
+                expiration_seconds = 3600
+                path               = module.workload_aws["pl-assistant"].token_path
+              }
+            }
           }
         }
       }

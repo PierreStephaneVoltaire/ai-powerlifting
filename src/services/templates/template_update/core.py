@@ -58,13 +58,14 @@ def _template_normalize_day(session):
 
 def _prepare_template_payload(template):
     prepared = copy.deepcopy(template)
+    if "phases" in prepared and not isinstance(prepared["phases"], list):
+        raise ValueError("Template phases must be a list")
+    if "sessions" not in prepared:
+        return prepared
     meta = prepared.setdefault("meta", {})
-    sessions = prepared.setdefault("sessions", [])
-    phases = prepared.setdefault("phases", [])
+    sessions = prepared["sessions"]
     if not isinstance(sessions, list):
-        prepared["sessions"] = sessions = []
-    if not isinstance(phases, list):
-        prepared["phases"] = []
+        raise ValueError("Template sessions must be a list")
     resolved = set()
     unresolved = set()
     required_maxes = set()
@@ -92,7 +93,7 @@ def _prepare_template_payload(template):
             exercise.setdefault("sets", None)
             exercise.setdefault("reps", None)
             load_type = str(exercise.get("load_type") or "unresolvable").lower()
-            if load_type not in {"rpe", "percentage", "absolute", "unresolvable"}:
+            if load_type not in {"rpe", "percentage", "absolute", "unresolvable", "duration"}:
                 load_type = "unresolvable"
             exercise["load_type"] = load_type
             if load_type == "percentage":
@@ -109,7 +110,7 @@ def _prepare_template_payload(template):
                 gid = str(gid)
                 exercise["glossary_id"] = gid
                 resolved.add(gid)
-                if exercise["load_type"] in {"percentage", "rpe"}:
+                if exercise["load_type"] == "percentage":
                     required_maxes.add(gid)
             else:
                 name = str(exercise.get("name") or "").strip()
@@ -117,11 +118,8 @@ def _prepare_template_payload(template):
                     unresolved.add(name)
     if not max_week:
         max_week = max([int(s.get("week_number") or 1) for s in sessions if isinstance(s, dict)] or [0])
-    meta.setdefault("name", "Imported Template")
-    meta.setdefault("description", "")
     meta.setdefault("estimated_weeks", max_week)
     meta.setdefault("days_per_week", _template_days_per_week(sessions))
-    meta.setdefault("archived", False)
     prepared["required_maxes"] = sorted(required_maxes)
     prepared["glossary_resolution"] = {
         "resolved": sorted(resolved),

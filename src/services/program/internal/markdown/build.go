@@ -544,17 +544,45 @@ func (d sectionData) sessionLine(session M) sessionLine {
 			if suffix := failedSetReasons(exercise["failed_set_reasons"]); suffix != "" {
 				notes = strings.TrimSpace(notes + " (" + suffix + ")")
 			}
-			rows = append(rows, []any{getd(exercise, "name", ""), str(getd(exercise, "sets", "")) + " x " + str(getd(exercise, "reps", "")), getd(exercise, "kg", ""), getd(exercise, "rpe", ""), notes, status})
+			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), getd(exercise, "kg", ""), getd(exercise, "rpe", ""), notes, status})
 		}
 		line.Table = table([]string{"Exercise", "Sets x Reps", "kg", "RPE", "Notes", "Status"}, rows)
 	} else if planned := maps(session["planned_exercises"]); len(planned) > 0 {
 		var rows [][]any
 		for _, exercise := range planned {
-			rows = append(rows, []any{getd(exercise, "name", ""), str(getd(exercise, "sets", "")) + " x " + str(getd(exercise, "reps", "")), getd(exercise, "kg", ""), getd(exercise, "rpe_target", ""), firstLine(getd(exercise, "notes", "")), status})
+			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), getd(exercise, "kg", ""), getd(exercise, "rpe_target", ""), firstLine(getd(exercise, "notes", "")), status})
 		}
 		line.Table = table([]string{"Exercise", "Sets x Reps", "kg", "Target RPE", "Notes", "Status"}, rows)
 	}
 	return line
+}
+
+func timedExercise(exercise M) bool {
+	unit := exercise["rep_unit"]
+	return unit == "minutes" || unit == "seconds" || exercise["duration_minutes"] != nil
+}
+
+func prescription(exercise M) string {
+	sets := str(getd(exercise, "sets", ""))
+	reps := getd(exercise, "reps", "")
+	if timedExercise(exercise) {
+		unit := exercise["rep_unit"]
+		if unit == nil {
+			unit, reps = "minutes", exercise["duration_minutes"]
+		}
+		label := "min"
+		if unit == "seconds" {
+			label = "sec"
+		}
+		return sets + " x " + str(reps) + " " + label
+	}
+	if exercise["rep_mode"] == "amrap" {
+		if !blank(reps) {
+			return sets + " x AMRAP (" + str(reps) + ")"
+		}
+		return sets + " x AMRAP"
+	}
+	return sets + " x " + str(reps)
 }
 
 type competitionView struct {

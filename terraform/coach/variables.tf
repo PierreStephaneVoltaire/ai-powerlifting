@@ -27,11 +27,6 @@ variable "image_pull_secret" {
   type = string
 }
 
-variable "aws_credentials_secret_name" {
-  description = "Secret holding the AWS credentials and config files the Discord bot uses to read its registrations"
-  type        = string
-}
-
 variable "discord_operator_id" {
   description = "Discord user id of the Operator"
   type        = string

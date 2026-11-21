@@ -1,6 +1,9 @@
 import asyncio
 import os
 
+from services.runtime.analytics_client import call as call_domain
+from services.runtime.dispatch import OperationError
+
 from .metrics import strip_calendar, template_metrics
 
 
@@ -9,10 +12,11 @@ def _lift_profiles(program):
     return [describe(profile) for profile in program.get("lift_profiles") or []]
 
 
-def _athlete_context(program):
+def _athlete_context(program, goals):
     return {
         "current_maxes": program.get("current_maxes") or {},
         "lift_profiles": _lift_profiles(program),
+        "goals": goals,
     }
 
 
@@ -67,7 +71,13 @@ async def _dispatch(args):
         context = (template.get("meta") or {}).get("program_context") or ""
     stripped = strip_calendar(template)
     stripped["meta"]["program_context"] = context
-    report = await generate_template_evaluate_report(stripped, _athlete_context(program), metrics, context)
+    try:
+        goals = await asyncio.to_thread(call_domain, "goals_list", {"pk": args["pk"]}, domain="goals")
+    except OperationError as error:
+        if error.status != 403:
+            raise
+        goals = None
+    report = await generate_template_evaluate_report(stripped, _athlete_context(program, goals), metrics, context)
     await _get_template_store().set_evaluation(sk, report, actor_pk=actor_pk, program_context=context)
     return report
 

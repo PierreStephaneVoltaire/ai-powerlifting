@@ -11,6 +11,7 @@ import os
 import re
 from datetime import date, datetime
 
+from .glossary import compatible_variation, create_missing_exercises
 
 def _get_program_store(pk):
     from services.runtime.program_store import ProgramStore
@@ -69,7 +70,7 @@ def _extract_xlsx(content, template=False):
 
     workbook = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     rows = []
-    sheets = []
+    sheet_headings = {}
     for sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
         if sheet.max_row is None or sheet.max_row < 2:
@@ -79,6 +80,12 @@ def _extract_xlsx(content, template=False):
         header_index = 0
         if template:
             header_index = next((index for index, values in enumerate(sheet_rows[:12]) if _training_header(values)), 0)
+            sheet_headings[sheet_name] = [
+                value.strip()
+                for values in sheet_rows[:header_index + 1]
+                for value in values
+                if isinstance(value, str) and value.strip()
+            ]
         header_values = sheet_rows[header_index]
         dated_headers = {
             index: _calendar_date(value)
@@ -108,7 +115,6 @@ def _extract_xlsx(content, template=False):
                 headers.append("row_label")
             else:
                 headers.append(str(value).strip() if value is not None else f"col_{index}")
-        sheet_has_data = False
         last_day = None
         for cells in sheet_rows[header_index + 1:]:
             row = {"_sheet": f"Week {week_number}" if week_number else sheet_name}
@@ -132,10 +138,7 @@ def _extract_xlsx(content, template=False):
                 row["day"] = last_day
             if has_data:
                 rows.append(row)
-                sheet_has_data = True
-        if sheet_has_data:
-            sheets.append(sheet_name)
-    return rows, ", ".join(sheets) if sheets else "empty"
+    return rows, sheet_headings
 
 
 def _extract_csv(content):
@@ -174,23 +177,73 @@ def _normalize_template_rows(rows):
     return normalized
 
 
-def _normalize_exercise_names(parsed):
+def _exercise_key(name):
+    return " ".join(str(name or "").casefold().split())
+
+
+def _row_value(row, *names):
+    wanted = {" ".join(name.casefold().replace("_", " ").replace("-", " ").split()) for name in names}
+    return next((value for key, value in row.items()
+                 if " ".join(str(key).casefold().replace("_", " ").replace("-", " ").split()) in wanted), None)
+
+
+def _row_week(row):
+    value = _row_value(row, "week_number", "week", "training week", "relative week", "_relative_week")
+    if value is None:
+        value = _week_from_sheet(str(_row_value(row, "_sheet") or ""))
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_day(row):
+    value = _row_value(row, "day_of_week", "day", "weekday", "_day_of_week")
+    return " ".join(str(value).casefold().split()) if value is not None else None
+
+
+def _source_exercise_notes(rows):
     from services.runtime.exercise_names import canonicalize_competition_lift
 
+    notes = []
+    for row in rows:
+        name = _row_value(row, "exercise", "exercise name", "lift", "movement")
+        note = _row_value(row, "exercise notes", "notes", "note")
+        if not name or not note:
+            continue
+        canonical, _ = canonicalize_competition_lift(name)
+        names = {_exercise_key(str(name)), _exercise_key(canonical)}
+        notes.append({"names": names, "week": _row_week(row), "day": _row_day(row), "note": str(note)})
+    return notes
+
+
+def _normalize_exercise_names(parsed, source_notes):
+    from services.runtime.exercise_names import canonicalize_competition_lift
+
+    exercises = []
     for session in parsed.get("sessions", []):
         if not isinstance(session, dict):
             continue
+        week, day = _row_week(session), _row_day(session)
         for exercise in session.get("exercises", []):
             if not isinstance(exercise, dict):
                 continue
             name = str(exercise.get("name") or "").strip()
-            canonical, prescription = canonicalize_competition_lift(name)
-            if canonical != name:
-                exercise["name"] = canonical
-            notes = str(exercise.get("notes") or "").strip()
-            if prescription and prescription.casefold() not in notes.casefold():
-                notes = f"{notes} {prescription}".strip()
-            exercise["notes"] = notes
+            canonical, _ = canonicalize_competition_lift(name)
+            exercise["name"] = canonical
+            exercise["notes"] = ""
+            exercises.append((exercise, {_exercise_key(name), _exercise_key(canonical)}, week, day))
+
+    matched = {}
+    for source in source_notes:
+        candidates = [i for i, (_, names, week, day) in enumerate(exercises)
+                      if names & source["names"] and source["week"] in (None, week)
+                      and source["day"] in (None, day)]
+        if len(candidates) == 1:
+            matched.setdefault(candidates[0], []).append(source["note"])
+    for i, notes in matched.items():
+        if len(notes) == 1:
+            exercises[i][0]["notes"] = notes[0]
 
 
 async def _dispatch(args):
@@ -207,12 +260,14 @@ async def _dispatch(args):
     if args.get("template_import") and classification != "template":
         raise ValueError("template_import requires import_type=template")
     is_template = classification == "template"
-    rows, _ = _extract_xlsx(content, template=is_template) if filename.lower().endswith(".xlsx") else (_extract_csv(content), "")
+    rows, sheet_headings = _extract_xlsx(content, template=is_template) if filename.lower().endswith(".xlsx") else (_extract_csv(content), {})
     if is_template:
         rows = _normalize_template_rows(rows)
     pk = args["pk"]
+    glossary = _get_glossary_store(pk)
+    exercises = await glossary.get_glossary()
     if is_template:
-        context = {}
+        context = {"glossary": [{"id": item["id"], "name": item["name"]} for item in exercises if item.get("id") and item.get("name")]}
     else:
         try:
             program = await _get_program_store(pk).get_program()
@@ -224,10 +279,11 @@ async def _dispatch(args):
             context = {"current_maxes": {}, "current_program_weeks": 0}
     parsed = await generate_import_parse_report(
         json.dumps(rows if is_template else rows[:100], indent=2, default=str),
-        "reusable-template" if is_template else filename,
+        filename,
         classification,
         context,
         args.get("import_instructions", ""),
+        sheet_headings,
     )
     if not isinstance(parsed, dict):
         raise ValueError("The AI parser returned an invalid result")
@@ -236,9 +292,7 @@ async def _dispatch(args):
         raise ValueError(errors[0].get("message") or "AI could not parse the uploaded file")
     if not parsed.get("sessions"):
         raise ValueError("No training sessions were found in the uploaded file")
-    _normalize_exercise_names(parsed)
-    glossary = _get_glossary_store(pk)
-    exercises = await glossary.get_glossary()
+    _normalize_exercise_names(parsed, _source_exercise_notes(rows))
     names = {
         exercise.get("name")
         for session in parsed.get("sessions", [])
@@ -250,10 +304,40 @@ async def _dispatch(args):
         glossary_id = await glossary.fuzzy_resolve(name, threshold=0.92, exercises=exercises)
         if glossary_id:
             resolved[name] = glossary_id
+    glossary_by_id = {str(item["id"]): item for item in exercises if item.get("id") and item.get("name")}
+    glossary_by_name = {item["name"].casefold(): item for item in glossary_by_id.values()}
     for session in parsed.get("sessions", []):
         for exercise in session.get("exercises", []):
-            if exercise.get("name") in resolved:
-                exercise["glossary_id"] = resolved[exercise["name"]]
+            name = str(exercise.get("name") or "").strip()
+            suggested = exercise.pop("glossary_id", None)
+            if not is_template:
+                if name in resolved:
+                    exercise["glossary_id"] = resolved[name]
+                continue
+            entry = glossary_by_name.get(name.casefold())
+            if not entry:
+                for candidate_id in (suggested, resolved.get(name)):
+                    candidate = glossary_by_id.get(str(candidate_id))
+                    if candidate and compatible_variation(name, candidate["name"]):
+                        entry = candidate
+                        break
+            if entry:
+                exercise["glossary_id"] = entry["id"]
+                exercise["name"] = entry["name"]
+    if args.get("template_import"):
+        missing = {
+            exercise["name"]
+            for session in parsed.get("sessions", [])
+            for exercise in session.get("exercises", [])
+            if exercise.get("name") and not exercise.get("glossary_id")
+        }
+        if missing:
+            current_exercises = await glossary.get_glossary()
+            created = await asyncio.to_thread(create_missing_exercises, missing, parsed.get("new_exercises") or [], current_exercises, pk)
+            for session in parsed.get("sessions", []):
+                for exercise in session.get("exercises", []):
+                    if exercise.get("name") in created and not exercise.get("glossary_id"):
+                        exercise["glossary_id"] = created[exercise["name"]]
     import_id = await _get_import_store(pk).stage_import({
         "import_type": "template" if classification == "template" else "session_import",
         "source_filename": filename,

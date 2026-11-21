@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react'
 import {
-  Modal, Stack, Group, Button, TextInput, Select, Autocomplete, ActionIcon, Text, Divider,
+  Modal, Stack, Group, Button, TextInput, Select, Autocomplete, ActionIcon, Text, Divider, SegmentedControl,
 } from '@mantine/core'
 import type { TemplateSession, TemplateExercise, GlossaryExercise } from '@powerlifting/types'
+import DraftNumberInput from '@/components/sessions/DraftNumberInput'
+import { changePrescription, prescriptionMode, type PrescriptionMode } from '@/utils/prescriptionUnit'
 
 interface Props {
   session: TemplateSession | null
@@ -21,7 +23,7 @@ const LOAD_TYPE_OPTIONS = [
 ]
 
 function blankExercise(): TemplateExercise {
-  return { name: '', sets: 3, reps: 5, load_type: 'rpe', load_value: null, rpe_target: 8, notes: '', glossary_id: undefined }
+  return { name: '', sets: 3, reps: 5, load_type: 'rpe', load_value: 8, rpe_target: 8, notes: '' }
 }
 
 export function TemplateSessionModal({ session, glossary, onSave, onClose, disabled }: Props) {
@@ -185,18 +187,45 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose, disab
                   onChange={(e) => updateExercise(i, { sets: Number(e.currentTarget.value) || 1 })}
                   disabled={disabled}
                 />
-                <TextInput
-                  type="number"
-                  label="Reps"
-                  value={ex.reps}
-                  onChange={(e) => updateExercise(i, { reps: Number(e.currentTarget.value) || 1 })}
-                  disabled={disabled}
-                />
+                <Stack gap={4} style={{ flex: 1 }}>
+                  <Text size="sm" fw={500}>Prescription</Text>
+                  <SegmentedControl
+                    value={prescriptionMode(ex)}
+                    data={[{ label: 'Reps', value: 'reps' }, { label: 'AMRAP', value: 'amrap' }, { label: 'Minutes', value: 'minutes' }, { label: 'Seconds', value: 'seconds' }]}
+                    onChange={(value) => {
+                      const next = value as PrescriptionMode
+                      const timed = next === 'minutes' || next === 'seconds'
+                      updateExercise(i, {
+                        ...changePrescription(ex, next),
+                        ...(timed && ex.load_type === 'unresolvable' ? { load_type: 'duration' } : {}),
+                        ...(!timed && ex.load_type === 'duration' ? { load_type: 'rpe', load_value: 8, rpe_target: 8 } : {}),
+                      })
+                    }}
+                    disabled={disabled}
+                    size="xs"
+                  />
+                  {prescriptionMode(ex) !== 'amrap' ? (
+                    <DraftNumberInput
+                      label={prescriptionMode(ex) === 'reps' ? 'Reps' : prescriptionMode(ex) === 'minutes' ? 'Minutes' : 'Seconds'}
+                      value={ex.reps == null && ex.duration_minutes == null ? null : Number(ex.reps ?? ex.duration_minutes)}
+                      isValid={(value) => value > 0 && (prescriptionMode(ex) !== 'reps' || Number.isInteger(value))}
+                      nullable={false}
+                      commitOnlyValid
+                      preservePrecision
+                      onValueChange={(value) => value != null && updateExercise(i, { reps: value, duration_minutes: undefined, rep_unit: prescriptionMode(ex) === 'seconds' ? 'seconds' : prescriptionMode(ex) === 'minutes' ? 'minutes' : 'reps' })}
+                      disabled={disabled}
+                    />
+                  ) : <Text size="sm">As many reps as possible</Text>}
+                </Stack>
                 <Select
                   label="Load Type"
                   value={ex.load_type}
-                  onChange={(v) => updateExercise(i, { load_type: (v as TemplateExercise['load_type']) ?? 'rpe' })}
-                  data={LOAD_TYPE_OPTIONS}
+                  onChange={(v) => {
+                    const mode = (v as TemplateExercise['load_type']) ?? 'rpe'
+                    const target = mode === 'rpe' ? ex.rpe_target ?? 8 : null
+                    updateExercise(i, { load_type: mode, rpe_target: target, load_value: target })
+                  }}
+                  data={prescriptionMode(ex) === 'minutes' || prescriptionMode(ex) === 'seconds' ? [...LOAD_TYPE_OPTIONS, { value: 'duration', label: 'Duration' }] : LOAD_TYPE_OPTIONS}
                   allowDeselect={false}
                   disabled={disabled}
                 />
@@ -205,7 +234,10 @@ export function TemplateSessionModal({ session, glossary, onSave, onClose, disab
                     type="number"
                     label="RPE Target"
                     value={ex.rpe_target ?? ''}
-                    onChange={(e) => updateExercise(i, { rpe_target: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })}
+                    onChange={(e) => {
+                      const rpe = e.currentTarget.value === '' ? null : Number(e.currentTarget.value)
+                      updateExercise(i, { rpe_target: rpe, load_value: rpe })
+                    }}
                     step={0.5}
                     disabled={disabled}
                   />

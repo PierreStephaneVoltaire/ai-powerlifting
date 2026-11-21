@@ -11,9 +11,7 @@ function templateWeekCount(template: Template): number {
 }
 
 function templateAvgWeeklyMuscleSets(template: Template, glossary: GlossaryExercise[]): Partial<Record<MuscleGroup, number>> {
-  const entries = template.sessions.flatMap((session) =>
-    session.exercises.map((exercise) => ({ name: exercise.name, sets: exercise.sets, reps: exercise.reps, kg: null }))
-  )
+  const entries = template.sessions.flatMap((session) => session.exercises)
   const totals = sessionMuscleSets(entries, glossary)
   const weeks = templateWeekCount(template)
   return Object.fromEntries(

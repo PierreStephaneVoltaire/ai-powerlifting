@@ -26,6 +26,10 @@ kubernetes:
   - 'terraform/coach/**'
   - 'terraform/security/**'
   - 'scripts/migrate_identity_pointers.py'
+  - 'scripts/verify_workload_identity.py'
+  - 'scripts/k3s-workload-identity*'
+  - 'scripts/verify_network_canary.py'
+  - 'scripts/test_verify_*.py'
 terraform:
   - 'terraform/**'
   - 'src/lambda/**'

@@ -31,6 +31,15 @@ func (d *Deps) Propose(ctx context.Context, in ProposeInput) (ProposalView, erro
 	case tools.IsMutating(request.ReadOperation) || !slices.Contains(in.Subject.Scope, request.ReadOperation):
 		return reject("read_operation must be a permitted read operation")
 	}
+	if request.Operation == "template_patch" {
+		if request.Arguments["apply"] != true {
+			return reject("template_patch proposals require apply=true")
+		}
+		sk, _ := request.Arguments["sk"].(string)
+		if sk == "" || sk != request.TargetID || request.ReadOperation != "template_get" || request.ReadArguments["sk"] != sk {
+			return reject("use the same template sk in arguments, target_id and template_get read_arguments")
+		}
+	}
 	if request.Operation == "supplement_phases_update" {
 		if invalid := validateSupplementCompounds(request.Arguments); invalid != "" {
 			return reject(invalid)

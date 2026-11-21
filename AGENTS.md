@@ -17,8 +17,10 @@ working — this file is only layout + operating rules.
 ## Terraform scopes — do not cross them
 
 - `powerlifting-app/terraform/` → AWS resources only, applied by CI.
-- `powerlifting-app/terraform/k8s/{core,perms,network,app}` → the Powerlifting Kubernetes resources, one state each, applied by the in-cluster runner (`kubernetes-apply` job). See `terraform/k8s/README.md`.
-- `powerlifting-app/terraform/coach/` → its own state for the Coach Kubernetes resources only (PVC, Deployments, Services), applied locally because CI cannot reach the cluster. Coach ECR repositories live in `powerlifting-app/terraform/` with the other AWS resources. See `src/services/coach/README.md`.
+- `powerlifting-app/terraform/k8s/{core,perms,network,mesh,app}` → the Powerlifting Kubernetes resources, one state each, applied by the in-cluster runner.
+- `powerlifting-app/terraform/coach/` → its own state for the Coach Kubernetes resources (PVC, Deployments, Services), applied by the same runner. Coach ECR repositories live in `powerlifting-app/terraform/` with the other AWS resources. See [Coach](src/services/coach/README.md).
+
+Keep infrastructure deployment and verification in the [pipeline](.github/workflows/build-images.yml). Document the architecture in the README and architecture guide. Omit operator runbooks.
 
 ## Run
 

@@ -3,7 +3,7 @@ image_tag              = "latest"
 namespace              = ""
 node_name              = ""
 image_pull_secret      = ""
-aws_credentials_secret_name = ""
+
 discord_operator_id    = ""
 operator_person        = ""
 discord_persons        = {}
@@ -37,3 +37,6 @@ coach_replicas = 1
 # operation_ai = {
 #   program_evaluation = { provider = "litellm", model = "<alias>", effort = "high" }
 # }
+
+network_policy_ingress_workloads = []
+network_policy_egress_workloads  = []

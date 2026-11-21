@@ -15,6 +15,7 @@ export function mainLiftFor(name: string): MainLift | null {
 }
 
 export function bestSetE1rm(exercise: Exercise, sessionRpe?: number | null): number | null {
+  if (exercise.duration_minutes != null || (exercise.rep_unit && exercise.rep_unit !== 'reps')) return null
   const statuses = exercise.set_statuses ?? []
   const fallbackRpe = (exercise as { rpe?: number | null }).rpe ?? sessionRpe ?? null
   const sets = exercise.sets_data?.length
