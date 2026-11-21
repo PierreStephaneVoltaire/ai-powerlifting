@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use super::Sessions;
 use super::weeks::{find_phase, phase_label};
-use crate::model::{Phase, Session};
+use crate::model::{Phase, Session, timed_exercise};
 use crate::util::{num_of, round};
 
 #[derive(Debug, Serialize)]
@@ -57,7 +57,7 @@ impl Totals {
             self.completed_volume += volume;
             return;
         }
-        for item in planned {
+        for item in planned.iter().filter(|item| !timed_exercise(item)) {
             let sets = num_of(item.get("sets"));
             let reps = num_of(item.get("reps"));
             self.planned_sets += sets;

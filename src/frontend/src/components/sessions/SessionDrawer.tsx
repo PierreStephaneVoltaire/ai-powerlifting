@@ -365,7 +365,24 @@ function SortableExerciseItem({
       )}
 
       <Box p={16}>
-        {exercise.duration_minutes == null && <Group justify="flex-end" mb="xs">
+        <Group mb="xs">
+          <SegmentedControl
+            size="xs"
+            value={exercise.rep_mode === 'amrap' ? 'amrap' : exercise.rep_unit ?? 'reps'}
+            onChange={(value) => {
+              if ((value === 'minutes' || value === 'seconds') && (exercise.rep_unit === 'minutes' || exercise.rep_unit === 'seconds') && exercise.rep_unit !== value) {
+                setData.forEach((set, setIndex) => {
+                  if (set.reps != null) onUpdateSet(index, setIndex, { reps: value === 'seconds' ? set.reps * 60 : set.reps / 60 })
+                })
+              }
+              onUpdate(index, 'rep_unit', value === 'minutes' || value === 'seconds' ? value : 'reps')
+              onUpdate(index, 'rep_mode', value === 'amrap' ? 'amrap' : undefined)
+            }}
+            data={[{ label: 'Reps', value: 'reps' }, { label: 'AMRAP', value: 'amrap' }, { label: 'Minutes', value: 'minutes' }, { label: 'Seconds', value: 'seconds' }]}
+            disabled={disabled}
+          />
+        </Group>
+        <Group justify="flex-end" mb="xs">
           <SegmentedControl
             size="xs"
             value={layout}
@@ -376,13 +393,9 @@ function SortableExerciseItem({
             ]}
             data-testid={`exercise-layout-${index}`}
           />
-        </Group>}
+        </Group>
 
-        {exercise.duration_minutes != null ? (
-          <DraftNumberInput label="Minutes per bout" value={exercise.duration_minutes}
-            onValueChange={(next) => next != null && onUpdate(index, 'duration_minutes', next)}
-            isValid={(value) => value > 0} nullable={false} commitOnlyValid disabled={disabled} />
-        ) : layout === 'straight' ? (
+        {layout === 'straight' ? (
           <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" mb="xs">
             <Box>
               <Text className="if-small-label">Sets</Text>
@@ -399,11 +412,11 @@ function SortableExerciseItem({
               />
             </Box>
             <Box>
-              <Text className="if-small-label">{exercise.rep_mode === 'amrap' ? 'AMRAP reps completed' : 'Reps'}</Text>
+              <Text className="if-small-label">{exercise.rep_mode === 'amrap' ? 'AMRAP reps completed' : exercise.rep_unit === 'minutes' ? 'Minutes' : exercise.rep_unit === 'seconds' ? 'Seconds' : 'Reps'}</Text>
               <DraftNumberInput
                 value={straight.reps}
                 onValueChange={(next) => onUpdateStraight(index, 'reps', next)}
-                isValid={isNonNegativeInteger}
+                isValid={exercise.rep_unit === 'minutes' || exercise.rep_unit === 'seconds' ? isNonNegative : isNonNegativeInteger}
                 size="sm"
                 classNames={{ input: 'if-control-input' }}
                 disabled={disabled}
@@ -457,7 +470,7 @@ function SortableExerciseItem({
             </Box>
             <SimpleGrid cols={4} spacing="xs">
               <Text className="if-small-label">Set</Text>
-              <Text className="if-small-label">{exercise.rep_mode === 'amrap' ? 'AMRAP reps completed' : 'Reps'}</Text>
+              <Text className="if-small-label">{exercise.rep_mode === 'amrap' ? 'AMRAP reps completed' : exercise.rep_unit === 'minutes' ? 'Minutes' : exercise.rep_unit === 'seconds' ? 'Seconds' : 'Reps'}</Text>
               <Text className="if-small-label">{unit}</Text>
               <Text className="if-small-label">RPE</Text>
             </SimpleGrid>
@@ -472,7 +485,7 @@ function SortableExerciseItem({
                     <DraftNumberInput
                       value={set.reps}
                       onValueChange={(next) => onUpdateSet(index, setIndex, { reps: next })}
-                      isValid={isNonNegativeInteger}
+                      isValid={exercise.rep_unit === 'minutes' || exercise.rep_unit === 'seconds' ? isNonNegative : isNonNegativeInteger}
                       size="sm"
                       classNames={{ input: 'if-control-input' }}
                       disabled={disabled}
@@ -549,10 +562,11 @@ function editableSession(session: Session): Session {
     clone.exercises = clone.planned_exercises!.map(pe => ({
       name: pe.name,
       sets: pe.sets,
-      reps: pe.reps,
       kg: pe.kg,
+      load_source: pe.load_source,
       rep_mode: pe.rep_mode,
-      duration_minutes: pe.duration_minutes,
+      rep_unit: pe.rep_unit ?? (pe.duration_minutes != null ? 'minutes' : undefined),
+      reps: pe.reps ?? pe.duration_minutes ?? null,
       glossary_id: pe.glossary_id,
       rpe_target: pe.rpe_target,
       notes: pe.notes ?? '',
@@ -561,7 +575,7 @@ function editableSession(session: Session): Session {
     }))
   }
   clone.exercises = clone.exercises.map((ex) => ({
-    ...withSetStatusFields(ex, clone.completed),
+    ...withSetStatusFields(ex.duration_minutes != null && !ex.rep_unit ? { ...ex, rep_unit: 'minutes', reps: ex.duration_minutes, duration_minutes: undefined } : ex, clone.completed),
     id: ex.id || `ex-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
   }))
   return clone

@@ -4,6 +4,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from services.runtime.prescription import is_timed, normalize_prescription
+
 def derive_week_number(session: dict[str, Any], program: dict[str, Any]) -> int:
     """Return the 1-based week number of a session relative to program start."""
     meta = program.get("meta", {})
@@ -55,7 +57,8 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
         tpl_exercises = []
         exercises = session.get("planned_exercises") or session.get("exercises") or []
         
-        for ex in exercises:
+        for original in exercises:
+            ex = normalize_prescription(dict(original))
             name = ex.get("name")
             if not name: continue
             
@@ -64,17 +67,15 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
             e1rm = e1rm_map.get(name)
             load_source = ex.get("load_source", "absolute")
             rep_mode = ex.get("rep_mode")
-            duration_minutes = ex.get("duration_minutes")
+            timed = is_timed(ex)
             
-            if duration_minutes is not None and not kg:
-                tpl_ex_fields = {"load_type": "unresolvable", "load_value": None, "rpe_target": None}
-            elif load_source == "rpe" or (kg == 0 and rpe):
+            if load_source in ("rpe", "rpe_estimate") or (kg == 0 and rpe):
                 tpl_ex_fields = {
                     "load_type": "rpe",
                     "load_value": rpe,
                     "rpe_target": rpe
                 }
-            elif kg > 0 and e1rm and e1rm > 0:
+            elif kg > 0 and e1rm and e1rm > 0 and (not timed or load_source == "percentage"):
                 tpl_ex_fields = {
                     "load_type": "percentage",
                     "load_value": round(float(kg) / e1rm, 3),
@@ -88,7 +89,7 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
                 }
             else:
                 tpl_ex_fields = {
-                    "load_type": "unresolvable",
+                    "load_type": "duration" if timed else "unresolvable",
                     "load_value": None,
                     "rpe_target": None
                 }
@@ -104,9 +105,8 @@ def convert_block_to_template(program: dict[str, Any], e1rm_map: dict[str, float
             if rep_mode == "amrap":
                 exercise["rep_mode"] = "amrap"
                 exercise["reps"] = None
-            if duration_minutes is not None:
-                exercise["duration_minutes"] = duration_minutes
-                exercise["reps"] = None
+            if ex.get("rep_unit") is not None:
+                exercise["rep_unit"] = ex["rep_unit"]
             tpl_exercises.append(exercise)
             
         sessions.append({

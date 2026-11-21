@@ -208,6 +208,24 @@ func concreteExercise(exercise map[string]any, maxes map[string]float64) map[str
 		loadType = pyval.Str(value)
 	}
 	value := exercise["load_value"]
+	unit := exercise["rep_unit"]
+	reps := exercise["reps"]
+	legacy := exercise["duration_minutes"]
+	if legacy != nil && unit == nil {
+		unit, reps = "minutes", legacy
+	}
+	timed := unit == "minutes" || unit == "seconds"
+	rpe := exercise["rpe_target"]
+	if rpe == nil && loadType == "rpe" {
+		rpe = value
+	}
+	if timed && (loadType == "unresolvable" || loadType == "") {
+		if rpe != nil {
+			loadType, value = "rpe", rpe
+		} else {
+			loadType = "duration"
+		}
+	}
 	var kg any
 	source := loadType
 	gidText, _ := gid.(string)
@@ -222,23 +240,34 @@ func concreteExercise(exercise map[string]any, maxes map[string]float64) map[str
 		}
 	case loadType == "absolute":
 		kg = value
-	case loadType == "rpe":
-		percent, ok := rpeToPercent(exercise["reps"], exercise["rpe_target"])
+	case loadType == "rpe" && !timed && exercise["rep_mode"] != "amrap":
+		percent, ok := rpeToPercent(reps, rpe)
 		if hasMax && e1rm != 0 && ok {
 			kg = roundToPlate(e1rm * percent)
 			source = "rpe_estimate"
-		} else {
-			source = "unresolvable"
 		}
 	}
 	notes := exercise["notes"]
 	if _, present := exercise["notes"]; !present {
 		notes = ""
 	}
-	return map[string]any{
-		"name": exercise["name"], "glossary_id": gid, "sets": exercise["sets"], "reps": exercise["reps"],
-		"kg": kg, "rpe_target": exercise["rpe_target"], "load_source": source, "notes": notes,
+	result := map[string]any{
+		"name": exercise["name"], "glossary_id": gid, "sets": exercise["sets"], "reps": reps,
+		"kg": kg, "rpe_target": rpe, "load_source": source, "notes": notes,
 	}
+	if unit != nil {
+		result["rep_unit"] = unit
+	}
+	if legacy != nil {
+		result["duration_minutes"] = legacy
+	}
+	if exercise["rep_mode"] != nil {
+		result["rep_mode"] = exercise["rep_mode"]
+	}
+	if timed && (loadType == "absolute" || loadType == "percentage" || loadType == "rpe") {
+		result["load_type"], result["load_value"] = loadType, value
+	}
+	return result
 }
 
 func templateVisible(template map[string]any, person string, aliases map[string]bool) bool {

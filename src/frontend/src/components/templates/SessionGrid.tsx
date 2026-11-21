@@ -36,12 +36,12 @@ export const SessionGrid: React.FC<Props> = ({ template }) => {
                           <Text size="sm" truncate>{ex.name}</Text>
                           <Text size="xs" c="dimmed">
                             {templatePrescription(ex)}
-                            {ex.duration_minutes == null && ex.load_type === 'rpe' && ex.rpe_target != null && ` @ RPE ${ex.rpe_target}`}
-                            {ex.duration_minutes == null && ex.load_type === 'percentage' && ex.load_value != null && ` (${(ex.load_value * 100).toFixed(0)}%)`}
-                            {ex.duration_minutes == null && ex.load_type === 'absolute' && ex.load_value != null ? ` ${ex.load_value}kg` : ''}
+                            {ex.load_type === 'rpe' && ex.rpe_target != null && ` @ RPE ${ex.rpe_target}`}
+                            {ex.load_type === 'percentage' && ex.load_value != null && ` (${(ex.load_value * 100).toFixed(0)}%)`}
+                            {ex.load_type === 'absolute' && ex.load_value != null ? ` ${ex.load_value}kg` : ''}
                           </Text>
                         </Stack>
-                        {ex.duration_minutes == null && ex.load_type && <LoadTypeBadge source={ex.load_type} />}
+                        {ex.load_type && <LoadTypeBadge source={ex.load_type} />}
                       </Group>
                     ))}
                   </Stack>

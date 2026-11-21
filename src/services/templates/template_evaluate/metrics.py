@@ -6,6 +6,7 @@ from services.runtime import analytics_client
 from services.runtime.dispatch import OperationError
 from services.runtime.exercise_names import GLOSSARY_NAMES, competition_lift, normalize as _normalize
 from services.runtime.lift_calculations import RPE_PERCENT
+from services.runtime.prescription import is_timed, normalize_prescription
 
 USER_SELECTED_RPE = 8
 FATIGUE_DIMENSIONS = ("axial", "neural", "peripheral", "systemic")
@@ -42,7 +43,7 @@ class Glossary:
 
 
 def load_mode(exercise: dict) -> tuple[str, float | None]:
-    if exercise.get("duration_minutes"):
+    if is_timed(exercise):
         return "timed", None
     load_type = str(exercise.get("load_type") or "").lower()
     value = _number(exercise.get("load_value"))
@@ -107,7 +108,8 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
             continue
         workload = weekly_prescriptions.setdefault(str(week), {"lifting_sets": 0, "amrap_sets": 0, "cardio_minutes": 0, "muscle_sets": {}})
         planned = []
-        for exercise in session.get("exercises") or []:
+        for original in session.get("exercises") or []:
+            exercise = normalize_prescription(dict(original))
             sets = _number(exercise.get("sets")) or 0
             reps = _number(exercise.get("reps")) or 0
             if sets <= 0:
@@ -121,7 +123,8 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
             mode, value = load_mode(exercise)
             kg, load_source = _planned_kg(exercise, entry, lift, maxes)
             if mode == "timed":
-                workload["cardio_minutes"] += sets * (_number(exercise["duration_minutes"]) or 0)
+                duration = _number(exercise["reps"]) or 0
+                workload["cardio_minutes"] += sets * (duration / 60 if exercise["rep_unit"] == "seconds" else duration)
             else:
                 workload["lifting_sets"] += sets
                 if exercise.get("rep_mode") == "amrap":
@@ -132,7 +135,7 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
                         muscle_sets[muscle] = muscle_sets.get(muscle, 0) + sets * multiplier
             if canonical.lower().strip() not in glossary_profiles:
                 missing_from_glossary.add(name)
-            if kg and reps > 0:
+            if mode != "timed" and kg and reps > 0:
                 planned.append({"name": canonical, "kg": _round(kg, 2), "reps": int(reps), "sets": sets, "rpe": value if mode in ("rpe", "user_selected") else None})
                 if lift:
                     top_sets[week][lift] = max(kg, top_sets[week].get(lift, 0.0))
@@ -146,6 +149,10 @@ def template_program(template: dict, glossary_exercises: list[dict], current_max
                 "load_modes": set(), "planned_load_sources": set(), "weeks": set(),
             })
             summary["load_modes"].add(mode)
+            if mode == "timed" and exercise.get("load_type") in ("rpe", "percentage", "absolute"):
+                summary["timed_load_type"] = exercise["load_type"]
+                summary["timed_load_value"] = exercise.get("load_value")
+                summary["timed_rpe_target"] = exercise.get("rpe_target")
             if load_source:
                 summary["planned_load_sources"].add(load_source)
             summary["weeks"].add(week)

@@ -95,7 +95,7 @@ def _prepare_template_payload(template):
             exercise.setdefault("sets", None)
             exercise.setdefault("reps", None)
             load_type = str(exercise.get("load_type") or "unresolvable").lower()
-            if load_type not in {"rpe", "percentage", "absolute", "unresolvable"}:
+            if load_type not in {"rpe", "percentage", "absolute", "unresolvable", "duration"}:
                 load_type = "unresolvable"
             exercise["load_type"] = load_type
             if load_type == "percentage":

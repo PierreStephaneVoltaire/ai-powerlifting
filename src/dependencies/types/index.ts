@@ -298,6 +298,7 @@ export interface Exercise {
   set_ids?: string[]
   sets_data?: ExerciseSetData[]
   rep_mode?: 'amrap'
+  rep_unit?: RepUnit
   duration_minutes?: number
   glossary_id?: string
   name: string
@@ -331,7 +332,8 @@ export type FailedSetReason =
   | 'pain'
   | 'fatigue'
   | 'misload_bad_attempt_selection'
-export type LoadSource = 'absolute' | 'rpe' | 'percentage' | 'unresolvable'
+export type RepUnit = 'reps' | 'minutes' | 'seconds'
+export type LoadSource = 'absolute' | 'rpe' | 'percentage' | 'duration' | 'unresolvable'
 export type LoadType = LoadSource
 
 export interface PlannedSet {
@@ -349,6 +351,7 @@ export interface PlannedExercise {
   name: string
   sets: number
   rep_mode?: 'amrap'
+  rep_unit?: RepUnit
   duration_minutes?: number
   reps: number | null
   reps_max?: number | null
@@ -680,6 +683,7 @@ export interface TemplateExercise {
   glossary_id?: string
   sets: number
   rep_mode?: 'amrap'
+  rep_unit?: RepUnit
   duration_minutes?: number
   reps: number | null
   load_type: LoadType

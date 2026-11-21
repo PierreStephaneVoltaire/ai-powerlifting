@@ -5,36 +5,21 @@ import asyncio
 import copy
 import hashlib
 import logging
-import math
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from services.runtime.aws import dynamodb_resource
+from services.runtime.prescription import normalize_prescription
 
 logger = logging.getLogger(__name__)
 
 def _normalize_prescriptions(sessions):
     for session in sessions:
         for exercise in session.get("exercises") or []:
-            mode = exercise.get("rep_mode")
-            minutes = exercise.get("duration_minutes")
-            if mode not in (None, "amrap"):
-                raise ValueError("Unknown template rep mode")
-            if minutes is not None:
-                if isinstance(minutes, str):
-                    try:
-                        minutes = float(minutes)
-                    except ValueError:
-                        raise ValueError("Cardio minutes must be a positive number") from None
-                if isinstance(minutes, bool) or not isinstance(minutes, (int, float, Decimal)) or not math.isfinite(minutes) or minutes <= 0:
-                    raise ValueError("Cardio minutes must be a positive number")
-                exercise["duration_minutes"] = minutes
-                if mode:
-                    raise ValueError("A timed exercise cannot also prescribe AMRAP")
-            if (mode or minutes is not None) and exercise.get("reps") is not None:
-                raise ValueError("AMRAP and timed prescriptions require an open rep count")
+            normalize_prescription(exercise)
+
 
 class TemplateNotFoundError(Exception):
     """Raised when a template is not found or not visible to the actor."""
@@ -183,6 +168,7 @@ class TemplateStore:
         item["sk"] = item.get("sk", sk)
         if not include_hidden and not self._visible(item, actor_pk):
             return None
+        _normalize_prescriptions(item.get("sessions") or [])
         return item
 
     async def get_template(self, sk: str, actor_pk: str | None = None, include_hidden: bool = False) -> dict | None:

@@ -8,6 +8,13 @@ use crate::util::{int_of, normalize_name, num, num_of, parse_date, present, text
 
 pub const DEFAULT_BLOCK: &str = "current";
 
+pub fn timed_exercise(value: &Value) -> bool {
+    matches!(
+        value.get("rep_unit").and_then(Value::as_str),
+        Some("minutes" | "seconds")
+    ) || present(value.get("duration_minutes")).is_some()
+}
+
 #[derive(Debug)]
 pub struct Exercise {
     pub name: String,
@@ -143,7 +150,13 @@ impl Session {
         let exercises = raw
             .get("exercises")
             .and_then(Value::as_array)
-            .map(|items| items.iter().map(Exercise::from_value).collect())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|item| !timed_exercise(item))
+                    .map(Exercise::from_value)
+                    .collect()
+            })
             .unwrap_or_default();
         let wellness = raw
             .get("wellness")
@@ -681,5 +694,25 @@ impl ProgramData {
             settings_sex,
             root: program.as_object().cloned().unwrap_or_default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod prescription_tests {
+    use super::Session;
+    use serde_json::json;
+
+    #[test]
+    fn timed_work_stays_in_the_session_without_counting_as_lifted_reps() {
+        let raw = json!({"exercises": [
+            {"name":"Loaded carry","sets":2,"reps":30,"rep_unit":"seconds","kg":40},
+            {"name":"Bike","sets":1,"reps":15,"rep_unit":"minutes"},
+            {"name":"Bike","sets":1,"duration_minutes":15},
+            {"name":"Squat","sets":2,"reps":5,"kg":100}
+        ]});
+        let session = Session::from_value(raw.clone());
+        assert_eq!(session.raw, raw);
+        assert_eq!(session.exercises.len(), 1);
+        assert_eq!(session.exercises[0].executed_volume(), 1000.0);
     }
 }

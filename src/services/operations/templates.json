@@ -961,9 +961,12 @@
                   "rpe",
                   "percentage",
                   "absolute",
+                  "duration",
                   "unresolvable"
                 ]
               },
+              "rep_unit": {"type": "string", "enum": ["reps", "minutes", "seconds"]},
+              "rep_mode": {"enum": ["amrap", null]},
               "load_value": {
                 "type": [
                   "number",

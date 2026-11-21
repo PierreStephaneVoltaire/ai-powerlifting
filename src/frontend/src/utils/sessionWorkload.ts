@@ -1,7 +1,7 @@
 import type { GlossaryExercise, MuscleGroup, Session } from '@powerlifting/types'
 import { executedSets, normalizeExerciseName } from './volume'
 
-type WorkoutEntry = Pick<Session['exercises'][number], 'name' | 'sets' | 'set_statuses'> & { glossary_id?: string; duration_minutes?: number }
+type WorkoutEntry = Pick<Session['exercises'][number], 'name' | 'sets' | 'set_statuses'> & { glossary_id?: string; duration_minutes?: number; rep_unit?: 'reps' | 'minutes' | 'seconds' }
 
 const MUSCLE_CONTRIBUTION_MULTIPLIERS = {
   primary: 1,
@@ -48,7 +48,7 @@ export function sessionMuscleSets(
   const volumes: Partial<Record<MuscleGroup, number>> = {}
 
   for (const ex of entries) {
-    if (ex.duration_minutes) continue
+    if (ex.duration_minutes != null || (ex.rep_unit && ex.rep_unit !== 'reps')) continue
     const muscles = lookup.get(ex.glossary_id ?? '') ?? lookup.get(normalizeExerciseName(ex.name))
     if (!muscles) continue
 

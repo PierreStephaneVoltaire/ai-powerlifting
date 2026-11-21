@@ -232,8 +232,10 @@ def test_apply_template_defaults_unloaded_exercises_to_rpe_8_drops_dates_and_lin
     assert "date" not in session
     assert squat["glossary_id"] == "g-squat" and squat["load_value"] == 162.5
     assert (pullup["load_type"], pullup["load_value"], pullup["rpe_target"]) == ("rpe", 8, 8)
-    assert pullup["notes"] == "add 5 lb per week Lifter selects the load at RPE 8."
+    assert pullup["notes"] == "add 5 lb per week"
     assert (deadbug["load_type"], deadbug["load_value"]) == ("rpe", 8)
+    assert deadbug["notes"] == ""
+    assert squat["notes"] == ""
     assert "glossary_id" not in pause or pause["glossary_id"] is None
 
 
@@ -242,17 +244,22 @@ def test_template_import_preserves_amrap_and_timed_exercises():
 
     result = _prepare_template({"sessions": [{"week_number": 1, "exercises": [
         {"name": "Leg Curl", "sets": 2, "reps": None, "rep_mode": "amrap"},
-        {"name": "Air Bike", "duration_minutes": 15},
+        {"name": "Air Bike", "sets": 1, "reps": 15, "rep_unit": "minutes"},
+        {"name": "Plank", "sets": 2, "reps": 30, "rep_unit": "seconds", "load_type": "rpe", "load_value": 6.5},
         {"name": "Rear Delt Fly", "sets": 3, "reps": 10, "load_type": "rpe", "load_value": 7.5},
+        {"name": "Cable Row", "sets": 3, "reps": 8},
     ]}]})
-    leg_curl, bike, fly = result["sessions"][0]["exercises"]
+    leg_curl, bike, plank, fly, row = result["sessions"][0]["exercises"]
     assert leg_curl["rep_mode"] == "amrap"
     assert (leg_curl["load_type"], leg_curl["load_value"]) == ("rpe", 8)
-    assert bike["duration_minutes"] == 15
+    assert (bike["reps"], bike["rep_unit"]) == (15, "minutes")
     assert bike["sets"] == 1
-    assert bike["load_type"] == "unresolvable"
+    assert bike["load_type"] == "duration"
     assert bike.get("rpe_target") is None
+    assert (plank["reps"], plank["rep_unit"], plank["load_type"], plank["load_value"]) == (30, "seconds", "rpe", 6.5)
+    assert plank["rpe_target"] == 6.5
     assert fly["rpe_target"] == 7.5
+    assert (row["load_type"], row["load_value"], row["rpe_target"]) == ("rpe", 8, 8)
 
 
 def test_template_import_validates_ai_glossary_ids(monkeypatch):
@@ -288,7 +295,59 @@ def test_template_import_validates_ai_glossary_ids(monkeypatch):
     assert "glossary_id" not in second
     assert (exact["name"], exact["glossary_id"]) == ("Back Extension", "back")
     assert (fuzzy["name"], fuzzy["glossary_id"]) == ("Leg Curl", "curl")
-    assert "Leg Curls" in fuzzy["notes"]
+    assert fuzzy["notes"] == ""
+
+
+@pytest.mark.parametrize(("headers", "rows", "expected"), [
+    (b"WEEK,DAY,EXERCISE,EXERCISE NOTES\n1,Monday,Squat,Keep knees out\n1,Tuesday,Squat,Brace hard\n",
+     [{"week_number": 1, "day_of_week": "Monday", "exercises": [{"name": "Squat", "notes": "Keep knees out"}]},
+      {"week_number": 1, "day_of_week": "Tuesday", "exercises": [{"name": "Squat", "notes": "Brace hard"}]}],
+     ["Keep knees out", "Brace hard"]),
+    (b"day,exercise,notes\nMonday,Squat,One note\nTuesday,Squat,Another note\n",
+     [{"week_number": 1, "day_of_week": "Monday", "exercises": [{"name": "Squat", "notes": "One note"}]},
+      {"week_number": 1, "day_of_week": "Tuesday", "exercises": [{"name": "Squat", "notes": "Another note"}]}],
+     ["One note", "Another note"]),
+])
+def test_import_notes_only_copies_exact_text_from_an_exercise_notes_column(monkeypatch, headers, rows, expected):
+    from services.imports.import_parse_file import core, import_parse_ai
+
+    imports = FakeImportStore()
+
+    class Glossary:
+        async def get_glossary(self):
+            return []
+
+        async def fuzzy_resolve(self, *args, **kwargs):
+            return None
+
+    async def parse(*args):
+        return {"sessions": rows}
+
+    monkeypatch.setattr(core, "_get_glossary_store", lambda pk: Glossary())
+    monkeypatch.setattr(core, "_get_import_store", lambda pk: imports)
+    monkeypatch.setattr(import_parse_ai, "generate_import_parse_report", parse)
+    dispatch(load_operations("imports")["import_parse_file"], {
+        "pk": "athlete-1", "filename": "program.csv", "import_type": "template",
+        "base64_content": base64.b64encode(
+            headers
+        ).decode(),
+    })
+
+    parsed_sessions = imports.staged[0]["ai_parse_result"]["sessions"]
+    assert [session["exercises"][0]["notes"] for session in parsed_sessions] == expected
+
+
+@pytest.mark.parametrize("context", [{}, {"Week": 1}])
+def test_import_notes_are_cleared_when_repeated_exercise_occurrence_is_ambiguous(context):
+    from services.imports.import_parse_file.core import _normalize_exercise_names, _source_exercise_notes
+
+    source = _source_exercise_notes([{"Exercise": "Squat", "Notes": "Brace hard", **context}])
+    parsed = {"sessions": [
+        {"week_number": 1, "day_of_week": "Monday", "exercises": [{"name": "Squat", "notes": "Brace hard"}]},
+        {"week_number": 1, "day_of_week": "Tuesday", "exercises": [{"name": "Squat", "notes": "Brace hard"}]},
+    ]}
+    _normalize_exercise_names(parsed, source)
+    assert [session["exercises"][0]["notes"] for session in parsed["sessions"]] == ["", ""]
 
 
 def test_new_exercises_require_complete_profiles_and_reuse_existing(monkeypatch):
@@ -357,7 +416,9 @@ def test_template_import_creates_glossary_entry_and_preserves_metadata(monkeypat
     back, twist = draft["sessions"][0]["exercises"]
     assert result["template_sk"] == "template#draft"
     assert (back["glossary_id"], back["load_value"], back["rpe_target"]) == ("back", 7, 7)
+    assert back["notes"] == ""
     assert twist["glossary_id"] == created[0]["id"]
+    assert twist["notes"] == ""
     assert (created[0]["fatigue_category"], created[0]["fatigue_profile_source"]) == ("accessory", "ai_estimated")
     assert not compatible_variation("Single-leg Press", "Leg Press")
     assert compatible_variation("Single-leg Press", "One Leg Press")

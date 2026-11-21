@@ -82,3 +82,12 @@ def test_set_workload_includes_unloaded_amrap_and_separates_cardio_minutes():
     assert summary["weekly_prescriptions"]["1"] == {"lifting_sets": 2, "amrap_sets": 2, "cardio_minutes": 15, "muscle_sets": {"lats": 2}}
     assert summary["exercises"]["Row alias"]["fatigue_profile"] == GLOSSARY[2]["fatigue_profile"]
     assert summary["exercises"]["Bike"]["load_modes"] == ["timed"]
+
+
+def test_timed_seconds_and_loaded_duration_are_excluded_from_rep_metrics():
+    bike = {"name": "Squat", "sets": 2, "reps": 90, "rep_unit": "seconds", "load_type": "absolute", "load_value": 50}
+    program, summary = template_program(template([(1, [bike])]), GLOSSARY, {"squat": 185}, [])
+    assert summary["weekly_prescriptions"]["1"]["cardio_minutes"] == 3
+    assert summary["weekly_prescriptions"]["1"]["lifting_sets"] == 0
+    assert program["sessions"][0]["exercises"] == []
+    assert summary["exercises"]["Squat"]["timed_load_value"] == 50

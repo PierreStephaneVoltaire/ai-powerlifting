@@ -23,6 +23,8 @@ export const LoadTypeBadge: React.FC<Props> = ({ source, type, size = 'xs' }) =>
           <Badge color="green" variant="filled" size={size} radius="sm">%</Badge>
         </Tooltip>
       )
+    case 'duration':
+      return <Badge color="gray" variant="light" size={size} radius="sm">Duration</Badge>
     case 'absolute':
       return null // Default, no badge needed usually but let's see
     case 'unresolvable':

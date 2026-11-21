@@ -1,4 +1,5 @@
 import type { PlannedExercise, PlannedSet } from '@powerlifting/types'
+import { templatePrescription } from './templatePrescription'
 
 export function repsLabel(reps: number | null | undefined, repsMax?: number | null): string {
   const low = reps ?? '?'
@@ -30,7 +31,16 @@ function loadLabel(set: Pick<PlannedSet, 'kg' | 'rpe_target'>, formatLoad: (kg: 
 }
 
 export function formatPlannedExercise(exercise: PlannedExercise, formatLoad: (kg: number) => string): string {
-  if (exercise.duration_minutes != null) return exercise.sets > 1 ? `${exercise.sets} × ${exercise.duration_minutes} min` : `${exercise.duration_minutes} min`
+  if (exercise.duration_minutes != null || (exercise.rep_unit && exercise.rep_unit !== 'reps')) {
+    if (!exercise.set_plan?.length) return `${templatePrescription(exercise)}${loadLabel(exercise, formatLoad)}`
+    const groups: { count: number; set: PlannedSet }[] = []
+    for (const set of exercise.set_plan) {
+      const last = groups[groups.length - 1]
+      if (last && sameSet(last.set, set)) last.count += 1
+      else groups.push({ count: 1, set })
+    }
+    return groups.map(({ count, set }) => `${templatePrescription({ sets: count, reps: set.reps, rep_unit: exercise.rep_unit ?? 'minutes' })}${loadLabel(set, formatLoad)}`).join(', ')
+  }
   if (exercise.rep_mode === 'amrap') return `${exercise.sets} × AMRAP${loadLabel(exercise, formatLoad)}`
   if (!exercise.set_plan?.length) {
     return `${exercise.sets}x${repsLabel(exercise.reps, exercise.reps_max)}${loadLabel(exercise, formatLoad)}`

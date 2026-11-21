@@ -177,23 +177,73 @@ def _normalize_template_rows(rows):
     return normalized
 
 
-def _normalize_exercise_names(parsed):
+def _exercise_key(name):
+    return " ".join(str(name or "").casefold().split())
+
+
+def _row_value(row, *names):
+    wanted = {" ".join(name.casefold().replace("_", " ").replace("-", " ").split()) for name in names}
+    return next((value for key, value in row.items()
+                 if " ".join(str(key).casefold().replace("_", " ").replace("-", " ").split()) in wanted), None)
+
+
+def _row_week(row):
+    value = _row_value(row, "week_number", "week", "training week", "relative week", "_relative_week")
+    if value is None:
+        value = _week_from_sheet(str(_row_value(row, "_sheet") or ""))
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_day(row):
+    value = _row_value(row, "day_of_week", "day", "weekday", "_day_of_week")
+    return " ".join(str(value).casefold().split()) if value is not None else None
+
+
+def _source_exercise_notes(rows):
     from services.runtime.exercise_names import canonicalize_competition_lift
 
+    notes = []
+    for row in rows:
+        name = _row_value(row, "exercise", "exercise name", "lift", "movement")
+        note = _row_value(row, "exercise notes", "notes", "note")
+        if not name or not note:
+            continue
+        canonical, _ = canonicalize_competition_lift(name)
+        names = {_exercise_key(str(name)), _exercise_key(canonical)}
+        notes.append({"names": names, "week": _row_week(row), "day": _row_day(row), "note": str(note)})
+    return notes
+
+
+def _normalize_exercise_names(parsed, source_notes):
+    from services.runtime.exercise_names import canonicalize_competition_lift
+
+    exercises = []
     for session in parsed.get("sessions", []):
         if not isinstance(session, dict):
             continue
+        week, day = _row_week(session), _row_day(session)
         for exercise in session.get("exercises", []):
             if not isinstance(exercise, dict):
                 continue
             name = str(exercise.get("name") or "").strip()
-            canonical, prescription = canonicalize_competition_lift(name)
-            if canonical != name:
-                exercise["name"] = canonical
-            notes = str(exercise.get("notes") or "").strip()
-            if prescription and prescription.casefold() not in notes.casefold():
-                notes = f"{notes} {prescription}".strip()
-            exercise["notes"] = notes
+            canonical, _ = canonicalize_competition_lift(name)
+            exercise["name"] = canonical
+            exercise["notes"] = ""
+            exercises.append((exercise, {_exercise_key(name), _exercise_key(canonical)}, week, day))
+
+    matched = {}
+    for source in source_notes:
+        candidates = [i for i, (_, names, week, day) in enumerate(exercises)
+                      if names & source["names"] and source["week"] in (None, week)
+                      and source["day"] in (None, day)]
+        if len(candidates) == 1:
+            matched.setdefault(candidates[0], []).append(source["note"])
+    for i, notes in matched.items():
+        if len(notes) == 1:
+            exercises[i][0]["notes"] = notes[0]
 
 
 async def _dispatch(args):
@@ -242,7 +292,7 @@ async def _dispatch(args):
         raise ValueError(errors[0].get("message") or "AI could not parse the uploaded file")
     if not parsed.get("sessions"):
         raise ValueError("No training sessions were found in the uploaded file")
-    _normalize_exercise_names(parsed)
+    _normalize_exercise_names(parsed, _source_exercise_notes(rows))
     names = {
         exercise.get("name")
         for session in parsed.get("sessions", [])
@@ -274,8 +324,6 @@ async def _dispatch(args):
             if entry:
                 exercise["glossary_id"] = entry["id"]
                 exercise["name"] = entry["name"]
-                if name.casefold() != entry["name"].casefold():
-                    exercise["notes"] = f"{exercise['notes']} Imported as {name}.".strip()
     if args.get("template_import"):
         missing = {
             exercise["name"]
