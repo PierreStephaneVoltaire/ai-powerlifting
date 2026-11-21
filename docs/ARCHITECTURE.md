@@ -305,12 +305,15 @@ the caller on service-to-service requests. GitHub Actions uses GitHub-issued
 OIDC tokens for its AWS CI roles. Registry image pulls use the `ecr-registry`
 Secret, which the `ecr-refresher` service account renews using its own AWS role.
 
-The AWS stack owns the public discovery endpoint, IAM provider and role policies.
-App and Coach Terraform look up the role ARNs and mount the projected tokens
-using the [shared workload settings](../terraform/k8s/modules/workload-aws/main.tf). See the
+The deployment pipeline publishes the k3s public signing keys and discovery
+document and provisions the IAM provider and roles. The in-cluster runner
+configures the issuer and deploys the workloads with projected tokens. After
+rollout, CI verifies that STS accepts the `pl-rankings` service account and
+rejects a wrong audience or an unrelated service account. See the
+[deployment workflow](../.github/workflows/build-images.yml),
 [IAM policy definitions](../terraform/workload_identity.tf), the
-[rollout and verification procedure](../terraform/k8s/README.md#aws-workload-identity)
-and [ADR 0010](adr/0010-aws-workload-identity-and-network-hardening.md).
+[shared workload settings](../terraform/k8s/modules/workload-aws/main.tf) and
+[ADR 0010](adr/0010-aws-workload-identity-and-network-hardening.md).
 
 ### Mesh, monitoring and deployment
 
@@ -359,9 +362,9 @@ Terraform, with separate states for each scope:
 | `terraform/k8s/app` | Portal, domain services, caches, OAuth2 Proxy, waypoint and service policies |
 | `terraform/coach` | Coach, Discord bot and persistent state |
 
-The in-cluster runner applies the Kubernetes stacks and the separate Coach
-state after their images are published. See
-[`terraform/k8s/README.md`](../terraform/k8s/README.md) for the deployment flow.
+The in-cluster runner applies the core, permissions, network, mesh and app
+stacks in order. The same job applies the separate Coach state when a Coach
+image builds successfully or the workflow selects Kubernetes changes.
 
 ## Analysis page: the four computation paths
 

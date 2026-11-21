@@ -365,12 +365,9 @@ publishes these documents and configures the issuer before rolling out workloads
 See [AWS workload identity](docs/ARCHITECTURE.md#aws-workload-identity)
 and [ADR 0010](docs/adr/0010-aws-workload-identity-and-network-hardening.md).
 
-Infrastructure is Terraform, split into a few stacks: AWS and Cloudflare in
-`terraform/` (applied by CI), the Kubernetes pieces under `terraform/k8s/`
-(applied by a runner inside the cluster; `core` holds namespaces, secrets, the
-Actions runner, Authentik, Postgres and monitoring),
-and the Coach in `terraform/coach`. See
-[`terraform/k8s/README.md`](terraform/k8s/README.md).
+CI applies the AWS and Cloudflare resources in `terraform/`. An in-cluster
+runner applies the Kubernetes stacks in `terraform/k8s/` and the separate
+Coach state in `terraform/coach/` through the [deployment workflow](.github/workflows/build-images.yml).
 
 For more on the request flow, data model and caching, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
