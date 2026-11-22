@@ -75,7 +75,7 @@ export default function WeightTracker() {
     if (!targetClass || !currentBW) return null
     return {
       kg: parseFloat((currentBW - targetClass).toFixed(2)),
-      lb: parseFloat((kgToLb(currentBW - targetClass)).toFixed(1)),
+      lb: kgToLb(currentBW - targetClass),
       over: currentBW > targetClass,
     }
   }, [currentBW, targetClass])

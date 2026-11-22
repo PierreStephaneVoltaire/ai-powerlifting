@@ -31,7 +31,7 @@ export default function UnitConverter() {
     } else {
       return {
         from: `${value} lb`,
-        to: `${lbToKg(value)} kg`,
+        to: `${Number(lbToKg(value).toFixed(3))} kg`,
       }
     }
   }, [inputValue, mode])
