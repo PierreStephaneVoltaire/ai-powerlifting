@@ -783,6 +783,7 @@ def _md_sessions(sessions: list[dict]) -> str:
             planned = session.get("planned_exercises") or []
             
             if exercises:
+                lines.append("\n**Actual exercises**")
                 ex_rows = []
                 for ex in exercises:
                     failed = " \u2717" if "failed" in (ex.get("set_statuses") or []) else ""
@@ -800,7 +801,8 @@ def _md_sessions(sessions: list[dict]) -> str:
                     ])
                 lines.append("")
                 lines.append(_md_table(["Exercise", "Sets x Reps", "kg", "RPE", "Notes", "Status"], ex_rows))
-            elif planned:
+            if planned:
+                lines.append("\n**Planned exercises**")
                 ex_rows = []
                 for ex in planned:
                     ex_rows.append([
@@ -1228,7 +1230,7 @@ def _md_dots_trend(trend_rows: list[dict]) -> list[str]:
         lines.append(f"DOTS {direction}{dots_change} over {span} tracked weeks ({direction}{round(dots_change / max(1, span - 1), 2)}/week).")
         lines.append("")
 
-    headers = ["Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode"]
+    headers = ["Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode", "Squat change (kg)", "Bench change (kg)", "Deadlift change (kg)"]
     rows = []
     for r in trend_rows:
         rows.append([
@@ -1241,6 +1243,7 @@ def _md_dots_trend(trend_rows: list[dict]) -> list[str]:
             r.get("dots", "") or "",
             r.get("ipf_gl"),
             r.get("ipf_gl_mode"),
+            r.get("squat_delta"), r.get("bench_delta"), r.get("deadlift_delta"),
         ])
     lines.append(_md_table(headers, rows))
     lines.append("")
@@ -2729,7 +2732,7 @@ def _write_trends_sheet(
     _write_section_label(ws, row, "DOTS Trend", width=6)
     row += 1
     trend_rows = _build_dots_trend_rows(sessions, weight_log, sex)
-    headers = ["Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode"]
+    headers = ["Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode", "Squat change (kg)", "Bench change (kg)", "Deadlift change (kg)"]
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=row, column=col_idx, value=header)
         cell.font = _HEADER_FONT
@@ -2746,11 +2749,13 @@ def _write_trends_sheet(
             ws.cell(row=row, column=7, value=item.get("dots", ""))
             ws.cell(row=row, column=8, value=item.get("ipf_gl"))
             ws.cell(row=row, column=9, value=item.get("ipf_gl_mode"))
+            for column, lift in enumerate(("squat", "bench", "deadlift"), 10):
+                ws.cell(row=row, column=column, value=item.get(f"{lift}_delta"))
             row += 1
     else:
         ws.cell(row=row, column=1, value="No DOTS trend data available")
 
-    _autosize_columns(ws, max_cols=10, max_width=60)
+    _autosize_columns(ws, max_cols=12, max_width=60)
 
 def _bodyweight_points(sessions: list[dict], weight_log: list[dict]) -> list[tuple[str, float]]:
     by_date: dict[str, float] = {}
@@ -2817,6 +2822,7 @@ def _build_dots_trend_rows(
             ipf_gl = calculate_ipf_gl(total, bodyweight, sex, mode)
             if ipf_gl is not None:
                 mode_label = "Classic" if full_sbd else "Bench"
+        previous = rows[-1] if rows and rows[-1]["week"] == week - 1 else {}
         rows.append({
             "week": week,
             "squat": squat or None,
@@ -2827,5 +2833,6 @@ def _build_dots_trend_rows(
             "dots": dots,
             "ipf_gl": ipf_gl,
             "ipf_gl_mode": mode_label,
+            **{f"{lift}_delta": round(bucket[lift] - previous[lift], 1) if bucket[lift] and previous.get(lift) else None for lift in ("squat", "bench", "deadlift")},
         })
     return rows

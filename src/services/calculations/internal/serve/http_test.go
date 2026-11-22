@@ -33,8 +33,9 @@ func TestOperations(t *testing.T) {
 		name, body, key string
 		want            any
 	}{
-		{"lb_to_kg", `{"lb":220.462}`, "kg", float64(100)},
-		{"kg_to_lb", `{"kg":100}`, "lb", 220.5},
+		{"lb_to_kg", `{"lb":170.4}`, "kg", 77.29223176783302},
+		{"kg_to_lb", `{"kg":100}`, "lb", 220.462},
+		{"pct_of_max", `{"max_kg":100,"pct":50}`, "lb", 110.231},
 		{"pct_of_max", `{"max_kg":185,"pct":85}`, "rounded_2_5_kg", 157.5},
 		{"ipf_weight_classes", `{"sex":"F"}`, "sex", "F"},
 		{"estimate_1rm", `{"weight_kg":100,"reps":5,"rpe":8}`, "e1rm", 122.7},
@@ -72,7 +73,7 @@ func TestMCPAndValidation(t *testing.T) {
 		status     int
 		contains   string
 	}{
-		{"/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kg_to_lb","arguments":{"kg":100}}}`, 200, `"lb":220.5`},
+		{"/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kg_to_lb","arguments":{"kg":100}}}`, 200, `"lb":220.462`},
 		{"/operations/kg_to_lb", `{"kg":0}`, 422, `validation`},
 		{"/operations/kg_to_lb", `{"kg":1,"_person_pk":"forged"}`, 403, `forbidden`},
 	} {

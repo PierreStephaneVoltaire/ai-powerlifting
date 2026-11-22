@@ -82,14 +82,14 @@ func (s *Service) calculate(name string, a map[string]any) (any, error) {
 	switch name {
 	case "lb_to_kg":
 		v := n("lb")
-		return map[string]any{"lb": v, "kg": calc.Round(v/2.20462, 2)}, nil
+		return map[string]any{"lb": v, "kg": v / 2.20462}, nil
 	case "kg_to_lb":
 		v := n("kg")
-		return map[string]any{"kg": v, "lb": calc.Round(v*2.20462, 1)}, nil
+		return map[string]any{"kg": v, "lb": v * 2.20462}, nil
 	case "pct_of_max":
 		max, pct := n("max_kg"), n("pct")
 		raw := max * (pct / 100)
-		return map[string]any{"max_kg": max, "pct": pct, "raw_kg": calc.Round(raw, 2), "rounded_2_5_kg": math.RoundToEven(raw/2.5) * 2.5, "lb": calc.Round(raw*2.20462, 1)}, nil
+		return map[string]any{"max_kg": max, "pct": pct, "raw_kg": calc.Round(raw, 2), "rounded_2_5_kg": math.RoundToEven(raw/2.5) * 2.5, "lb": raw * 2.20462}, nil
 	case "ipf_weight_classes":
 		sex := a["sex"].(string)
 		classes := []any{59, 66, 74, 83, 93, 105, 120, "120+"}

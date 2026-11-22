@@ -93,7 +93,7 @@ export default function BlockTransitionPanel() {
           <TextInput label="Start date" type="date" required value={startDate} onChange={event => setStartDate(event.currentTarget.value)} />
           <Select label="Week starts" data={weekdays} value={weekStart} onChange={value => value && setWeekStart(value as WeekStartDay)} />
           <Text size="sm">Confirm best-known current maxes in kg. Week numbering restarts at 1.</Text>
-          {lifts.map(lift => <NumberInput key={lift} label={`${lift[0].toUpperCase()}${lift.slice(1)} 1RM (kg${maxes[lift] ? ` / ${(maxes[lift] * 2.20462).toFixed(1)} lb` : ''})`} min={0.5} step={2.5} value={maxes[lift] || ''} onChange={value => setMaxes(previous => ({ ...previous, [lift]: Number(value) }))} required />)}
+          {lifts.map(lift => <NumberInput key={lift} label={`${lift[0].toUpperCase()}${lift.slice(1)} 1RM (kg${maxes[lift] ? ` / ${Number((maxes[lift] * 2.20462).toFixed(2))} lb` : ''})`} min={0.5} step={2.5} value={maxes[lift] || ''} onChange={value => setMaxes(previous => ({ ...previous, [lift]: Number(value) }))} required />)}
         </>}
         {error && <Alert color="red">{error}<Button variant="subtle" onClick={() => loadProgram('current')}>Reload program</Button></Alert>}
         <Group justify="flex-end">

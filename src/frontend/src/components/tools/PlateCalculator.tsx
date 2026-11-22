@@ -256,24 +256,24 @@ export default function PlateCalculator() {
                       <Table.Tr key={plate}>
                         <Table.Td>{count}x {plate}kg</Table.Td>
                         <Table.Td ta="right">{plate.toFixed(1)} kg</Table.Td>
-                        <Table.Td ta="right">{kgToLb(plate).toFixed(1)} lb</Table.Td>
+                        <Table.Td ta="right">{kgToLb(plate)} lb</Table.Td>
                       </Table.Tr>
                     )
                   })}
                   <Table.Tr fw={500}>
                     <Table.Td>Per side total</Table.Td>
                     <Table.Td ta="right">{loadout.perSideKg.toFixed(1)} kg</Table.Td>
-                    <Table.Td ta="right">{kgToLb(loadout.perSideKg).toFixed(1)} lb</Table.Td>
+                    <Table.Td ta="right">{kgToLb(loadout.perSideKg)} lb</Table.Td>
                   </Table.Tr>
                   <Table.Tr fw={500} style={{ borderTopWidth: 2 }}>
                     <Table.Td>Bar</Table.Td>
                     <Table.Td ta="right">{actualBarWeight.toFixed(1)} kg</Table.Td>
-                    <Table.Td ta="right">{kgToLb(actualBarWeight).toFixed(1)} lb</Table.Td>
+                    <Table.Td ta="right">{kgToLb(actualBarWeight)} lb</Table.Td>
                   </Table.Tr>
                   <Table.Tr fw={700} bg="var(--mantine-color-blue-light)">
                     <Table.Td>Grand Total</Table.Td>
                     <Table.Td ta="right" data-testid="plate-grand-total-kg">{loadout.totalKg.toFixed(1)} kg</Table.Td>
-                    <Table.Td ta="right" data-testid="plate-grand-total-lb">{kgToLb(loadout.totalKg).toFixed(1)} lb</Table.Td>
+                    <Table.Td ta="right" data-testid="plate-grand-total-lb">{kgToLb(loadout.totalKg)} lb</Table.Td>
                   </Table.Tr>
                 </Table.Tbody>
               </Table>

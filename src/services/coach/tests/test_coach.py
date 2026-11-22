@@ -134,7 +134,13 @@ def test_large_prompt_uses_private_input_tool_and_cleans_up(tmp_path):
     class InspectModel(CodexModel):
         async def _run(self, ai, cwd, instructions, prompt, overrides=()):
             assert "job_input" in prompt and len(overrides) == 2
-            path = Path(json.loads(overrides[1].split("=", 1)[1])[-1])
+            import subprocess
+            import sys
+            args = json.loads(overrides[1].split("=", 1)[1])
+            path = Path(args[-1])
+            request = json.dumps({"id": 1, "method": "tools/list"}) + "\n"
+            result = subprocess.run([sys.executable, *args], input=request, text=True, capture_output=True, cwd=cwd, check=True)
+            assert json.loads(result.stdout)["result"]["tools"][0]["name"] == "read_input"
             data = path.read_text()
             assert len(data) == MAX_INLINE_PROMPT
             first = handle({"id": 1, "method": "tools/call", "params": {"name": "read_input", "arguments": {"offset": 0}}}, data)

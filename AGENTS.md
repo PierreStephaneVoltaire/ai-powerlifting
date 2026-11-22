@@ -62,3 +62,37 @@ npm run typecheck      # typecheck all workspaces
 ## Build bar
 
 `npm run build` must pass before declaring work done.
+
+## Live test athlete
+
+The private Authentik account `acceptance-luna-20260915` maps to Person/Athlete
+`person_be8959131fea4ca395a38e8f`. It has an `Automated Test Program` and four
+completed synthetic sessions: `automated-test-week-1` through `automated-test-week-3`
+and `manual-export-check-20261123`. They cover Nov 2–23, 2026 and include
+planned exercises plus actual per-set loads/RPE.
+
+With Node dependencies installed in `src`, Playwright Chromium available, and
+Kubernetes access to namespace `powerlifting`, create a normal headless OIDC
+session with:
+
+```bash
+node scripts/test-auth-session.mjs
+```
+
+It creates a ten-minute Authentik app password, logs in through the usual OIDC
+flow, verifies the expected Person, saves `/tmp/nolift-test-session.json` with
+owner-only permissions, then deletes the password. Set `PL_STORAGE_STATE` to
+change that location. The saved browser state is a credential; keep it out of
+the repository and recreate it when expired. If interrupted, the temporary
+password expires in ten minutes. Authentik API tokens do not authenticate to
+NoLift; use the OAuth2 Proxy session cookie and never fabricate internal
+identity headers.
+
+`node scripts/test-live-api.mjs` reuses that session for direct HTTP checks
+without launching a browser. `node scripts/test-live-browser.mjs` launches
+headless Chromium and checks the training sessions in the UI. Both verify the
+test account first. `node scripts/test-seed-athlete.mjs` completes onboarding,
+initializes a program if needed, and adds the three weekly synthetic sessions
+if missing; it does not delete or reset data. These API and browser checks are
+read-only. The export API assertions currently fail on the live deployment
+because the prescription and weekly e1RM changes are missing.

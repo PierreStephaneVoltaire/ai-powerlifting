@@ -121,7 +121,7 @@ class CodexModel:
             path.write_text(prompt, encoding="utf-8")
             overrides = (
                 'mcp_servers.job_input.command=' + json.dumps(sys.executable),
-                'mcp_servers.job_input.args=' + json.dumps(["-m", "services.coach.input_reader", str(path)]),
+                'mcp_servers.job_input.args=' + json.dumps([str(Path(__file__).with_name("input_reader.py")), str(path)]),
             )
             return await self._run(ai, cwd, instructions, "Read the complete input using the job_input tool, then complete the requested task.", overrides)
 

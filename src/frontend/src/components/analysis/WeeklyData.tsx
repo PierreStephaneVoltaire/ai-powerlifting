@@ -135,14 +135,14 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
                           <Table.Td colSpan={10}>
                             <Box ml="md">
                               <Text fz="xs" c="dimmed" mb="xs">
-                                Accessory work counted toward {name}: {details.sets} weighted sets from {details.raw_sets} main sets, {Math.round(toDisplayUnit(details.volume, unit)).toLocaleString()} {unit} weighted volume
+                                Accessory work counted toward {name}: {details.sets} weighted sets from {details.raw_sets} main sets, {toDisplayUnit(details.volume, unit).toLocaleString()} {unit} weighted volume
                               </Text>
                               <SimpleGrid cols={{ base: 2, md: 3, lg: 4 }}>
                                 {details.accessories.map(a => (
                                   <Box key={a.name} p="xs" style={{ borderRadius: 'var(--mantine-radius-sm)', background: 'var(--mantine-color-default)' }}>
                                     <Text fz="xs" fw={500}>{a.name}</Text>
                                     <Text fz="xs" c="dimmed">transfer {a.transfer.toFixed(2)} · {a.sets} sets = {a.weighted_sets} weighted</Text>
-                                    <Text fz="xs" c="dimmed">{Math.round(toDisplayUnit(a.volume, unit)).toLocaleString()} {unit}</Text>
+                                    <Text fz="xs" c="dimmed">{toDisplayUnit(a.volume, unit).toLocaleString()} {unit}</Text>
                                   </Box>
                                 ))}
                               </SimpleGrid>
@@ -174,7 +174,7 @@ export function WeeklyData({ data, viewMode, analysisWeeks, unit }: WeeklyDataPr
                       <Table.Tr key={name}>
                         <Table.Td fw={500}>{name}</Table.Td>
                         <Table.Td ta="right">{s.total_sets}</Table.Td>
-                        <Table.Td ta="right">{Math.round(toDisplayUnit(s.total_volume, unit)).toLocaleString()}</Table.Td>
+                        <Table.Td ta="right">{toDisplayUnit(s.total_volume, unit).toLocaleString()}</Table.Td>
                         <Table.Td ta="right">{formatDisplayWeight(s.max_kg, unit)}</Table.Td>
                       </Table.Tr>
                     ))}

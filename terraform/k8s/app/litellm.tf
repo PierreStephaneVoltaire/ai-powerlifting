@@ -233,6 +233,11 @@ resource "kubernetes_deployment_v1" "litellm" {
             value = "False"
           }
 
+          env {
+            name  = "NO_DOCS"
+            value = "true"
+          }
+
           env_from {
             secret_ref {
               name = kubernetes_secret_v1.litellm.metadata[0].name
