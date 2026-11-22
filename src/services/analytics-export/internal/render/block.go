@@ -274,6 +274,14 @@ func (b block) weeklySummaryRows() []Row {
 		{"Window", compact(b.weekly["window_start"]) + " to " + compact(b.weekly["window_end"])},
 		{"Sessions analyzed", numberOrBlank(b.weekly["sessions_analyzed"])},
 		{"Compliance", complianceText},
+		{"Set compliance", formatRawPct(compliance["set_pct"])},
+		{"Volume compliance", formatRawPct(compliance["vol_pct"])},
+		{"Planned sessions", numberOrBlank(compliance["planned"])},
+		{"Completed sessions", numberOrBlank(compliance["completed"])},
+		{"Planned sets", numberOrBlank(compliance["planned_sets"])},
+		{"Completed sets", numberOrBlank(compliance["completed_sets"])},
+		{"Planned volume", formatKg(compliance["planned_volume"])},
+		{"Completed volume", formatKg(compliance["completed_volume"])},
 		{"Current squat", formatKg(maxes["squat"])},
 		{"Current bench", formatKg(maxes["bench"])},
 		{"Current deadlift", formatKg(maxes["deadlift"])},
@@ -443,13 +451,9 @@ func sessionStatus(session map[string]any) string {
 	return "Planned"
 }
 
-// sessionRows lists every logged exercise set across the block's sessions,
-// scoped to the block's date window. This is the raw training log, not a
-// derived metric - it is what makes the export a full record of the block
-// rather than just its computed analytics.
 func (b block) sessionRows() []Row {
 	start, end := compact(b.meta["startDate"]), compact(b.meta["endDate"])
-	rows := []Row{{"Date", "Day", "Status", "Exercise", "Prescription", "Load", "RPE", "Notes"}}
+	rows := []Row{{"Date", "Day", "Status", "Exercise", "Type", "Sets x Reps", "Load", "RPE", "Notes"}}
 	for _, session := range sortedSessions(sessionList(b.bundle["sessions"])) {
 		date := text(session["date"])
 		if block, sessionBlock := text(b.meta["block"]), text(session["block"]); block != "" && sessionBlock != block {
@@ -463,17 +467,35 @@ func (b block) sessionRows() []Row {
 		}
 		day, status := text(session["day"]), sessionStatus(session)
 		exercises := list(session["exercises"])
-		if len(exercises) == 0 {
-			rows = append(rows, Row{date, day, status, "--", "", "", "", text(session["session_comments"])})
+		planned := list(session["planned_exercises"])
+		if len(exercises) == 0 && len(planned) == 0 {
+			rows = append(rows, Row{date, day, status, "--", "", "", "", "", firstText(session["session_notes"], session["session_comments"])})
 			continue
+		}
+		for _, raw := range planned {
+			exercise := record(raw)
+			rows = append(rows, Row{date, day, status, text(exercise["name"]), "Planned", compact(exercise["sets"]) + " x " + compact(exercise["reps"]), formatKg(exercise["kg"]), formatNumber(exercise["rpe_target"], 1), text(exercise["notes"])})
 		}
 		for _, raw := range exercises {
 			exercise := record(raw)
-			rows = append(rows, Row{
-				date, day, status, text(exercise["name"]),
-				compact(exercise["sets"]) + " x " + compact(exercise["reps"]),
-				formatKg(exercise["kg"]), formatNumber(exercise["rpe"], 1), text(exercise["notes"]),
-			})
+			sets := list(exercise["sets_data"])
+			if len(sets) == 0 {
+				sets = []any{exercise}
+			}
+			for _, rawSet := range sets {
+				set := record(rawSet)
+				value := func(key string) any {
+					if v, ok := set[key]; ok {
+						return v
+					}
+					return exercise[key]
+				}
+				count := any(1)
+				if len(list(exercise["sets_data"])) == 0 {
+					count = exercise["sets"]
+				}
+				rows = append(rows, Row{date, day, status, text(exercise["name"]), "Actual", compact(count) + " x " + compact(value("reps")), formatKg(value("kg")), formatNumber(value("rpe"), 1), text(exercise["notes"])})
+			}
 		}
 	}
 	if len(rows) == 1 {

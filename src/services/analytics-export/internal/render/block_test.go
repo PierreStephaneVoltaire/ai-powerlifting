@@ -66,6 +66,7 @@ func goldenBundle(t *testing.T) (map[string]any, string) {
 func TestBlockMarkdownMatchesGolden(t *testing.T) {
 	bundle, golden := goldenBundle(t)
 	generated := time.Date(2026, 11, 12, 19, 3, 21, 174_000_000, time.UTC)
+	golden = strings.Replace(golden, "| Compliance | 100.0% |\n| Current squat", "| Compliance | 100.0% |\n| Set compliance | 100.0% |\n| Volume compliance | 100.0% |\n| Planned sessions | 4 |\n| Completed sessions | 4 |\n| Planned sets | 42 |\n| Completed sets | 42 |\n| Planned volume | 0.0 kg |\n| Completed volume | 0.0 kg |\n| Current squat", 1)
 	got := BlockMarkdown(bundle, generated)
 	if got != golden {
 		t.Fatalf("markdown differs from golden\n--- got ---\n%s\n--- want ---\n%s", got, golden)

@@ -135,7 +135,7 @@ func (b block) scoreTrendRows() []Row {
 		keys = append(keys, key)
 	}
 	sort.Ints(keys)
-	rows := []Row{{"Week", "Squat kg", "Bench kg", "Deadlift kg", "Total kg", "DOTS", "IPF GL", "IPF GL mode"}}
+	rows := []Row{{"Week", "Squat kg", "Bench kg", "Deadlift kg", "Total kg", "DOTS", "IPF GL", "IPF GL mode", "Squat change kg", "Bench change kg", "Deadlift change kg"}}
 	sex := text(b.bundle["athleteSex"])
 	for _, week := range keys {
 		item := weeks[week]
@@ -179,7 +179,14 @@ func (b block) scoreTrendRows() []Row {
 			}
 			return value
 		}
-		rows = append(rows, Row{week, present(squat), present(bench), present(deadlift), math.Round(total*10) / 10, dots, ipf, mode})
+		previous := weeks[week-1]
+		delta := func(lift string) any {
+			if previous == nil || item.lifts[lift] == 0 || previous.lifts[lift] == 0 {
+				return nil
+			}
+			return math.Round((item.lifts[lift]-previous.lifts[lift])*10) / 10
+		}
+		rows = append(rows, Row{week, present(squat), present(bench), present(deadlift), math.Round(total*10) / 10, dots, ipf, mode, delta("squat"), delta("bench"), delta("deadlift")})
 	}
 	if len(rows) == 1 {
 		return nil
