@@ -279,8 +279,18 @@ export default function CalendarPage() {
         <SessionsCompactView backTo={sessionsBackTo} readOnly={readOnly} />
       ) : view === 'Month' ? renderMonthGrid() : (
         <Stack gap="md">
+          {weeklyGroups.length > 1 && (
+            <Select
+              aria-label="Jump to week"
+              placeholder="Jump to week"
+              value={null}
+              data={weeklyGroups.map(({ weekStart, weekLabel }) => ({ value: weekStart, label: `Week of ${weekLabel}` }))}
+              onChange={(week) => week && document.getElementById(`agenda-week-${week}`)?.scrollIntoView({ block: 'start' })}
+              size="sm"
+            />
+          )}
           {weeklyGroups.map(({ weekStart, weekLabel, sessions }) => (
-            <Stack key={weekStart} gap={4}>
+            <Stack key={weekStart} id={`agenda-week-${weekStart}`} gap={4} style={{ scrollMarginTop: 80 }}>
               <Text className="if-week-header">Week of {weekLabel}</Text>
               {sessions.map((session) => renderSessionRow(session, false))}
             </Stack>

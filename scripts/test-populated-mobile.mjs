@@ -30,6 +30,24 @@ try {
       const program = payload.data
       const block = program.meta.current_block_id || 'current'
       const date = (i) => new Date(Date.UTC(2026, 10, 1 + i)).toISOString().slice(0, 10)
+      const sourceSessions = [...program.sessions]
+      assert.ok(sourceSessions.length > 0, 'Expected real session records to clone')
+      const programStart = new Date(`${program.meta.program_start}T00:00:00Z`)
+      const populatedSessions = Array.from({ length: 40 }, (_, index) => {
+        const week = index + 1
+        const sessionDate = new Date(programStart)
+        sessionDate.setUTCDate(sessionDate.getUTCDate() + ((week - 1) * 7) + 2)
+        const cloned = structuredClone(sourceSessions[index % sourceSessions.length])
+        return {
+          ...cloned,
+          id: `synthetic-populated-week-${week}`,
+          date: sessionDate.toISOString().slice(0, 10),
+          day: 'Tuesday',
+          week: `W${week}`,
+          week_number: week,
+        }
+      })
+      program.sessions = [...sourceSessions, ...populatedSessions]
       program.meta.block_notes = Array.from({ length: 30 }, (_, i) => ({ date: date(i), block_id: block, notes: `Note ${i + 1}: ${'Long training context, recovery, exercise technique and adjustments. '.repeat(4)}`, updated_at: `${date(i)}T12:00:00Z` }))
       program.diet_notes = Array.from({ length: 12 }, (_, i) => ({ date: date(i), block_id: block, notes: `Biometrics ${i + 1}`, avg_daily_calories: 3000 + i, avg_protein_g: 180 + i, consistent: true }))
       program.supplement_phases = Array.from({ length: 2 }, (_, i) => ({ phase: i + 1, phase_name: `Synthetic phase ${i + 1}`, block_id: block, notes: '', start_week: 1, end_week: 4, items: Array.from({ length: 8 }, (_, k) => ({ name: `Compound ${i + 1}-${k + 1}`, dose: '5 g/day', notes: '', dose_assessment: 'within_range' })) }))
@@ -42,6 +60,28 @@ try {
   const page = await context.newPage()
   for (const viewport of [{ width: 375, height: 667 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(viewport)
+    await page.goto(`${baseUrl}/sessions?view=Agenda`)
+    await page.getByRole('button', { name: 'Agenda' }).waitFor()
+    const jumpToWeek = page.getByRole('combobox', { name: 'Jump to week' })
+    await jumpToWeek.waitFor()
+    const jumpBox = await jumpToWeek.boundingBox()
+    assert.ok(jumpBox && jumpBox.y >= 0 && jumpBox.y + jumpBox.height <= viewport.height, `Jump to week should be visible at ${viewport.width}px`)
+    assert.ok(await page.evaluate(() => window.scrollY <= 2), `Agenda should open at the top at ${viewport.width}px`)
+    await jumpToWeek.click()
+    await page.getByRole('option', { name: /Week of/ }).last().click()
+    const lastHeading = page.locator('[id^="agenda-week-"]').last()
+    await lastHeading.waitFor()
+    assert.ok(await page.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return rect.top >= 0 && rect.top < innerHeight
+    }, await lastHeading.elementHandle()), `Selecting a later week should bring its heading into view at ${viewport.width}px`)
+    await page.getByRole('combobox', { name: 'Jump to week' }).click()
+    await page.getByRole('option', { name: /Week of/ }).last().click()
+    assert.ok(await page.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return rect.top >= 0 && rect.top < innerHeight
+    }, await lastHeading.elementHandle()), `Reselecting a week should keep its heading in view at ${viewport.width}px`)
+
     await page.goto(`${baseUrl}/notes`)
     await page.getByTestId('program-note-card').first().waitFor()
     assert.equal(await page.getByTestId('program-note-card').count(), 5)
