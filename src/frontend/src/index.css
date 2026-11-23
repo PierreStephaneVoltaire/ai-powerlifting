@@ -1276,8 +1276,9 @@
   }
 
   .if-session-action-bar .mantine-Button-root {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 1 auto;
+    min-width: max-content;
+    min-height: 44px;
   }
 }
 

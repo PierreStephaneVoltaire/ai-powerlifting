@@ -1141,7 +1141,7 @@ export default function SessionDrawer({
   }
 
   const toggleComplete = () => {
-    if (localSession?.completed && !window.confirm('Mark this session incomplete?')) return
+    if (!window.confirm(localSession?.completed ? 'Mark this session incomplete?' : 'Mark this session done?')) return
     setLocalSession((prev) => {
       if (!prev) return prev
       const completed = !prev.completed
