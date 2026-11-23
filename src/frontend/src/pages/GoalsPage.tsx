@@ -16,7 +16,6 @@ import {
   Stack,
   Text,
   Textarea,
-  Title,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import * as api from '@/api/client'
@@ -267,7 +266,7 @@ export default function GoalsPage() {
               Designer
             </Text>
             <Text c="dimmed">/</Text>
-            <Title order={2}>Goals</Title>
+            <h1 className="if-mock-title">Goals</h1>
           </Group>
           <Text c="dimmed" size="sm" mt={4}>
             Formalize what this block is trying to accomplish so the analysis can evaluate the right target.

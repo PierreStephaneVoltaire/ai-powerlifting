@@ -17,7 +17,6 @@ import {
   Text,
   TextInput,
   Textarea,
-  Title,
 } from '@mantine/core'
 import { useCompetitionsStore } from '@/store/competitionsStore'
 import { useUiStore } from '@/store/uiStore'
@@ -283,9 +282,9 @@ export default function CompetitionsPage() {
           <Group gap="xs">
             <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>Designer</Text>
             <Text c="dimmed">/</Text>
-            <Title order={2}>Competitions</Title>
+            <h1 className="if-mock-title">Competitions</h1>
           </Group>
-          <Text c="dimmed" size="sm" mt={4}>Browse upcoming competitions. Master details are read-only \u2014 edit only your personal fields.</Text>
+          <Text c="dimmed" size="sm" mt={4}>Browse upcoming competitions. Master details are read-only — edit only your personal fields.</Text>
         </Stack>
       </Group>
 

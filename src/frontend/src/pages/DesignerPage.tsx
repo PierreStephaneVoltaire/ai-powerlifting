@@ -770,59 +770,64 @@ export default function DesignerPage() {
         <div className="if-designer-page-title">Session Design</div>
         <div className="if-designer-top-right">
           {assistant.button}
-          <button
-            type="button"
-            className="if-designer-btn"
+          <Button
+            variant="default"
+            size="sm"
+            h={44}
             disabled={selectedWeek <= 1 || readOnly}
+            leftSection={<Copy size={14} />}
             onClick={() => handleCopySessions(selectedWeek - 1)}
           >
-            <Copy size={14} /> Copy Previous
-          </button>
-          <button
-            type="button"
-            className="if-designer-btn"
+            Copy Previous
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            h={44}
             disabled={selectedWeek >= totalWeeks || readOnly}
+            leftSection={<Copy size={14} />}
             onClick={() => handleCopySessions(selectedWeek + 1)}
           >
-            <Copy size={14} /> Copy Next
-          </button>
-          <button
-            type="button"
-            className="if-designer-btn if-designer-btn-primary"
+            Copy Next
+          </Button>
+          <Button
+            variant="filled"
+            size="sm"
+            h={44}
+            leftSection={<Plus size={14} />}
             onClick={() => openSessionEditor()}
             disabled={readOnly}
           >
-            <Plus size={14} /> Add Session
-          </button>
+            Add Session
+          </Button>
         </div>
       </div>
 
       <div className="if-designer-week-bar">
         <div className="if-designer-week-nav">
-          <button
-            type="button"
-            className="if-designer-btn"
+          <Button variant="default" size="sm" h={44} leftSection={<ArrowLeft size={14} />}
             disabled={selectedWeek <= 1}
             onClick={() => setSelectedWeek(prev => prev - 1)}
           >
-            <ArrowLeft size={14} /> Prev Week
-          </button>
-          <button
-            type="button"
-            className="if-designer-btn"
+            Prev Week
+          </Button>
+          <Button variant="default" size="sm" h={44} rightSection={<ArrowRight size={14} />}
             disabled={selectedWeek >= totalWeeks}
             onClick={() => setSelectedWeek(prev => prev + 1)}
           >
-            Next Week <ArrowRight size={14} />
-          </button>
+            Next Week
+          </Button>
         </div>
-        <select
-          className="if-designer-week-selector"
+        <Select
+          size="sm"
+          aria-label="Week"
           value={selectedWeek}
-          onChange={(event) => setSelectedWeek(Number(event.currentTarget.value))}
-        >
-          {weekOptions.map(w => <option key={w} value={w}>Week {w}</option>)}
-        </select>
+          onChange={(value) => value != null && setSelectedWeek(value)}
+          data={weekOptions.map(w => ({ value: w, label: `Week ${w}` }))}
+          allowDeselect={false}
+          w={130}
+          styles={{ input: { minHeight: 44 } }}
+        />
       </div>
 
       <div className="if-designer-vol-card">
