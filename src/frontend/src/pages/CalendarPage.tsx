@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Stack,
@@ -12,7 +12,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { sessionRoute } from '@/utils/sessionRoute'
 import { phaseColor } from '@/utils/phases'
 import { format } from 'date-fns'
-import { findClosestSessionToToday, parseLocalDate } from '@/utils/dates'
+import { parseLocalDate } from '@/utils/dates'
 import { trainingWeekStartForDate, weekStartForBlock } from '@/utils/weekStart'
 import { normalizeExerciseName } from '@/utils/volume'
 import { Check, ArrowUp } from 'lucide-react'
@@ -40,8 +40,6 @@ export default function CalendarPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const agendaTargetRef = useRef<HTMLButtonElement | null>(null)
-  const hasScrolledAgendaRef = useRef(typeof location.state?.restoreScrollY === 'number')
   const [showScrollTop, setShowScrollTop] = useState(false)
   const view = parseSessionView(searchParams.get('view')) || defaultSessionsView
   const sessionsBackTo = useMemo(() => {
@@ -100,11 +98,6 @@ export default function CalendarPage() {
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [program, block])
 
-  const closestAgendaSession = useMemo(
-    () => findClosestSessionToToday(currentSessions),
-    [currentSessions],
-  )
-
   const weeklyGroups = useMemo(() => {
     if (!program || !currentSessions.length) return []
     const groups = new Map<string, Session[]>()
@@ -126,20 +119,6 @@ export default function CalendarPage() {
       sessions,
     }))
   }, [currentSessions, program, block])
-  useEffect(() => {
-    if (view !== 'Agenda' || hasScrolledAgendaRef.current || !closestAgendaSession) return
-
-    const timeoutId = window.setTimeout(() => {
-      const target = agendaTargetRef.current
-      if (!target) return
-
-      target.scrollIntoView({ block: 'center', inline: 'nearest' })
-      hasScrolledAgendaRef.current = true
-    }, 0)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [closestAgendaSession, view])
-
   useEffect(() => {
     if (!program || isLoading || typeof location.state?.restoreScrollY !== 'number') return
     const frame = requestAnimationFrame(() => window.scrollTo({ top: location.state.restoreScrollY }))
@@ -176,7 +155,6 @@ export default function CalendarPage() {
     return (
       <UnstyledButton
         key={`${session.date}-${session.id ?? session.week_number}`}
-        ref={session === closestAgendaSession ? agendaTargetRef : undefined}
         onClick={() => openSession(session)}
         style={{ width: '100%', minHeight: 44 }}
       >
