@@ -1,5 +1,5 @@
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, Calendar, Droplets, Flame, CheckCircle, XCircle, Moon, Beef } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
@@ -19,6 +19,8 @@ export default function BiometricsPage() {
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<DietNote[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  const [page, setPage] = useState(0)
+  const entriesRef = useRef<HTMLDivElement>(null)
   useUnsavedChanges(hasChanges)
   const assistant = useAssistant('biometrics', {}, readOnly || hasChanges)
 
@@ -26,6 +28,18 @@ export default function BiometricsPage() {
     if (hasChanges) return
     setNotes(recordsInBlock(program?.diet_notes ?? [], program).sort((a, b) => b.date.localeCompare(a.date)))
   }, [program, hasChanges])
+
+  const pageSize = 2
+  const pageCount = Math.ceil(notes.length / pageSize)
+  useEffect(() => setPage((current) => Math.min(current, Math.max(0, pageCount - 1))), [pageCount])
+
+  const pager = notes.length > pageSize && <Group justify="space-between" align="center">
+    <Text size="sm" c="dimmed">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, notes.length)} of {notes.length}</Text>
+    <Group gap="xs">
+      <Button variant="default" size="sm" h={44} disabled={page === 0} onClick={() => setPage((current) => current - 1)}>Previous</Button>
+      <Button variant="default" size="sm" h={44} disabled={page >= pageCount - 1} onClick={() => setPage((current) => current + 1)}>Next</Button>
+    </Group>
+  </Group>
 
   function updateNote(date: string, updates: Partial<DietNote>) {
     setNotes((prev) =>
@@ -41,6 +55,7 @@ export default function BiometricsPage() {
       return
     }
     setNotes((prev) => [{ date: today, notes: '' }, ...prev])
+    setPage(0)
     setHasChanges(true)
   }
 
@@ -83,8 +98,9 @@ export default function BiometricsPage() {
         </Group>
       </Group>
 
-      <Stack gap="md">
-        {notes.map((note) => (
+      <Stack gap="md" ref={entriesRef}>
+        {pager}
+        {notes.slice(page * pageSize, (page + 1) * pageSize).map((note) => (
           <Paper key={note.date} withBorder p={0} className="if-card">
             <Box p="14px 16px">
             <Stack gap="sm">
@@ -299,6 +315,14 @@ export default function BiometricsPage() {
           </Paper>
         ))}
       </Stack>
+
+      {notes.length > pageSize && <Group justify="space-between" align="center">
+        <Text size="sm" c="dimmed">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, notes.length)} of {notes.length}</Text>
+        <Group gap="xs">
+          <Button variant="default" size="sm" h={44} disabled={page === 0} onClick={() => { setPage((current) => current - 1); entriesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>Previous</Button>
+          <Button variant="default" size="sm" h={44} disabled={page >= pageCount - 1} onClick={() => { setPage((current) => current + 1); entriesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>Next</Button>
+        </Group>
+      </Group>}
 
       {notes.length === 0 && (
         <Text ta="center" py={48} c="dimmed">
