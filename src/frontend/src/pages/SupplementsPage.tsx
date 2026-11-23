@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Trash2, Edit2, Save, ChevronDown, ChevronUp, CopyPlus } from 'lucide-react'
 import {
   Stack, Group, Text, Button,
@@ -23,7 +24,11 @@ export default function SupplementsPage() {
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  useUnsavedChanges(hasChanges)
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
+  const [itemPages, setItemPages] = useState<Record<number, number>>({})
+  const itemListRef = useRef<HTMLDivElement | null>(null)
+  const itemPageChangeRef = useRef(false)
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
   const [block, setBlock] = useState(() => currentBlockId(program))
   const readOnly = accessReadOnly || block !== currentBlockId(program)
@@ -61,16 +66,21 @@ export default function SupplementsPage() {
     }
   }, [program, hasChanges])
 
+  useEffect(() => setItemPages({}), [block, program?.supplement_phases])
+
+  useEffect(() => {
+    if (!itemPageChangeRef.current) return
+    itemPageChangeRef.current = false
+    itemListRef.current?.scrollIntoView({ block: 'start' })
+  }, [itemPages])
+
   useEffect(() => {
     if (filteredPhases.length === 0) {
       setExpandedPhase(null)
       return
     }
 
-    setExpandedPhase((current) => {
-      if (current != null && filteredPhases.some((phase) => phase.phase === current)) return current
-      return [...filteredPhases].sort((a, b) => a.phase - b.phase)[0]?.phase ?? null
-    })
+    setExpandedPhase((current) => current != null && filteredPhases.some((phase) => phase.phase === current) ? current : null)
   }, [block, filteredPhases])
 
   function updatePhase(index: number, updates: Partial<SupplementPhase>) {
@@ -94,6 +104,8 @@ export default function SupplementsPage() {
   }
 
   function addItem(phaseIndex: number) {
+    const phase = phases[phaseIndex]
+    if (phase) setItemPages((current) => ({ ...current, [phase.phase]: Math.floor(phase.items.length / 3) }))
     setPhases((prev) => {
       const newPhases = [...prev]
       const items = [...newPhases[phaseIndex].items, { name: '', dose: '' }]
@@ -104,6 +116,8 @@ export default function SupplementsPage() {
   }
 
   function removeItem(phaseIndex: number, itemIndex: number) {
+    const phase = phases[phaseIndex]
+    if (phase) setItemPages((current) => ({ ...current, [phase.phase]: Math.min(current[phase.phase] ?? 0, Math.max(0, Math.ceil((phase.items.length - 1) / 3) - 1)) }))
     setPhases((prev) => {
       const newPhases = [...prev]
       const items = newPhases[phaseIndex].items.filter((_, i) => i !== itemIndex)
@@ -140,7 +154,8 @@ export default function SupplementsPage() {
   function addSupplement() {
     const target = [...filteredPhases].sort((a, b) => b.phase - a.phase)[0]
     if (target) {
-      addItem(phases.indexOf(target))
+      const targetIndex = phases.indexOf(target)
+      addItem(targetIndex)
       setExpandedPhase(target.phase)
       return
     }
@@ -246,6 +261,7 @@ export default function SupplementsPage() {
                 <button
                   type="button"
                   className="if-supp-phase-header"
+                  aria-expanded={isOpen}
                   onClick={() => setExpandedPhase(isOpen ? null : phase.phase)}
                 >
                   <span className="if-supp-phase-number">Phase {phase.phase}</span>
@@ -268,9 +284,9 @@ export default function SupplementsPage() {
                           if (readOnly) return
                           setEditingPhase(phase.phase)
                         }}
-                        style={{ alignItems: 'center', cursor: readOnly ? 'default' : 'text', display: 'inline-flex', gap: 5, minWidth: 0 }}
+                        style={{ alignItems: 'center', cursor: readOnly ? 'default' : 'text', display: 'flex', flexWrap: 'wrap', gap: 5, minWidth: 0 }}
                       >
-                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{phase.phase_name}</span>
+                        <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{phase.phase_name}</span>
                         <Edit2 size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
                       </span>
                     )}
@@ -327,7 +343,7 @@ export default function SupplementsPage() {
                       />
                     </div>
 
-                    <div className="if-supp-table-header">
+                    <div className="if-supp-table-header" ref={phase.items.length > 3 ? itemListRef : undefined}>
                       <span className="if-supp-table-label">Compound</span>
                       <span className="if-supp-table-label">Daily total</span>
                       <span className="if-supp-table-label">Dose assessment</span>
@@ -345,7 +361,17 @@ export default function SupplementsPage() {
                       </Button>
                     </div>
 
-                    {phase.items.length > 0 ? phase.items.map((item, itemIndex) => (
+                    {phase.items.length > 3 && <Group justify="space-between" px="md" py="xs">
+                      <Text size="sm" c="dimmed">{(itemPages[phase.phase] ?? 0) * 3 + 1}–{Math.min((itemPages[phase.phase] ?? 0) * 3 + 3, phase.items.length)} of {phase.items.length}</Text>
+                      <Group gap="xs">
+                        <Button h={44} variant="default" disabled={!itemPages[phase.phase]} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: Math.max(0, (current[phase.phase] ?? 0) - 1) })) }}>Previous</Button>
+                        <Button h={44} variant="default" disabled={(itemPages[phase.phase] ?? 0) >= Math.ceil(phase.items.length / 3) - 1} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: (current[phase.phase] ?? 0) + 1 })) }}>Next</Button>
+                      </Group>
+                    </Group>}
+
+                    {phase.items.length > 0 ? phase.items.slice((itemPages[phase.phase] ?? 0) * 3, (itemPages[phase.phase] ?? 0) * 3 + 3).map((item, visibleIndex) => {
+                      const itemIndex = (itemPages[phase.phase] ?? 0) * 3 + visibleIndex
+                      return (
                       <div className="if-supp-table-row" key={itemIndex}>
                         <TextInput
                           value={item.name}
@@ -428,11 +454,19 @@ export default function SupplementsPage() {
                           classNames={{ input: 'if-supp-note-input' }}
                         />
                       </div>
-                    )) : (
+                    )}) : (
                       <Text size="sm" c="dimmed" py="md" px={16}>
                         No supplements added yet.
                       </Text>
                     )}
+
+                    {phase.items.length > 3 && <Group justify="space-between" px="md" py="xs">
+                      <Text size="sm" c="dimmed">{(itemPages[phase.phase] ?? 0) * 3 + 1}–{Math.min((itemPages[phase.phase] ?? 0) * 3 + 3, phase.items.length)} of {phase.items.length}</Text>
+                      <Group gap="xs">
+                        <Button h={44} variant="default" disabled={!itemPages[phase.phase]} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: Math.max(0, (current[phase.phase] ?? 0) - 1) })) }}>Previous</Button>
+                        <Button h={44} variant="default" disabled={(itemPages[phase.phase] ?? 0) >= Math.ceil(phase.items.length / 3) - 1} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: (current[phase.phase] ?? 0) + 1 })) }}>Next</Button>
+                      </Group>
+                    </Group>}
 
                     <div className="if-supp-footer">
                       <Button

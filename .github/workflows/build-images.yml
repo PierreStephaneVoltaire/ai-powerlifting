@@ -87,7 +87,8 @@ jobs:
           fi
           if [ "$open_prs" -gt 0 ] \
             || { [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" = "master" ]; } \
-            || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply_terraform }}" = "true" ]; }; then
+            || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply_terraform }}" = "true" ]; } \
+            || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.frontend_only }}" = "true" ] && [ "${{ inputs.backend_only }}" != "true" ] && [ "${{ inputs.apply_terraform }}" != "true" ]; }; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
             echo "deploy=false" >> "$GITHUB_OUTPUT"
@@ -105,11 +106,18 @@ jobs:
         run: |
           {
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              echo "backend=true"
               echo "frontend=true"
-              echo "services=true"
-              echo "terraform=true"
-              echo "kubernetes=true"
+              if [ "${{ inputs.frontend_only }}" = "true" ] && [ "${{ inputs.backend_only }}" != "true" ] && [ "${{ inputs.apply_terraform }}" != "true" ]; then
+                echo "backend=false"
+                echo "services=false"
+                echo "terraform=false"
+                echo "kubernetes=false"
+              else
+                echo "backend=true"
+                echo "services=true"
+                echo "terraform=true"
+                echo "kubernetes=true"
+              fi
             else
               echo "backend=${{ steps.filter.outputs.backend }}"
               echo "frontend=${{ steps.filter.outputs.frontend }}"
@@ -263,6 +271,9 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
+    outputs:
+      image_uri: ${{ steps.image.outputs.image_uri }}
+      image_account: ${{ steps.image.outputs.image_account }}
     steps:
       - uses: actions/checkout@v4
 
@@ -308,6 +319,117 @@ jobs:
             -var "api_url=/api" \
             -var "cloudfront_media_base_url=${{ steps.tfout.outputs.cloudfront_media_base_url }}" \
             powerlifting-frontend.pkr.hcl
+
+      - name: Resolve immutable frontend image URI
+        id: image
+        env:
+          IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          repository="${ECR_REPO_PREFIX}-powerlifting-app-frontend"
+          digest="$(aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text)"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Frontend image tag $IMAGE_TAG has no valid sha256 digest in ECR" >&2
+            exit 1
+          fi
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          if [[ ! "$account" =~ ^[0-9]{12}$ ]]; then
+            echo "AWS returned an invalid account ID" >&2
+            exit 1
+          fi
+          image_uri="$account.dkr.ecr.$AWS_REGION.amazonaws.com/$repository@$digest"
+          echo "image_uri=$image_uri" >> "$GITHUB_OUTPUT"
+          echo "image_account=$account" >> "$GITHUB_OUTPUT"
+
+  deploy-frontend-only:
+    needs: [changes, build-frontend]
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
+    runs-on: powerlifting-k8s
+    if: >-
+      ${{ always()
+      && needs.changes.outputs.deploy == 'true'
+      && needs.build-frontend.result == 'success'
+      && github.triggering_actor == github.repository_owner
+      && github.actor == github.repository_owner
+      && needs.changes.outputs.backend == 'false'
+      && needs.changes.outputs.services == 'false'
+      && needs.changes.outputs.kubernetes == 'false'
+      && needs.changes.outputs.terraform == 'false' }}
+    concurrency:
+      group: kubernetes-apply
+      cancel-in-progress: false
+    env:
+      KUBE_LOAD_CONFIG_FILE: "false"
+      IMAGE_URI: ${{ needs.build-frontend.outputs.image_uri }}
+      IMAGE_ACCOUNT: ${{ needs.build-frontend.outputs.image_account }}
+    steps:
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.5
+
+      - name: Configure kubectl for the in-cluster runner
+        run: |
+          cat > "$RUNNER_TEMP/kubeconfig" <<'EOF'
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: in-cluster
+            cluster:
+              certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              server: https://kubernetes.default.svc
+          contexts:
+          - name: runner
+            context:
+              cluster: in-cluster
+              user: runner
+          current-context: runner
+          users:
+          - name: runner
+            user:
+              tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+          EOF
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Deploy frontend image by immutable digest
+        run: |
+          set -euo pipefail
+          repository="${ECR_REPO_PREFIX}-powerlifting-app-frontend"
+          expected_prefix="$IMAGE_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$repository@sha256:"
+          if [[ ! "$IMAGE_ACCOUNT" =~ ^[0-9]{12}$ || "$IMAGE_URI" != "$expected_prefix"* || ! "$IMAGE_URI" =~ ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[^@]+@sha256:[a-f0-9]{64}$ ]]; then
+            echo "Frontend image URI does not match the expected ECR account, region, repository, and sha256 digest" >&2
+            exit 1
+          fi
+          image="$IMAGE_URI"
+          allowed="$(kubectl auth can-i patch deployment/powerlifting-app-frontend -n powerlifting)"
+          if [ "$allowed" != "yes" ]; then
+            echo "The in-cluster runner cannot patch deployment/powerlifting-app-frontend in namespace powerlifting" >&2
+            exit 1
+          fi
+          previous="$(kubectl -n powerlifting get deployment powerlifting-app-frontend -o jsonpath='{.spec.template.spec.containers[?(@.name=="frontend")].image}')"
+          if [ -z "$previous" ]; then
+            echo "Could not read the current frontend container image for rollback" >&2
+            exit 1
+          fi
+          updated=0
+          rollback() {
+            status=$?
+            trap - EXIT
+            if [ "$status" -ne 0 ] && [ "$updated" -eq 1 ]; then
+              kubectl -n powerlifting set image deployment/powerlifting-app-frontend frontend="$previous" || true
+              kubectl -n powerlifting rollout status deployment/powerlifting-app-frontend --timeout=600s || true
+            fi
+            exit "$status"
+          }
+          trap rollback EXIT
+          updated=1
+          kubectl -n powerlifting set image deployment/powerlifting-app-frontend frontend="$image"
+          kubectl -n powerlifting rollout status deployment/powerlifting-app-frontend --timeout=600s
+          actual="$(kubectl -n powerlifting get deployment powerlifting-app-frontend -o jsonpath='{.spec.template.spec.containers[?(@.name=="frontend")].image}')"
+          if [ "$actual" != "$image" ]; then
+            echo "Frontend deployment image mismatch: expected $image, got $actual" >&2
+            exit 1
+          fi
 
   terraform-validate:
     needs: changes
@@ -482,6 +604,11 @@ jobs:
       && github.actor == github.repository_owner
       && !contains(needs.*.result, 'failure')
       && !contains(needs.*.result, 'cancelled')
+      && !(needs.build-frontend.result == 'success'
+        && needs.changes.outputs.backend == 'false'
+        && needs.changes.outputs.services == 'false'
+        && needs.changes.outputs.kubernetes == 'false'
+        && needs.changes.outputs.terraform == 'false')
       && (needs.changes.outputs.kubernetes == 'true'
         || needs.build-backend.result == 'success'
         || needs.build-services.result == 'success'

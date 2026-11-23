@@ -433,16 +433,17 @@ export default function AnalysisPage() {
   }, [activeSection, version])
 
   const handleRegenerateAnalysis = async () => {
+    if (!window.confirm('Regenerate weekly analysis? Cached analysis will be cleared and recalculated.')) return
     setRegenerating(true)
     setError(null)
     try {
-      setSectionPayloads({})
-      setSectionStatuses({})
       await invalidateAnalysisSections({
         asOfDate,
         windowKey: analysisKey,
         sections: DETERMINISTIC_ANALYSIS_SECTIONS,
       })
+      setSectionPayloads({})
+      setSectionStatuses({})
       setAnalysisRefreshNonce((value) => value + 1)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))

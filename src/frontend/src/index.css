@@ -1276,8 +1276,9 @@
   }
 
   .if-session-action-bar .mantine-Button-root {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 1 auto;
+    min-width: max-content;
+    min-height: 44px;
   }
 }
 
@@ -2082,9 +2083,8 @@
   font-size: 15px;
   font-weight: 500;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .if-supp-count-pill {

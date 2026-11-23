@@ -163,9 +163,9 @@ export default function DesignerPhases() {
           {phases.map((phase, i) => (
             <Paper key={phase.name} withBorder p={0} className="if-card">
               <Box p="14px 16px">
-              <Group justify="space-between" wrap="nowrap">
+              <Group justify="space-between" align="flex-start" wrap="wrap">
                 <Box style={{ background: phaseColor(phase, phases), borderRadius: '50%', flexShrink: 0, height: 10, marginTop: 6, width: 10 }} />
-                <Box style={{ flex: 1, minWidth: 0 }}>
+                <Box style={{ flex: '1 1 180px', minWidth: 0 }}>
                   <Text fw={500}>{phase.name}</Text>
                   <Text size="sm" c="dimmed">
                     W{phase.start_week} - W{phase.end_week}
@@ -178,7 +178,7 @@ export default function DesignerPhases() {
                     <Text size="sm" c="dimmed" mt={4}>{phase.intent}</Text>
                   )}
                 </Box>
-                <Group gap="xs" wrap="nowrap">
+                <Group gap="xs" wrap="wrap" ml="auto">
                   <Button
                     component={Link}
                     to={`/designer/sessions?week=${phase.start_week}`}
@@ -192,6 +192,9 @@ export default function DesignerPhases() {
                     variant="subtle"
                     onClick={() => openPhaseEditor(phase, i)}
                     disabled={readOnly}
+                    aria-label={`Edit ${phase.name}`}
+                    w={44}
+                    h={44}
                   >
                     <Edit2 size={16} />
                   </ActionIcon>
@@ -200,6 +203,9 @@ export default function DesignerPhases() {
                     color="red"
                     onClick={() => deletePhase(phase.name)}
                     disabled={readOnly}
+                    aria-label={`Delete ${phase.name}`}
+                    w={44}
+                    h={44}
                   >
                     <Trash2 size={16} />
                   </ActionIcon>

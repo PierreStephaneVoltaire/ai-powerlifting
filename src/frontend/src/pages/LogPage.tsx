@@ -33,10 +33,10 @@ export default function LogPage() {
         </div>
       </div>
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
         {LOG_ITEMS.map((item) => (
-          <UnstyledButton key={item.to} component={Link} to={item.to} data-testid={`log-link-${item.title.toLowerCase()}`}>
-            <div className="if-mock-card" style={{ minHeight: 132 }}>
+          <UnstyledButton key={item.to} component={Link} to={item.to} data-testid={`log-link-${item.title.toLowerCase()}`} style={{ display: 'block', height: '100%' }}>
+            <div className="if-mock-card" style={{ boxSizing: 'border-box', height: '100%', minHeight: 132 }}>
               <item.icon size={18} style={{ color: 'var(--color-text-secondary)', marginBottom: 16 }} />
               <div style={{ color: 'var(--color-text-primary)', fontSize: 15, fontWeight: 500, marginBottom: 4 }}>{item.title}</div>
               <Text size="sm" c="dimmed" lh={1.45}>{item.desc}</Text>

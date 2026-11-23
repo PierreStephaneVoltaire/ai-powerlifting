@@ -1141,6 +1141,7 @@ export default function SessionDrawer({
   }
 
   const toggleComplete = () => {
+    if (!window.confirm(localSession?.completed ? 'Mark this session incomplete?' : 'Mark this session done?')) return
     setLocalSession((prev) => {
       if (!prev) return prev
       const completed = !prev.completed
@@ -1718,7 +1719,7 @@ export default function SessionDrawer({
               disabled={readOnly}
               data-testid="session-toggle-complete"
             >
-              {localSession.completed ? 'Done' : 'Mark Done'}
+              {localSession.completed ? 'Mark incomplete' : 'Mark done'}
             </Button>
           </Group>
         </Stack>

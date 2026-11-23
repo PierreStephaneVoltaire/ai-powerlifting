@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Save, BookOpen, Plus, Trash2, Calendar, X, Lock } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
 import { useUiStore } from '@/store/uiStore'
@@ -9,6 +9,7 @@ import {
 import { DatePickerInput } from '@mantine/dates'
 import type { BlockNote } from '@powerlifting/types'
 import { recordsInBlock } from '@/utils/blockScope'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 
 function todayString(): string {
   return new Date().toISOString().split('T')[0]
@@ -75,6 +76,20 @@ export default function NotesPage() {
   const [editText, setEditText] = useState('')
   const [editPrivate, setEditPrivate] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [page, setPage] = useState(0)
+  const notesListRef = useRef<HTMLDivElement>(null)
+  const pageCount = Math.ceil(notes.length / 5)
+  const visibleNotes = notes.slice(page * 5, page * 5 + 5)
+  const editingNote = notes.find((note) => note.date === editingDate)
+  const editingDirty = Boolean(editingNote && (editDate !== editingNote.date || editText !== editingNote.notes || editPrivate !== Boolean(editingNote.private)))
+  useUnsavedChanges(Boolean(newText.trim()) || editingDirty)
+  const pager = (scrollToList = false) => <Group justify="space-between" align="center">
+    <Text size="sm" c="dimmed">{page * 5 + 1}–{Math.min((page + 1) * 5, notes.length)} of {notes.length} notes</Text>
+    <Group gap="xs">
+      <Button variant="default" size="sm" h={44} onClick={() => { setPage((current) => current - 1); if (scrollToList) notesListRef.current?.scrollIntoView({ block: 'start' }) }} disabled={page === 0 || Boolean(editingDate)}>Previous</Button>
+      <Button variant="default" size="sm" h={44} onClick={() => { setPage((current) => current + 1); if (scrollToList) notesListRef.current?.scrollIntoView({ block: 'start' }) }} disabled={page + 1 >= pageCount || Boolean(editingDate)}>Next</Button>
+    </Group>
+  </Group>
 
   useEffect(() => {
     if (program) {
@@ -85,15 +100,27 @@ export default function NotesPage() {
     }
   }, [program])
 
-  async function persistNotes(nextNotes: BlockNote[], successMessage: string) {
+  useEffect(() => {
+    setPage((current) => Math.min(current, Math.max(0, pageCount - 1)))
+  }, [pageCount])
+
+  useEffect(() => {
+    if (!editingDate) return
+    const index = notes.findIndex((note) => note.date === editingDate)
+    if (index >= 0) setPage(Math.floor(index / 5))
+  }, [editingDate, notes])
+
+  async function persistNotes(nextNotes: BlockNote[], successMessage: string): Promise<boolean> {
     setSaving(true)
     try {
       const sorted = sortNotes(nextNotes)
       await updateBlockNotes(sorted)
       setNotes(sorted)
       pushToast({ message: successMessage, type: 'success' })
+      return true
     } catch {
       pushToast({ message: 'Failed to save notes', type: 'error' })
+      return false
     } finally {
       setSaving(false)
     }
@@ -101,17 +128,23 @@ export default function NotesPage() {
 
   function startEdit(note: BlockNote) {
     if (readOnly) return
+    if (editingDirty && !window.confirm('Discard unsaved changes to this note?')) return
     setEditingDate(note.date)
     setEditDate(note.date)
     setEditText(note.notes)
     setEditPrivate(Boolean(note.private))
   }
 
-  function cancelEdit() {
+  function clearEdit() {
     setEditingDate(null)
     setEditDate('')
     setEditText('')
     setEditPrivate(false)
+  }
+
+  function cancelEdit() {
+    if (editingDirty && !window.confirm('Discard unsaved changes to this note?')) return
+    clearEdit()
   }
 
   async function addNote() {
@@ -123,10 +156,12 @@ export default function NotesPage() {
     }
 
     const now = new Date().toISOString()
-    await persistNotes(
-      [{ date: newDate, notes: text, updated_at: now, private: newPrivate }, ...notes],
+    const nextNotes = sortNotes([{ date: newDate, notes: text, updated_at: now, private: newPrivate }, ...notes])
+    if (!await persistNotes(
+      nextNotes,
       'Note added'
-    )
+    )) return
+    setPage(Math.floor(nextNotes.findIndex((note) => note.date === newDate) / 5))
     setNewText('')
     setNewPrivate(false)
     setNewDate(todayString())
@@ -147,20 +182,17 @@ export default function NotesPage() {
         ? { ...note, date: editDate, notes: text, updated_at: now, private: editPrivate }
         : note
     ))
-    await persistNotes(nextNotes, 'Note updated')
-    cancelEdit()
+    if (await persistNotes(nextNotes, 'Note updated')) clearEdit()
   }
 
   async function removeNote(date: string) {
     if (!confirm('Delete this note?')) return
-    await persistNotes(notes.filter((note) => note.date !== date), 'Note deleted')
-    if (editingDate === date) cancelEdit()
+    if (await persistNotes(notes.filter((note) => note.date !== date), 'Note deleted') && editingDate === date) clearEdit()
   }
 
   if (!program) return null
 
-  const canAdd = Boolean(newDate && newText.trim()) && !readOnly && !saving
-
+  const canAdd = Boolean(newDate && newText.trim()) && !readOnly && !saving && !editingDirty
   return (
     <Stack gap="md" className="if-mock-page">
       <Group justify="space-between" align="flex-start" className="if-mock-header">
@@ -217,8 +249,12 @@ export default function NotesPage() {
         </Box>
       </Paper>
 
-      <Stack gap="md">
-        {notes.map((note) => {
+      {notes.length > 5 && pager()}
+      {editingDate && notes.length > 5 && <Text size="xs" c="dimmed">Save or cancel the open edit before changing pages.</Text>}
+      {editingDirty && <Text size="xs" c="dimmed">Save or cancel the open note edit before adding another note.</Text>}
+
+      <Stack gap="md" ref={notesListRef}>
+        {visibleNotes.map((note) => {
           const isEditing = editingDate === note.date
 
           if (isEditing) {
@@ -345,7 +381,7 @@ export default function NotesPage() {
                       </Badge>
                     )}
                   </Group>
-                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                     {previewText(note.notes)}
                   </Text>
                 </Box>
@@ -370,6 +406,8 @@ export default function NotesPage() {
           )
         })}
       </Stack>
+
+      {notes.length > 5 && pager(true)}
 
       {notes.length === 0 && (
         <Text ta="center" py={48} c="dimmed">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProgramStore } from '@/store/programStore'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -37,8 +37,6 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
   const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(() => new Set(location.state?.expandedWeeks ?? []))
   const [showAddModal, setShowAddModal] = useState(false)
   const [newDate, setNewDate] = useState<string>('')
-  const compactTargetRef = useRef<HTMLButtonElement | null>(null)
-  const hasScrolledCompactRef = useRef(typeof location.state?.restoreScrollY === 'number')
 
   const availableBlocks = useMemo(() => {
     if (!program) return ['current']
@@ -69,7 +67,7 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
   )
 
   useEffect(() => {
-    if (hasScrolledCompactRef.current || closestWeek == null) return
+    if (typeof location.state?.restoreScrollY === 'number' || closestWeek == null) return
 
     setExpandedWeeks((prev) => {
       if (prev.has(closestWeek)) return prev
@@ -78,27 +76,6 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
       return next
     })
   }, [closestWeek])
-
-  useEffect(() => {
-    if (
-      hasScrolledCompactRef.current ||
-      closestWeek == null ||
-      !expandedWeeks.has(closestWeek) ||
-      !closestSession
-    ) {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const target = compactTargetRef.current
-      if (!target) return
-
-      target.scrollIntoView({ block: 'center', inline: 'nearest' })
-      hasScrolledCompactRef.current = true
-    }, 0)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [closestSession, closestWeek, expandedWeeks])
 
   const handleAddSession = async () => {
     if (!newDate || readOnly) {
@@ -324,7 +301,6 @@ export function SessionsCompactView({ backTo = '/sessions?view=Compact', readOnl
                     return (
                       <Box
                         key={`${session.date}-${session.id ?? session.week_number}`}
-                        ref={session === closestSession ? compactTargetRef : undefined}
                         component="button"
                         onClick={() => navigate(sessionRoute(session, program.sessions.indexOf(session)), {
                           state: { backTo, backScrollY: window.scrollY, expandedWeeks: [...expandedWeeks] },

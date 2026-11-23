@@ -18,7 +18,6 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core'
@@ -366,7 +365,7 @@ export default function FederationsPage() {
           <Group gap="xs">
             <Text component={Link} to="/designer" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>Designer</Text>
             <Text c="dimmed">/</Text>
-            <Title order={2}>Federations</Title>
+            <h1 className="if-mock-title">Federations</h1>
           </Group>
           <Text c="dimmed" size="sm" mt={4}>
             Federations are shared globally across all users. Standards are sorted on save — just edit the fields and click Save.
@@ -471,13 +470,13 @@ function FederationAccordionItem(props: FederationAccordionItemProps) {
   return (
     <Accordion.Item value={id}>
       <Accordion.Control>
-        <Group gap="sm" wrap="nowrap">
-          <Badge variant="light" color={federationStatusColor(status)}>
+        <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Badge variant="light" color={federationStatusColor(status)} style={{ flexShrink: 0 }}>
             {status}
           </Badge>
-          <Stack gap={0}>
-            <Text fw={500}>{abbreviation || name}</Text>
-            <Text size="xs" c="dimmed">{name}</Text>
+          <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
+            <Text fw={500} style={{ whiteSpace: 'normal' }}>{abbreviation || name}</Text>
+            <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal' }}>{name}</Text>
           </Stack>
           {hasChanges && (
             <Badge variant="filled" color="yellow" size="sm">Unsaved</Badge>

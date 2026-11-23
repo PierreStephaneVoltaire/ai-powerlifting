@@ -570,6 +570,7 @@ export default function GlossaryPage() {
             style={{ flex: 1, minWidth: 220 }}
           />
           <SegmentedControl
+            visibleFrom="sm"
             size="sm"
             value={hasE1rmFilter}
             onChange={(v) => setHasE1rmFilter(v as 'all' | 'with' | 'without')}
@@ -579,6 +580,18 @@ export default function GlossaryPage() {
               { label: 'Missing e1RM', value: 'without' },
             ]}
             className="if-segmented"
+          />
+          <Select
+            hiddenFrom="sm"
+            aria-label="Estimated 1RM filter"
+            value={hasE1rmFilter}
+            onChange={(value) => value && setHasE1rmFilter(value as 'all' | 'with' | 'without')}
+            data={[
+              { label: 'All e1RM', value: 'all' },
+              { label: 'With e1RM', value: 'with' },
+              { label: 'Missing e1RM', value: 'without' },
+            ]}
+            style={{ flex: '1 1 100%', minWidth: 0 }}
           />
           <Button
             variant={showArchived ? 'filled' : 'light'}
@@ -995,18 +1008,18 @@ export default function GlossaryPage() {
               {categoryExercises.map((exercise) => (
                 <Accordion.Item key={exercise.id} value={exercise.id}>
                   <Accordion.Control>
-                    <Group gap="sm" wrap="nowrap">
-                      <Text fw={500}>{exercise.name}</Text>
-                      <Badge variant="light" color="gray" size="sm">
+                    <Group gap="xs" wrap="wrap" style={{ minWidth: 0, paddingRight: 8 }}>
+                      <Text fw={500} style={{ flex: '1 1 180px', minWidth: 0, whiteSpace: 'normal' }}>{exercise.name}</Text>
+                      <Badge style={{ flexShrink: 0 }} variant="light" color="gray" size="sm">
                         {EQUIPMENT_LABELS[exercise.equipment]}
                       </Badge>
                       {exercise.fatigue_profile && (
-                        <Badge variant="light" color={exercise.fatigue_profile_personalized ? 'blue' : 'gray'} size="sm">
+                        <Badge style={{ flexShrink: 0 }} variant="light" color={exercise.fatigue_profile_personalized ? 'blue' : 'gray'} size="sm">
                           {exercise.fatigue_profile_personalized ? 'Personal FP' : 'Shared FP'}
                         </Badge>
                       )}
                       {exercise.e1rm_estimate && (
-                        <Badge variant="filled" color="green" size="sm">
+                        <Badge style={{ flexShrink: 0 }} variant="filled" color="green" size="sm">
                           e1RM: {exercise.e1rm_estimate.value_kg}kg
                         </Badge>
                       )}

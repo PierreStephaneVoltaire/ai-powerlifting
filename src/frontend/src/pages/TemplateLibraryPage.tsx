@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Title, SimpleGrid, Button, Group, LoadingOverlay, Stack, Text, Tabs } from '@mantine/core'
+import { SimpleGrid, Button, Group, LoadingOverlay, Stack, Text, Tabs } from '@mantine/core'
 import { Plus } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { fetchTemplates } from '../api/client'
@@ -29,7 +29,7 @@ export default function TemplateLibraryPage() {
             Designer
           </Text>
           <Text c="dimmed">/</Text>
-          <Title order={2}>Template Library</Title>
+          <h1 className="if-mock-title">Template Library</h1>
         </Group>
         <Group gap="xs">
           <Button

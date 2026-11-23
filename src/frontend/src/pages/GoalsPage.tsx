@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Save, Target, Trash2 } from 'lucide-react'
 import {
@@ -15,7 +16,6 @@ import {
   Stack,
   Text,
   Textarea,
-  Title,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import * as api from '@/api/client'
@@ -149,11 +149,19 @@ export default function GoalsPage() {
   const { pushToast } = useUiStore()
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const [goals, setGoals] = useState<AthleteGoal[]>([])
+  const [page, setPage] = useState(0)
+  const goalListRef = useRef<HTMLDivElement>(null)
   const [hasChanges, setHasChanges] = useState(false)
+  useUnsavedChanges(hasChanges)
   const assistant = useAssistant('goals', {}, readOnly || hasChanges)
   const [federations, setFederations] = useState<MasterFederation[]>([])
 
   const effectiveAgeClass: AgeCategory = authAgeClass || 'open'
+  const pageSize = 5
+  const pageCount = Math.ceil(goals.length / pageSize)
+  const pageGoals = goals.slice(page * pageSize, (page + 1) * pageSize)
+
+  useEffect(() => setPage((current) => Math.min(current, Math.max(0, pageCount - 1))), [pageCount])
 
   useEffect(() => {
     if (hasChanges) return
@@ -210,7 +218,10 @@ export default function GoalsPage() {
   }
 
   function addGoal() {
-    setGoals((current) => [...current, makeGoal()])
+    setPage(Math.floor(goals.length / pageSize))
+    setGoals((current) => {
+      return [...current, makeGoal()]
+    })
     setHasChanges(true)
   }
 
@@ -265,7 +276,7 @@ export default function GoalsPage() {
               Designer
             </Text>
             <Text c="dimmed">/</Text>
-            <Title order={2}>Goals</Title>
+            <h1 className="if-mock-title">Goals</h1>
           </Group>
           <Text c="dimmed" size="sm" mt={4}>
             Formalize what this block is trying to accomplish so the analysis can evaluate the right target.
@@ -306,16 +317,22 @@ export default function GoalsPage() {
           </Stack>
         </Paper>
       ) : (
+        <>
+        {pageCount > 1 && <Group justify="space-between" align="center">
+          <Text size="sm" c="dimmed">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, goals.length)} of {goals.length} goals</Text>
+          <Group gap="xs"><Button variant="default" size="sm" h={44} disabled={!page} onClick={() => setPage(page - 1)}>Previous</Button><Button variant="default" size="sm" h={44} disabled={page + 1 >= pageCount} onClick={() => setPage(page + 1)}>Next</Button></Group>
+        </Group>}
+        <div ref={goalListRef} />
         <Accordion variant="separated">
-          {goals.map((goal) => (
+          {pageGoals.map((goal) => (
             <Accordion.Item key={goal.id} value={goal.id}>
               <Accordion.Control>
-                <Group gap="sm" wrap="nowrap">
-                  <Badge color={priorityColor(goal.priority)} variant="light">
+                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                  <Badge color={priorityColor(goal.priority)} variant="light" style={{ flexShrink: 0 }}>
                     {goal.priority}
                   </Badge>
-                  <Stack gap={0}>
-                    <Text fw={500}>{goal.title || 'Untitled goal'}</Text>
+                  <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                    <Text fw={500} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{goal.title || 'Untitled goal'}</Text>
                     <Text size="xs" c="dimmed">{goalTypeLabel(goal.goal_type)}</Text>
                   </Stack>
                 </Group>
@@ -473,6 +490,11 @@ export default function GoalsPage() {
             </Accordion.Item>
           ))}
         </Accordion>
+        {pageCount > 1 && <Group justify="space-between" align="center">
+          <Text size="sm" c="dimmed">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, goals.length)} of {goals.length} goals</Text>
+          <Group gap="xs"><Button variant="default" size="sm" h={44} disabled={!page} onClick={() => { setPage(page - 1); goalListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>Previous</Button><Button variant="default" size="sm" h={44} disabled={page + 1 >= pageCount} onClick={() => { setPage(page + 1); goalListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}>Next</Button></Group>
+        </Group>}
+        </>
       )}
     </Stack>
   )
