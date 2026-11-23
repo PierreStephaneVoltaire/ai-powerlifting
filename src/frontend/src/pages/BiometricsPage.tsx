@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, Calendar, Droplets, Flame, CheckCircle, XCircle, Moon, Beef } from 'lucide-react'
 import { useProgramStore } from '@/store/programStore'
@@ -18,6 +19,7 @@ export default function BiometricsPage() {
   const { pushToast } = useUiStore()
   const [notes, setNotes] = useState<DietNote[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  useUnsavedChanges(hasChanges)
   const assistant = useAssistant('biometrics', {}, readOnly || hasChanges)
 
   useEffect(() => {

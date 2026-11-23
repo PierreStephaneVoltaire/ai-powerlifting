@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Edit2, Save, ChevronDown, ChevronUp, CopyPlus } from 'lucide-react'
 import {
@@ -23,6 +24,7 @@ export default function SupplementsPage() {
   const { pushToast } = useUiStore()
   const [phases, setPhases] = useState<SupplementPhase[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  useUnsavedChanges(hasChanges)
   const [expandedPhase, setExpandedPhase] = useState<number | null>(null)
   const [editingPhase, setEditingPhase] = useState<number | null>(null)
   const [block, setBlock] = useState(() => currentBlockId(program))

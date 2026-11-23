@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Save, Target, Trash2 } from 'lucide-react'
@@ -150,6 +151,7 @@ export default function GoalsPage() {
   const { competitions, loadAll: loadCompetitions } = useCompetitionsStore()
   const [goals, setGoals] = useState<AthleteGoal[]>([])
   const [hasChanges, setHasChanges] = useState(false)
+  useUnsavedChanges(hasChanges)
   const assistant = useAssistant('goals', {}, readOnly || hasChanges)
   const [federations, setFederations] = useState<MasterFederation[]>([])
 

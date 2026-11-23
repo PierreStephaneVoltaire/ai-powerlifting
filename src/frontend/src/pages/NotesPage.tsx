@@ -9,6 +9,7 @@ import {
 import { DatePickerInput } from '@mantine/dates'
 import type { BlockNote } from '@powerlifting/types'
 import { recordsInBlock } from '@/utils/blockScope'
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
 
 function todayString(): string {
   return new Date().toISOString().split('T')[0]
@@ -75,6 +76,8 @@ export default function NotesPage() {
   const [editText, setEditText] = useState('')
   const [editPrivate, setEditPrivate] = useState(false)
   const [saving, setSaving] = useState(false)
+  const editingNote = notes.find((note) => note.date === editingDate)
+  useUnsavedChanges(Boolean(newText.trim()) || Boolean(editingNote && (editDate !== editingNote.date || editText !== editingNote.notes || editPrivate !== Boolean(editingNote.private))))
 
   useEffect(() => {
     if (program) {
@@ -85,15 +88,17 @@ export default function NotesPage() {
     }
   }, [program])
 
-  async function persistNotes(nextNotes: BlockNote[], successMessage: string) {
+  async function persistNotes(nextNotes: BlockNote[], successMessage: string): Promise<boolean> {
     setSaving(true)
     try {
       const sorted = sortNotes(nextNotes)
       await updateBlockNotes(sorted)
       setNotes(sorted)
       pushToast({ message: successMessage, type: 'success' })
+      return true
     } catch {
       pushToast({ message: 'Failed to save notes', type: 'error' })
+      return false
     } finally {
       setSaving(false)
     }
@@ -123,10 +128,10 @@ export default function NotesPage() {
     }
 
     const now = new Date().toISOString()
-    await persistNotes(
+    if (!await persistNotes(
       [{ date: newDate, notes: text, updated_at: now, private: newPrivate }, ...notes],
       'Note added'
-    )
+    )) return
     setNewText('')
     setNewPrivate(false)
     setNewDate(todayString())
@@ -147,14 +152,12 @@ export default function NotesPage() {
         ? { ...note, date: editDate, notes: text, updated_at: now, private: editPrivate }
         : note
     ))
-    await persistNotes(nextNotes, 'Note updated')
-    cancelEdit()
+    if (await persistNotes(nextNotes, 'Note updated')) cancelEdit()
   }
 
   async function removeNote(date: string) {
     if (!confirm('Delete this note?')) return
-    await persistNotes(notes.filter((note) => note.date !== date), 'Note deleted')
-    if (editingDate === date) cancelEdit()
+    if (await persistNotes(notes.filter((note) => note.date !== date), 'Note deleted') && editingDate === date) cancelEdit()
   }
 
   if (!program) return null
