@@ -17,9 +17,8 @@ The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
 [AI components](../README.md#ai-components) section.
 
-The domain services share the `if-powerlifting-fns` image. The analytics
-reports sidecar is built from `docker/powerlifting-analytics.pkr.hcl` into
-`if-powerlifting-analytics`.
+Export, imports, templates and videos share the `if-powerlifting-fns` image.
+Lift profiles and the other native domain services use their own images.
 
 ```mermaid
 flowchart LR
@@ -42,8 +41,8 @@ reads the user from the ID token OAuth2 Proxy forwards and resolves the Person
 through Profile. Dedicated ServiceAccounts identify workloads through Istio
 Ambient mTLS, and per-service AuthorizationPolicies on the shared waypoint decide
 which workloads may call which services. Callers state the acting Person in a
-header; each domain service authorizes it in-process with Profile/PyCasbin and
-current grants at HTTP/MCP boundaries. See ADR-0006.
+header; each domain service enforces current grants at HTTP/MCP boundaries,
+including through Profile's access checks. See ADR-0006.
 
 Video upload keeps the existing multipart gateway endpoint. A single request
 spools the file with a 500 MiB bound; the backend sends bytes to S3 and confirms
@@ -157,14 +156,13 @@ flowchart TB
   Coach --> Training & MeetPrep & Analysis & Records
 ```
 
-The ten Python services share the `if-powerlifting-fns` image. Analytics
-and Rankings have their own Rust images; Analytics AI and Analytics Export
-have their own Go images. The old analytics reports sidecar has been replaced
-by these separate services.
+The remaining Python domain services share the `if-powerlifting-fns` image.
+Lift profiles, Analytics AI and Analytics Export have Go images; Analytics and
+Rankings have Rust images.
 
 Every service checks application permissions at its HTTP/MCP boundary using
-the current grants and publication settings. `pl-profile` manages those
-records; it is not a central authorization hop for every operation.
+current grants and publication settings. `pl-profile` manages those records
+and supplies access checks to native services.
 
 ### Analytics, AI and caches
 
@@ -523,6 +521,10 @@ totals. `failed_set_reasons[][]` align to `set_statuses[]` (strength/technical/
 command/grip/depth/pause/lockout/balance/pain/fatigue/misload tags).
 
 ### Lift profiles
+
+The Go lift-profile service exposes the same HTTP and MCP operations and
+performs per-Athlete access checks. It updates the profile field conditionally,
+preserving stored form videos and rejecting concurrent profile changes.
 
 Per lift (squat/bench/deadlift): style notes, sticking points, primary muscle,
 volume tolerance, `e1rm_multiplier`, `stimulus_coefficient` (with confidence +

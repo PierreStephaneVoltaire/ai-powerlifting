@@ -1104,5 +1104,30 @@
     },
     "execution": "deterministic",
     "ownership": "athlete"
+  },
+  {
+    "name": "template_create_from_import",
+    "domain": "templates",
+    "description": "Create a template for a claimed import.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {"type": "string", "minLength": 1},
+        "import_id": {"type": "string", "minLength": 1},
+        "claim_id": {"type": "string", "minLength": 1},
+        "template": {"type": "object"},
+        "author": {"type": "string"}
+      },
+      "required": ["pk", "import_id", "claim_id", "template"],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {"status": {"const": "created"}, "sk": {"type": "string"}},
+      "required": ["status", "sk"],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
   }
 ]

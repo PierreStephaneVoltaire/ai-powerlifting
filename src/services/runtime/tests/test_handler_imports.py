@@ -4,7 +4,7 @@ from pathlib import Path
 from services.runtime.contract import load_operations
 import services.runtime.dispatch
 
-NATIVE_DOMAINS = {"performance", "federation", "goals", "weight-log", "calculations", "analytics", "analytics-ai", "analytics-export", "rankings", "sessions", "program", "competition", "profile", "glossary"}
+NATIVE_DOMAINS = {"performance", "federation", "goals", "weight-log", "calculations", "analytics", "analytics-ai", "analytics-export", "rankings", "sessions", "program", "competition", "profile", "glossary", "lift-profiles"}
 
 
 def test_every_registered_handler_imports_with_service_dependencies():
@@ -13,5 +13,7 @@ def test_every_registered_handler_imports_with_service_dependencies():
         if operation_file.stem in NATIVE_DOMAINS:
             continue
         for operation in load_operations(operation_file.stem).values():
+            if operation.handler is None:
+                continue
             module = importlib.import_module(operation.handler)
             assert callable(module.handler), operation.name

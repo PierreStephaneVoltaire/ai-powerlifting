@@ -1,0 +1,205 @@
+[
+  {
+    "name": "export_program_history",
+    "domain": "export",
+    "description": "Export one training block (default: the active block), optionally limited to an analysis window, to Excel (.xlsx) or Markdown (.md) format.",
+    "handler": "services.export.export_program_history.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Export format: \"xlsx\" or \"md\"."
+        },
+        "block": {
+          "type": "string",
+          "description": "Block id to export, or \"current\" (default) for the active block."
+        },
+        "window_start": {
+          "type": "string",
+          "description": "Inclusive YYYY-MM-DD start of the selected analysis window."
+        },
+        "window_end": {
+          "type": "string",
+          "description": "Inclusive YYYY-MM-DD end of the selected analysis window."
+        },
+        "window_key": {
+          "type": "string",
+          "description": "Cached analysis window key for the selected export."
+        },
+        "week_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "week_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "filename",
+        "format",
+        "content_base64"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "xlsx",
+            "markdown"
+          ]
+        },
+        "content_base64": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "get_analysis_markdown",
+    "domain": "export",
+    "description": "Return the markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Served from cache while the program and glossary are unchanged; refresh forces regeneration.",
+    "handler": "services.export.analysis_reports.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "refresh": {
+          "type": "boolean",
+          "description": "Force regeneration before returning markdown",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "markdown",
+            "generated_at",
+            "cached"
+          ],
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "cached",
+            "cache_miss"
+          ],
+          "properties": {
+            "cached": {
+              "const": false
+            },
+            "cache_miss": {
+              "const": true
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "analytics.markdown",
+    "domain": "export",
+    "description": "Return the cached markdown export of the full training program.",
+    "handler": "services.export.analysis_reports.handler",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        },
+        "cache_only": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "pk"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "markdown",
+            "generated_at",
+            "cached"
+          ],
+          "properties": {
+            "markdown": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": "string"
+            },
+            "cached": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "cached",
+            "cache_miss"
+          ],
+          "properties": {
+            "cached": {
+              "const": false
+            },
+            "cache_miss": {
+              "const": true
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

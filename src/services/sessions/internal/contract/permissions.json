@@ -427,6 +427,9 @@
   "template_create_from_payload": {
     "permission": "templates:write"
   },
+  "template_create_from_import": {
+    "permission": "imports:write"
+  },
   "template_delete": {
     "permission": "templates:write",
     "internal_only": true

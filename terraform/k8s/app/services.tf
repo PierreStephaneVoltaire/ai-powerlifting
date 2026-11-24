@@ -13,11 +13,12 @@ locals {
   small = { limits = { cpu = "500m", memory = "256Mi" }, requests = { cpu = "25m", memory = "64Mi" } }
 
   native_service_images = {
-    "pl-calculations" = local.images.calculations
-    "pl-federation"   = local.images.federation
-    "pl-goals"        = local.images.goals
-    "pl-performance"  = local.images.performance
-    "pl-weight-log"   = local.images.weight_log
+    "pl-calculations"  = local.images.calculations
+    "pl-federation"    = local.images.federation
+    "pl-goals"         = local.images.goals
+    "pl-lift-profiles" = local.images.lift_profiles
+    "pl-performance"   = local.images.performance
+    "pl-weight-log"    = local.images.weight_log
   }
 
   services = {
@@ -47,6 +48,13 @@ resource "kubernetes_deployment_v1" "service" {
 
   spec {
     replicas = 1
+
+    dynamic "strategy" {
+      for_each = each.key == "pl-lift-profiles" ? [1] : []
+      content {
+        type = "Recreate"
+      }
+    }
 
     selector {
       match_labels = { app = each.key }

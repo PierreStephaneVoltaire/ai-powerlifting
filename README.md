@@ -425,6 +425,9 @@ powerlifting-app/
 └── docs/           Architecture, formulas, and the implementation reference
 ```
 
+Lift profiles run as a Go service with their own image. Export, imports,
+templates and videos currently use the shared service image.
+
 See [`PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md) for the annotated tree and
 [`AGENTS.md`](AGENTS.md) for the guidelines agents and contributors must follow
 when working in this repo.
