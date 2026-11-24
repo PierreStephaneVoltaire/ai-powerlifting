@@ -158,6 +158,18 @@ def test_private_copy_cannot_be_replayed_or_retrieved_by_other_person():
         result.copy_template_sync("template#1", "Copy", actor_pk="bob")
 
 
+def test_copying_a_shared_template_does_not_overwrite_another_copy():
+    result = store()
+    seed(result, item=template("Shared", author="author", published=True))
+    alice = result.copy_template_sync("template#1", "Copy", actor_pk="alice")
+    bob = result.copy_template_sync("template#1", "Copy", actor_pk="bob")
+    assert alice != bob
+    assert result.get_template_sync(alice, actor_pk="alice")["meta"]["author_pk"] == "alice"
+    assert result.get_template_sync(bob, actor_pk="bob")["meta"]["author_pk"] == "bob"
+    assert {item["sk"] for item in result.list_templates_sync(actor_pk="alice")} == {"template#1", alice}
+    assert {item["sk"] for item in result.list_templates_sync(actor_pk="bob")} == {"template#1", bob}
+
+
 def test_template_applications_get_fresh_session_ids():
     blueprint = [{"id": "blueprint-session", "session_id": "blueprint-session", "date": "2026-09-15"}]
     first = _new_sessions(blueprint)

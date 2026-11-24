@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -379,7 +378,7 @@ class TemplateStore:
         now = self._now()
         meta["created_at"] = now
         meta["updated_at"] = now
-        new_sk = f"{self.TEMPLATE_SK_PREFIX}copy-{hashlib.sha256(f'{sk}:{new_name}'.encode()).hexdigest()[:32]}"
+        new_sk = self._new_template_sk()
         self._write_template_index_sync(new_template | {"pk": self._pk, "sk": new_sk})
         return new_sk
 
