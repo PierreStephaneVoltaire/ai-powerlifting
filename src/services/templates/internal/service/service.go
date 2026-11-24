@@ -257,11 +257,7 @@ func (s *Service) call(ctx context.Context, name string, args map[string]any, ca
 		}
 		return map[string]any{"status": "copied", "new_sk": id}, nil
 	case "template_apply_confirm":
-		target := value(args["target"])
-		if target == "" || target == "new_block" {
-			return s.confirmNewBlock(ctx, args, caller, owners)
-		}
-		return nil, apperr.Uncertain("This template target cannot safely commit while concurrent session writes are unversioned")
+		return s.confirmTemplate(ctx, args, caller, owners)
 	case "template_update":
 		input, _ := args["template"].(map[string]any)
 		if err := s.Library.Update(ctx, sk, input, owners); err != nil {

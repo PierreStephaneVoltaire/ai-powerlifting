@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -18,6 +19,28 @@ type Memory struct {
 
 func NewMemory() *Memory {
 	return &Memory{tables: map[Table]map[Key]Item{}}
+}
+
+func (m *Memory) PublishVersion(_ context.Context, tables Tables, athlete, expectedSK string, pointer Item, programSK, importID, importClaim string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current := m.rows(tables.Health)[Key{PK: athlete, SK: PointerSK}]
+	if importID != "" {
+		claim := m.rows(tables.Health)[Key{PK: athlete, SK: "import#pending#" + importID}]
+		if claim["status"] != "applying" || claim["apply_claim_id"] != importClaim {
+			return fmt.Errorf("import claim changed")
+		}
+	}
+	if pyval.Str2(current["ref_sk"]) != expectedSK {
+		return fmt.Errorf("program changed during publication")
+	}
+	program := m.rows(tables.Health)[Key{PK: athlete, SK: programSK}]
+	if program == nil {
+		return fmt.Errorf("program version missing")
+	}
+	program["published"] = true
+	m.rows(tables.Health)[Key{PK: athlete, SK: PointerSK}] = pyval.CopyMap(pointer)
+	return nil
 }
 
 func (m *Memory) rows(table Table) map[Key]Item {

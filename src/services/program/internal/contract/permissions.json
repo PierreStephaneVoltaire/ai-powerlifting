@@ -1,4 +1,9 @@
 {
+  "program_apply_session_import": {"internal_only": true, "permission": "imports:write"},
+  "template_apply_sessions": {
+    "internal_only": true,
+    "permission": "program:write"
+  },
   "access_context": {
     "permission": "profile:read",
     "public": true

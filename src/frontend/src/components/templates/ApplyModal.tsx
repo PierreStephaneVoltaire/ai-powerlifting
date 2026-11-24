@@ -10,7 +10,7 @@ interface Props {
   opened: boolean
   onClose: () => void
   sk: string
-  onApply: (data: any) => void
+  onApply: (data: any) => Promise<void>
 }
 
 export const ApplyModal: React.FC<Props> = ({ opened, onClose, sk, onApply }) => {
@@ -38,7 +38,7 @@ export const ApplyModal: React.FC<Props> = ({ opened, onClose, sk, onApply }) =>
         start_date: startDate || undefined,
         week_start_day: weekStartDay
       })
-      onApply(res)
+      await onApply({ ...res, confirmKey: idempotencyKey.current })
     } catch (err) {
       console.error(err)
     } finally {

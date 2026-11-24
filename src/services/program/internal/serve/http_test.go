@@ -251,8 +251,8 @@ func TestSwaggerDocumentsEveryOperation(t *testing.T) {
 	}
 	paths := document["paths"].(map[string]any)
 	registry, _ := contract.Load()
-	if len(registry.All()) != 18 {
-		t.Fatalf("expected 18 operations, got %d", len(registry.All()))
+	if len(registry.All()) != 20 {
+		t.Fatalf("expected 20 operations, got %d", len(registry.All()))
 	}
 	wantHeaders := []string{"X-Person-Pk", "X-Athlete-Pk", "X-PL-Source-Principal", "X-If-Job-Id", "X-If-Turn-Id", "X-PL-Nested-Operation"}
 	for _, operation := range registry.All() {
@@ -289,6 +289,34 @@ func TestSwaggerDocumentsEveryOperation(t *testing.T) {
 	page := e.do("GET", "/docs", "", nil).Body.String()
 	if !strings.Contains(strings.ToLower(page), "swagger") || !strings.Contains(page, "/openapi") {
 		t.Fatal("/docs must serve Swagger UI")
+	}
+}
+
+func TestTemplateApplySessionsRequiresTemplatesWorkload(t *testing.T) {
+	e := newEnvironment(t, 200)
+	for _, source := range []string{"", "spiffe://cluster.local/ns/powerlifting/sa/pl-imports", "spiffe://cluster.local/ns/powerlifting/sa/powerlifting-app-backend"} {
+		response := e.do("POST", "/operations/template_apply_sessions", `{}`, with(map[string]string{"X-PL-Source-Principal": source}))
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("source %q: status %d body %s", source, response.Code, response.Body.String())
+		}
+	}
+	response := e.do("POST", "/operations/template_apply_sessions", `{}`, with(map[string]string{"X-PL-Source-Principal": "spiffe://cluster.local/ns/powerlifting/sa/pl-templates"}))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("templates workload: status %d body %s", response.Code, response.Body.String())
+	}
+}
+
+func TestSessionImportRequiresImportsWorkload(t *testing.T) {
+	e := newEnvironment(t, 200)
+	for _, source := range []string{"", "spiffe://cluster.local/ns/powerlifting/sa/pl-templates", "spiffe://cluster.local/ns/powerlifting/sa/powerlifting-app-backend"} {
+		response := e.do("POST", "/operations/program_apply_session_import", `{}`, with(map[string]string{"X-PL-Source-Principal": source}))
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("source %q: status %d body %s", source, response.Code, response.Body.String())
+		}
+	}
+	response := e.do("POST", "/operations/program_apply_session_import", `{}`, with(map[string]string{"X-PL-Source-Principal": "spiffe://cluster.local/ns/powerlifting/sa/pl-imports"}))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("imports workload: status %d body %s", response.Code, response.Body.String())
 	}
 }
 

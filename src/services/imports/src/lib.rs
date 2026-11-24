@@ -7,7 +7,6 @@ pub mod missing;
 pub mod parse;
 pub mod resolve;
 pub mod server;
-pub mod sessions;
 pub mod source;
 pub mod store;
 pub mod summary;

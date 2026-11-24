@@ -215,7 +215,7 @@ func newVersion(d *Deps, r *Request) (any, error) {
 		log = []any{}
 	}
 	meta["change_log"] = append(log, map[string]any{"reason": reason, "timestamp": d.Env.Stamp()})
-	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, updated, false)
+	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, updated, false, loaded)
 	if err != nil {
 		return nil, mapError(err)
 	}

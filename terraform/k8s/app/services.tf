@@ -17,6 +17,8 @@ locals {
     "pl-export"        = local.images.export
     "pl-federation"    = local.images.federation
     "pl-goals"         = local.images.goals
+    "pl-imports"       = local.images.imports
+    "pl-templates"     = local.images.templates
     "pl-lift-profiles" = local.images.lift_profiles
     "pl-performance"   = local.images.performance
     "pl-weight-log"    = local.images.weight_log
@@ -51,7 +53,7 @@ resource "kubernetes_deployment_v1" "service" {
     replicas = 1
 
     dynamic "strategy" {
-      for_each = each.key == "pl-lift-profiles" ? [1] : []
+      for_each = contains(["pl-lift-profiles", "pl-imports", "pl-templates"], each.key) ? [1] : []
       content {
         type = "Recreate"
       }

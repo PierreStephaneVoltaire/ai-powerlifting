@@ -3,7 +3,6 @@
     "name": "export_program_history",
     "domain": "export",
     "description": "Export one training block (default: the active block), optionally limited to an analysis window, to Excel (.xlsx) or Markdown (.md) format.",
-    "handler": "services.export.export_program_history.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -71,7 +70,6 @@
     "name": "get_analysis_markdown",
     "domain": "export",
     "description": "Return the markdown export of the full training program (current block). This is the primary reference document for coaching decisions. Served from cache while the program and glossary are unchanged; refresh forces regeneration.",
-    "handler": "services.export.analysis_reports.handler",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -137,7 +135,6 @@
     "name": "analytics.markdown",
     "domain": "export",
     "description": "Return the cached markdown export of the full training program.",
-    "handler": "services.export.analysis_reports.handler",
     "input_schema": {
       "type": "object",
       "properties": {

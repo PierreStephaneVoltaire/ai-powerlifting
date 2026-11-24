@@ -672,6 +672,7 @@ export async function confirmApplyTemplate(sk: string, body: {
   target?: string;
   block_id?: string;
   block_name?: string;
+  operation_id?: string;
 }): Promise<{ program_sk: string }> {
   const res = await api.post(templatePath(sk, '/apply/confirm'), body)
   return res.data

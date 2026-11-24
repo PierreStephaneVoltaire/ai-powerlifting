@@ -1,5 +1,100 @@
 [
   {
+    "name": "program_apply_session_import",
+    "domain": "program",
+    "description": "Apply a claimed session import to a guarded program version.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {"type": "string", "minLength": 1},
+        "import_id": {"type": "string", "minLength": 1},
+        "claim_id": {"type": "string", "minLength": 1},
+        "sessions": {"type": "array", "items": {"type": "object"}},
+        "start_date": {"type": ["string", "null"]},
+        "merge_strategy": {"enum": ["append", "overwrite", "overwrite_future", "selective"]},
+        "conflict_resolutions": {"type": "array", "items": {"type": "object"}}
+      },
+      "required": ["import_id", "claim_id", "sessions"],
+      "additionalProperties": false
+    },
+    "result_schema": {"type": "object", "required": ["status", "applied_count", "skipped_count", "new_version"], "additionalProperties": true},
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_apply_sessions",
+    "domain": "program",
+    "description": "Apply template sessions to the active training block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "enum": [
+            "append",
+            "replace_incomplete"
+          ]
+        },
+        "operation_id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "block_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sk": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "week_start_day": {
+          "enum": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ]
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "target",
+        "sk",
+        "start_date",
+        "week_start_day",
+        "sessions"
+      ],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "program_sk",
+        "target",
+        "block_id"
+      ],
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
     "name": "block_transition",
     "domain": "program",
     "description": "Complete the current block, start a next block, or do both with an idempotent revisioned transition.",

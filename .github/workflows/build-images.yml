@@ -192,6 +192,10 @@ jobs:
             repository: powerlifting-goals
           - image: powerlifting-export
             repository: powerlifting-export
+          - image: powerlifting-imports
+            repository: powerlifting-imports
+          - image: powerlifting-templates
+            repository: powerlifting-templates
           - image: powerlifting-lift-profiles
             repository: powerlifting-lift-profiles
           - image: powerlifting-weight-log

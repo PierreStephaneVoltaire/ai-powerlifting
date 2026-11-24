@@ -21,6 +21,27 @@ resource "kubectl_manifest" "template_domain_calls" {
   })
 }
 
+resource "kubectl_manifest" "program_publication_calls" {
+  for_each = {
+    pl-templates = "template_apply_sessions"
+    pl-imports   = "program_apply_session_import"
+  }
+
+  yaml_body = yamlencode({
+    apiVersion = "security.istio.io/v1"
+    kind       = "AuthorizationPolicy"
+    metadata   = { name = "${each.key}-to-program-publication", namespace = var.namespace }
+    spec = {
+      targetRefs = [{ group = "", kind = "Service", name = "pl-program" }]
+      action     = "ALLOW"
+      rules = [{
+        from = [{ source = { principals = ["cluster.local/ns/${var.namespace}/sa/${each.key}"] } }]
+        to   = [{ operation = { ports = ["8000"], methods = ["POST"], paths = ["/operations/${each.value}"] } }]
+      }]
+    }
+  })
+}
+
 resource "kubectl_manifest" "export_glossary" {
   yaml_body = yamlencode({
     apiVersion = "security.istio.io/v1"

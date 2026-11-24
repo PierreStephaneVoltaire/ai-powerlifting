@@ -91,7 +91,7 @@ func TestNextLabel(t *testing.T) {
 		{"3.0", false, 3, 4, "4.0"}, {"3.2", true, 3, 4, "3.3"}, {"v003", false, 3, 4, "4.0"}, {"v001", false, 0, 1, "1.0"}, {"x.y", false, 5, 6, "6.0"},
 	}
 	for _, c := range cases {
-		if got := nextLabel(c.label, c.minor, c.current, c.new); got != c.want {
+		if got := NextVersionLabel(c.label, c.minor, c.current, c.new); got != c.want {
 			t.Errorf("%s: got %s want %s", c.label, got, c.want)
 		}
 	}
@@ -187,5 +187,35 @@ func TestCommitPreservesUnchangedSupplementField(t *testing.T) {
 	stored, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
 	if stored["supplements"].([]any)[0] != "current" || stored["supplement_phases"].([]any)[0] != "new phase" {
 		t.Fatalf("supplement merge: %v", stored)
+	}
+}
+
+func TestPublishVersionChecksPointerAndImportClaim(t *testing.T) {
+	ctx := context.Background()
+	db := NewMemory()
+	tables := Tables{Health: "h"}
+	for _, item := range []Item{
+		{"pk": "a", "sk": PointerSK, "ref_sk": "program#v001"},
+		{"pk": "a", "sk": "program#v002", "published": false},
+		{"pk": "a", "sk": "import#pending#i", "status": "applying", "apply_claim_id": "claim"},
+	} {
+		if err := db.Seed(tables.Health, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pointer := Item{"pk": "a", "sk": PointerSK, "ref_sk": "program#v002"}
+	if err := db.PublishVersion(ctx, tables, "a", "program#stale", pointer, "program#v002", "i", "claim"); err == nil {
+		t.Fatal("accepted a stale program pointer")
+	}
+	if err := db.PublishVersion(ctx, tables, "a", "program#v001", pointer, "program#v002", "i", "stale"); err == nil {
+		t.Fatal("accepted a stale import claim")
+	}
+	if err := db.PublishVersion(ctx, tables, "a", "program#v001", pointer, "program#v002", "i", "claim"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := db.Get(ctx, tables.Health, Key{"a", PointerSK}, GetOptions{})
+	version, _ := db.Get(ctx, tables.Health, Key{"a", "program#v002"}, GetOptions{})
+	if got["ref_sk"] != "program#v002" || version["published"] != true {
+		t.Fatalf("pointer %v version %v", got, version)
 	}
 }

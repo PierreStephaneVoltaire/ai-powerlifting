@@ -48,7 +48,7 @@ locals {
   workload_identity_dynamo_actions = {
     "pl-analytics"     = ["GetItem", "Query"]
     "pl-profile"       = ["GetItem", "PutItem", "UpdateItem", "DeleteItem", "Query", "Scan", "ConditionCheckItem"]
-    "pl-program"       = ["GetItem", "PutItem", "Query", "BatchWriteItem"]
+    "pl-program"       = ["GetItem", "PutItem", "UpdateItem", "Query", "BatchWriteItem", "ConditionCheckItem"]
     "pl-sessions"      = ["GetItem", "PutItem", "DeleteItem", "Query", "BatchWriteItem"]
     "pl-competition"   = ["GetItem", "UpdateItem", "Query"]
     "pl-glossary"      = ["GetItem", "PutItem", "UpdateItem", "Query"]

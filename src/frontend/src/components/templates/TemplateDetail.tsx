@@ -33,7 +33,7 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
   const handleApply = async (res: any) => {
     if (res.missing_maxes && res.missing_maxes.length > 0) {
       setMissingMaxes(res.missing_maxes)
-      setApplyData({ ...res, confirmKey: globalThis.crypto.randomUUID() })
+      setApplyData(res)
       setApplyModalOpened(false)
     } else {
       if (!resolvedTemplateSk) return
@@ -42,7 +42,8 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         const applied = await confirmApplyTemplate(resolvedTemplateSk, {
           start_date: res.start_date,
           week_start_day: res.week_start_day,
-          target: res.target
+          target: res.target,
+          operation_id: res.confirmKey
         })
         navigate(`/designer/sessions?version=${applied.program_sk}`)
       } finally {
@@ -74,7 +75,8 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
         backfilled_maxes,
         start_date: applyData.start_date,
         week_start_day: applyData.week_start_day,
-        target: applyData.target
+        target: applyData.target,
+        operation_id: applyData.confirmKey
       })
       navigate(`/designer/sessions?version=${res.program_sk}`)
     } catch (err) {

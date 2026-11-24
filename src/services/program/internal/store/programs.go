@@ -116,9 +116,11 @@ func (p Programs) CurrentSK(ctx context.Context, athlete, selected string) (stri
 }
 
 type Loaded struct {
-	Program map[string]any
-	SK      string
-	Version int
+	Program     map[string]any
+	SK          string
+	Version     int
+	ImportID    string
+	ImportClaim string
 }
 
 func (p Programs) Load(ctx context.Context, athlete, selected string, withSessions bool) (*Loaded, error) {
@@ -126,7 +128,7 @@ func (p Programs) Load(ctx context.Context, athlete, selected string, withSessio
 	if !unselected(selected) {
 		pointer = Item{"ref_sk": selected, "version": int64(0)}
 	} else {
-		found, err := p.getHealth(ctx, athlete, PointerSK, false)
+		found, err := p.getHealth(ctx, athlete, PointerSK, withSessions)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +147,7 @@ func (p Programs) Load(ctx context.Context, athlete, selected string, withSessio
 	if _, present := pointer["ref_sk"]; !present {
 		refSK = fmt.Sprintf("%s%03d", ProgramPrefix, version)
 	}
-	program, err := p.getHealth(ctx, athlete, refSK, false)
+	program, err := p.getHealth(ctx, athlete, refSK, withSessions)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +274,7 @@ type Written struct {
 	SK      string
 }
 
-func (p Programs) WriteNewVersion(ctx context.Context, athlete string, program map[string]any, minor bool) (*Written, error) {
+func (p Programs) WriteNewVersion(ctx context.Context, athlete string, program map[string]any, minor bool, loaded *Loaded) (*Written, error) {
 	now := p.Env.Stamp()
 	pointer, err := p.getHealth(ctx, athlete, PointerSK, false)
 	if err != nil {
@@ -292,7 +294,7 @@ func (p Programs) WriteNewVersion(ctx context.Context, athlete string, program m
 	if value, present := meta["version_label"]; present {
 		label = pyval.Str(value)
 	}
-	meta["version_label"] = nextLabel(label, minor, currentVersion, newVersion)
+	meta["version_label"] = NextVersionLabel(label, minor, currentVersion, newVersion)
 	meta["updated_at"] = now
 	newSK := fmt.Sprintf("%s%03d-%s", ProgramPrefix, newVersion, p.Env.Hex())
 	sessions, _ := pyval.DeepCopy(program["sessions"]).([]any)
@@ -309,7 +311,7 @@ func (p Programs) WriteNewVersion(ctx context.Context, athlete string, program m
 	}
 	item["pk"] = athlete
 	item["sk"] = newSK
-	item["published"] = true
+	item["published"] = false
 	if err := p.DB.Put(ctx, p.Tables.Health, item); err != nil {
 		return nil, err
 	}
@@ -318,13 +320,13 @@ func (p Programs) WriteNewVersion(ctx context.Context, athlete string, program m
 		return nil, err
 	}
 	pointerItem := Item{"pk": athlete, "sk": PointerSK, "version": int64(newVersion), "ref_sk": newSK, "updated_at": now, "current_block_id": scope.CurrentBlockID(program)}
-	if err := p.DB.Put(ctx, p.Tables.Health, pointerItem); err != nil {
+	if err := p.DB.PublishVersion(ctx, p.Tables, athlete, loaded.SK, pointerItem, newSK, loaded.ImportID, loaded.ImportClaim); err != nil {
 		return nil, err
 	}
 	return &Written{Program: program, SK: newSK}, nil
 }
 
-func nextLabel(label string, minor bool, currentVersion, newVersion int) string {
+func NextVersionLabel(label string, minor bool, currentVersion, newVersion int) string {
 	parts := strings.Split(label, ".")
 	if len(parts) == 2 {
 		major, errMajor := strconv.Atoi(strings.TrimSpace(parts[0]))

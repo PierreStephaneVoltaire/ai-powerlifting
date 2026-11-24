@@ -293,6 +293,14 @@ func blockTransition(d *Deps, r *Request) (any, error) {
 	}
 	program := pyval.CopyMap(loaded.Program)
 	meta := metaOf(program)
+	operationID := r.String("operation_id")
+	receipts, _ := meta["template_operations"].(map[string]any)
+	if receipt, ok := receipts[operationID].(map[string]any); operationID != "" && ok {
+		result := pyval.CopyMap(receipt)
+		program["sk"] = loaded.SK
+		result["program"] = program
+		return result, nil
+	}
 	blocks := pyval.Maps(pyval.DeepCopy(meta["blocks"]))
 	currentID := pyval.Str2(meta["current_block_id"])
 	if currentID == "" {
@@ -440,10 +448,18 @@ func blockTransition(d *Deps, r *Request) (any, error) {
 	program["phases"] = pyval.ToList(phases)
 	program["sessions"] = pyval.ToList(sessions)
 	result := map[string]any{"action": action, "block_id": blockID, "next_block_id": nextID, "warning": "Unfinished sessions were preserved"}
-	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, program, false)
+	if operationID != "" {
+		if receipts == nil {
+			receipts = map[string]any{}
+			meta["template_operations"] = receipts
+		}
+		receipts[operationID] = pyval.CopyMap(result)
+	}
+	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, program, false, loaded)
 	if err != nil {
 		return nil, mapError(err)
 	}
+	written.Program["sk"] = written.SK
 	result["program"] = written.Program
 	return result, nil
 }

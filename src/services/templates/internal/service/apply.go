@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -13,7 +15,14 @@ import (
 	"powerlifting/templates/internal/auth"
 )
 
-func (s *Service) confirmNewBlock(ctx context.Context, args map[string]any, caller auth.Caller, owners []string) (any, error) {
+func (s *Service) confirmTemplate(ctx context.Context, args map[string]any, caller auth.Caller, owners []string) (any, error) {
+	target := value(args["target"])
+	if target == "" {
+		target = "new_block"
+	}
+	if target != "new_block" && target != "append" && target != "replace_incomplete" {
+		return nil, apperr.Validation("target must be new_block, append, or replace_incomplete")
+	}
 	if s.Sources == nil || s.Domain == nil {
 		return nil, apperr.Upstream("Program source unavailable")
 	}
@@ -60,6 +69,36 @@ func (s *Service) confirmNewBlock(ctx context.Context, args map[string]any, call
 	sessions, err := apply.Concretize(template, maxes, glossary, start, weekDay)
 	if err != nil {
 		return nil, apperr.Validation(err.Error())
+	}
+	operationID := ""
+	if key := value(args["operation_id"]); key != "" {
+		sum := sha256.Sum256([]byte("request:" + key))
+		operationID = hex.EncodeToString(sum[:])
+	} else if job := caller.ActiveJob(); job != "" {
+		encoded, err := json.Marshal(args)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(append([]byte(job+":"), encoded...))
+		operationID = hex.EncodeToString(sum[:])
+	}
+	if target != "new_block" {
+		request := map[string]any{
+			"pk": caller.Athlete, "target": target,
+			"sk": args["sk"], "start_date": start.Format("2006-01-02"),
+			"week_start_day": weekDay, "sessions": sessions,
+		}
+		if blockID := value(args["block_id"]); blockID != "" {
+			request["block_id"] = blockID
+		}
+		if operationID != "" {
+			request["operation_id"] = operationID
+		}
+		result, err := s.Domain.Call(ctx, "program", "template_apply_sessions", request, caller)
+		if err != nil {
+			return nil, fmt.Errorf("apply template sessions: %w", err)
+		}
+		return result, nil
 	}
 	phases := []any{}
 	for _, raw := range asList(template["phases"]) {
@@ -128,6 +167,9 @@ func (s *Service) confirmNewBlock(ctx context.Context, args map[string]any, call
 		}
 	}
 	request := map[string]any{"pk": caller.Athlete, "action": action, "block_id": source, "start_date": start.Format("2006-01-02"), "week_start_day": weekDay, "start_maxes_kg": positive, "next_program": map[string]any{"phases": phases, "sessions": sessions}}
+	if operationID != "" {
+		request["operation_id"] = operationID
+	}
 	if name := value(args["block_name"]); name != "" {
 		request["name"] = name
 	}
