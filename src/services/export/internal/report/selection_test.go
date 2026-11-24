@@ -29,6 +29,13 @@ func TestExportSelectionNaming(t *testing.T) {
 	}
 }
 
+func TestExportNamingUsesActiveBlockWhenCurrentIDMissing(t *testing.T) {
+	program := map[string]any{"meta": map[string]any{"program_name": "Base", "blocks": []any{map[string]any{"id": "new", "name": "Meet Prep", "status": "active"}}}}
+	if got := Filename(program, "current", nil, "md"); got != "meet-prep.md" {
+		t.Fatalf("filename = %q", got)
+	}
+}
+
 func TestEntryWindowUsesBlockBoundariesBeforeSessionDates(t *testing.T) {
 	program := map[string]any{"meta": map[string]any{"current_block_id": "one", "blocks": []any{map[string]any{"id": "two", "start_date": "2026-12-01"}, map[string]any{"id": "one", "start_date": "2026-11-01"}}}}
 	sessions := []any{map[string]any{"date": "2026-11-10"}, map[string]any{"date": "2026-11-20"}}

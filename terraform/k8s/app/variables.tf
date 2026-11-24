@@ -25,6 +25,7 @@ variable "repositories" {
     federation       = optional(string, "if-powerlifting-federation")
     goals            = optional(string, "if-powerlifting-goals")
     lift_profiles    = optional(string, "if-powerlifting-lift-profiles")
+    export           = optional(string, "if-powerlifting-export")
     weight_log       = optional(string, "if-powerlifting-weight-log")
     calculations     = optional(string, "if-powerlifting-calculations")
     competition      = optional(string, "if-powerlifting-competition")

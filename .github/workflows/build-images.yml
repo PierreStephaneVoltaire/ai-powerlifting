@@ -190,6 +190,8 @@ jobs:
             repository: powerlifting-federation
           - image: powerlifting-goals
             repository: powerlifting-goals
+          - image: powerlifting-export
+            repository: powerlifting-export
           - image: powerlifting-lift-profiles
             repository: powerlifting-lift-profiles
           - image: powerlifting-weight-log

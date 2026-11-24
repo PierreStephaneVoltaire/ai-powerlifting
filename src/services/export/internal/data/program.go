@@ -49,7 +49,9 @@ func (p *ProgramClient) Get(ctx context.Context, caller auth.Caller, selection m
 		return nil, fmt.Errorf("program service returned HTTP %d", response.StatusCode)
 	}
 	var program map[string]any
-	if err = json.NewDecoder(io.LimitReader(response.Body, 64<<20)).Decode(&program); err != nil {
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 64<<20))
+	decoder.UseNumber()
+	if err = decoder.Decode(&program); err != nil {
 		return nil, fmt.Errorf("decode program: %w", err)
 	}
 	if program == nil {

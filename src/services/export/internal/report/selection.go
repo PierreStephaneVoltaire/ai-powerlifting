@@ -84,7 +84,7 @@ func EntryWindow(program map[string]any, block string, window map[string]any, se
 func BlockName(program map[string]any, block string) string {
 	meta := object(program["meta"])
 	if block == "current" || block == "" {
-		block, _ = meta["current_block_id"].(string)
+		block = scope.CurrentBlockID(program)
 	}
 	for _, item := range records(meta["blocks"]) {
 		if item["id"] == block || item["label"] == block {

@@ -51,7 +51,9 @@ func (d DomainClient) Call(ctx context.Context, domain, operation string, caller
 		return nil, fmt.Errorf("%s returned HTTP %d", domain, response.StatusCode)
 	}
 	var result map[string]any
-	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<20)).Decode(&result); err != nil {
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 64<<20))
+	decoder.UseNumber()
+	if err := decoder.Decode(&result); err != nil {
 		return nil, err
 	}
 	return result, nil

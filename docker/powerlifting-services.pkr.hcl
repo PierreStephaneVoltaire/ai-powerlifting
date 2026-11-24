@@ -46,7 +46,7 @@ build {
     inline = [
       "pip install --no-cache-dir -r /opt/powerlifting/services/runtime/requirements.txt",
       "rm -rf /opt/powerlifting/services/coach /opt/powerlifting/services/coach_discord",
-      "rm -rf /opt/powerlifting/services/calculations /opt/powerlifting/services/weight_log /opt/powerlifting/services/goals /opt/powerlifting/services/lift_profiles /opt/powerlifting/services/federation /opt/powerlifting/services/performance /opt/powerlifting/services/analytics /opt/powerlifting/services/rankings /opt/powerlifting/services/analytics-ai /opt/powerlifting/services/analytics-export /opt/powerlifting/services/prompt-cache /opt/powerlifting/services/sessions /opt/powerlifting/services/program /opt/powerlifting/services/competition /opt/powerlifting/services/profile /opt/powerlifting/services/glossary",
+      "rm -rf /opt/powerlifting/services/calculations /opt/powerlifting/services/export /opt/powerlifting/services/weight_log /opt/powerlifting/services/goals /opt/powerlifting/services/lift_profiles /opt/powerlifting/services/federation /opt/powerlifting/services/performance /opt/powerlifting/services/analytics /opt/powerlifting/services/rankings /opt/powerlifting/services/analytics-ai /opt/powerlifting/services/analytics-export /opt/powerlifting/services/prompt-cache /opt/powerlifting/services/sessions /opt/powerlifting/services/program /opt/powerlifting/services/competition /opt/powerlifting/services/profile /opt/powerlifting/services/glossary",
       "find /opt/powerlifting/services -name tests -type d -prune -exec rm -rf {} +",
       "find /opt/powerlifting -name target -type d -prune -exec rm -rf {} +",
       "find /opt/powerlifting -name __pycache__ -type d -prune -exec rm -rf {} +",

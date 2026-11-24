@@ -253,3 +253,24 @@ func TestWorkbookIncludesStructuredAnalysisReports(t *testing.T) {
 		}
 	}
 }
+
+func TestMetadataTrainingNotesAreReadable(t *testing.T) {
+	for _, tc := range []struct {
+		notes any
+		want  string
+	}{{nil, ""}, {[]any{"first", "second"}, "first; second"}, {"single", "single"}} {
+		rows := metadataRows(map[string]any{"training_notes": tc.notes}, map[string]any{}, Context{})
+		found := false
+		for _, row := range rows {
+			if row[0] == "Training Notes" {
+				found = true
+				if row[1] != tc.want {
+					t.Errorf("notes %#v: got %#v, want %q", tc.notes, row[1], tc.want)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("missing training notes")
+		}
+	}
+}

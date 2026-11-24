@@ -47,7 +47,9 @@ func (a AnalyticsClient) Weekly(ctx context.Context, caller auth.Caller, argumen
 		return nil, fmt.Errorf("analytics returned HTTP %d", response.StatusCode)
 	}
 	var result map[string]any
-	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<20)).Decode(&result); err != nil {
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 64<<20))
+	decoder.UseNumber()
+	if err := decoder.Decode(&result); err != nil {
 		return nil, err
 	}
 	return result, nil

@@ -50,8 +50,12 @@ func metadataRows(meta, program map[string]any, context Context) [][]any {
 	if notes == nil {
 		notes = []any{}
 	}
-	if _, ok := notes.([]any); ok {
-		notes = serialized(notes, []any{})
+	if list, ok := notes.([]any); ok {
+		parts := make([]string, 0, len(list))
+		for _, item := range list {
+			parts = append(parts, values.Str(item))
+		}
+		notes = strings.Join(parts, "; ")
 	}
 	return [][]any{
 		{"Program Name", meta["program_name"]}, {"Creator", creator}, {"Program PK", pk}, {"Program Version Token", version},

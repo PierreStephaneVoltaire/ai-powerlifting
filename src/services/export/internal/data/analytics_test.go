@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -22,5 +23,8 @@ func TestAnalyticsForwardsNestedIdentity(t *testing.T) {
 	result, err := client.Weekly(context.Background(), auth.Caller{Person: "person", Athlete: "athlete", TurnID: "turn"}, map[string]any{"weeks": 4})
 	if err != nil || result["overview"] == nil {
 		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	if got := result["overview"].(map[string]any)["week"]; got != json.Number("4") {
+		t.Fatalf("week precision lost: %#v", got)
 	}
 }

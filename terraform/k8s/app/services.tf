@@ -14,6 +14,7 @@ locals {
 
   native_service_images = {
     "pl-calculations"  = local.images.calculations
+    "pl-export"        = local.images.export
     "pl-federation"    = local.images.federation
     "pl-goals"         = local.images.goals
     "pl-lift-profiles" = local.images.lift_profiles
