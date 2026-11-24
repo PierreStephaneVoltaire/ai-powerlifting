@@ -155,7 +155,7 @@ func Prepare(input map[string]any, creating bool) (map[string]any, error) {
 			setDefault(exercise, "reps", nil)
 			loadType := strings.ToLower(text(exercise["load_type"]))
 			switch loadType {
-			case "rpe", "percentage", "absolute", "unresolvable":
+			case "rpe", "percentage", "absolute", "unresolvable", "duration":
 			default:
 				loadType = "unresolvable"
 			}
@@ -175,7 +175,7 @@ func Prepare(input map[string]any, creating bool) (map[string]any, error) {
 			if id := text(exercise["glossary_id"]); id != "" {
 				exercise["glossary_id"] = id
 				resolved[id] = true
-				if loadType == "percentage" || loadType == "rpe" {
+				if loadType == "percentage" {
 					maxes[id] = true
 				}
 			} else if name := strings.TrimSpace(text(exercise["name"])); name != "" {

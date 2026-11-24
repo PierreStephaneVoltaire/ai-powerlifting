@@ -199,3 +199,30 @@ func TestConcurrentIndexUpdateIsRetainedAfterRetry(t *testing.T) {
 		t.Fatalf("concurrent entry was lost: %#v", list)
 	}
 }
+
+func TestCopyDoesNotOverwriteAnotherAthlete(t *testing.T) {
+	ctx := context.Background()
+	db := &memory{items: map[string]map[string]any{}}
+	store := Library{Backend: db}
+	original, err := store.Create(ctx, map[string]any{"meta": map[string]any{"name": "published"}}, "author", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice, err := store.Copy(ctx, original, "Training", "alice", "", []string{"alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := store.Copy(ctx, original, "Training", "bob", "", []string{"bob"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alice == bob {
+		t.Fatal("different athletes received the same copy")
+	}
+	if _, err := store.Get(ctx, alice, []string{"alice"}); err != nil {
+		t.Fatalf("first copy was overwritten: %v", err)
+	}
+	if _, err := store.Get(ctx, bob, []string{"bob"}); err != nil {
+		t.Fatalf("second copy missing: %v", err)
+	}
+}

@@ -132,7 +132,11 @@ func (s *Service) call(ctx context.Context, name string, args map[string]any, ca
 		return item, nil
 	case "template_create_blank":
 		meta := map[string]any{"name": args["name"], "description": defaultValue(args["description"], ""), "program_context": defaultValue(args["program_context"], ""), "estimated_weeks": defaultValue(args["estimated_weeks"], 4), "days_per_week": defaultValue(args["days_per_week"], 3), "archived": false}
-		id, err := s.Library.Create(ctx, map[string]any{"meta": meta, "sessions": []any{}, "phases": []any{}}, actor, actor, false)
+		prepared, err := payload.Prepare(map[string]any{"meta": meta, "sessions": []any{}, "phases": []any{}}, true)
+		if err != nil {
+			return nil, err
+		}
+		id, err := s.Library.Create(ctx, prepared, actor, value(args["author"]), false)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +196,11 @@ func (s *Service) call(ctx context.Context, name string, args map[string]any, ca
 			return nil, apperr.Validation(err.Error())
 		}
 		converted["meta"].(map[string]any)["name"] = args["name"]
-		id, err := s.Library.Create(ctx, converted, actor, value(args["author"]), false)
+		prepared, err := payload.Prepare(converted, true)
+		if err != nil {
+			return nil, err
+		}
+		id, err := s.Library.Create(ctx, prepared, actor, value(args["author"]), false)
 		if err != nil {
 			return nil, err
 		}

@@ -210,7 +210,8 @@ func Program(template map[string]any, glossary []map[string]any, currentMaxes ma
 			e1rm := number(maxes[liftKey])
 			if liftKey == "" {
 				candidate := entry["e1rm_estimate"]
-				if candidate == nil {
+				emptyEstimate, isMap := candidate.(map[string]any)
+				if candidate == nil || isMap && len(emptyEstimate) == 0 || candidate == "" || candidate == float64(0) || candidate == int(0) {
 					candidate = entry["e1rm"]
 				}
 				if data, ok := candidate.(map[string]any); ok {

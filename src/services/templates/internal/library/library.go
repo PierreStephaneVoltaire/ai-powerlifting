@@ -389,8 +389,11 @@ func (s Library) Copy(ctx context.Context, sk, name, actor, author string, owner
 	}
 	meta["author"] = author
 	delete(meta, "published_at")
-	hash := sha256.Sum256([]byte(sk + ":" + name))
-	newSK := "template#copy-" + hex.EncodeToString(hash[:16])
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", err
+	}
+	newSK := "template#copy-" + hex.EncodeToString(id[:])
 	cloned["pk"], cloned["sk"] = s.partition(), newSK
 	delete(cloned, "is_owner")
 	if err := s.write(ctx, cloned); err != nil {

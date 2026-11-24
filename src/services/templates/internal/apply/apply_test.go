@@ -54,3 +54,37 @@ func TestConcretizeTimedRPEAndRoundEven(t *testing.T) {
 		t.Fatalf("exercise = %#v", ex)
 	}
 }
+
+func TestMissingRejectsEmptyExerciseEstimate(t *testing.T) {
+	template := map[string]any{"sessions": []any{map[string]any{"exercises": []any{map[string]any{"glossary_id": "row", "load_type": "percentage"}}}}}
+	glossary := []map[string]any{{"id": "row", "e1rm_estimate": map[string]any{}}}
+	if got := Missing(template, nil, glossary); !reflect.DeepEqual(got, []string{"row"}) {
+		t.Fatalf("missing = %#v", got)
+	}
+	glossary[0]["e1rm_estimate"] = map[string]any{"value_kg": 100}
+	if got := Missing(template, nil, glossary); len(got) != 0 {
+		t.Fatalf("missing = %#v", got)
+	}
+}
+
+func TestConcretizeRespectsExplicitZeroMax(t *testing.T) {
+	template := map[string]any{"sessions": []any{map[string]any{"day_of_week": "Monday", "exercises": []any{map[string]any{"name": "Squat", "glossary_id": "squat", "sets": 3, "reps": 5, "load_type": "rpe", "load_value": 8}}}}}
+	glossary := []map[string]any{{"id": "squat", "e1rm_estimate": map[string]any{"value_kg": 200}}}
+	start := time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		maxes    map[string]any
+		wantLoad bool
+	}{{"explicit zero", map[string]any{"squat": 0}, false}, {"no max", nil, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			sessions, err := Concretize(template, tc.maxes, glossary, start, "Monday")
+			if err != nil {
+				t.Fatal(err)
+			}
+			exercise := sessions[0]["planned_exercises"].([]map[string]any)[0]
+			if (exercise["kg"] != nil) != tc.wantLoad {
+				t.Fatalf("exercise = %#v", exercise)
+			}
+		})
+	}
+}

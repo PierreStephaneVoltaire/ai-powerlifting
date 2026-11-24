@@ -77,7 +77,8 @@ func Missing(template map[string]any, maxes map[string]any, glossary []map[strin
 			}
 			continue
 		}
-		if byID[id] == nil || byID[id]["e1rm_estimate"] == nil {
+		estimate, ok := byID[id]["e1rm_estimate"].(map[string]any)
+		if !ok || len(estimate) == 0 {
 			missing = append(missing, id)
 		}
 	}
@@ -143,8 +144,9 @@ func Concretize(template map[string]any, maxes map[string]any, glossary []map[st
 			if rpe == nil && loadType == "rpe" {
 				rpe = ex["load_value"]
 			}
-			e1rm := number(maxes[gid])
-			if e1rm == 0 {
+			maxValue, hasMax := maxes[gid]
+			e1rm := number(maxValue)
+			if !hasMax {
 				if entry := byID[gid]; entry != nil {
 					if estimate, ok := entry["e1rm_estimate"].(map[string]any); ok {
 						e1rm = number(estimate["value_kg"])

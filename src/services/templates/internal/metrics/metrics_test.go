@@ -45,6 +45,20 @@ func TestCompetitionLiftRejectsVariations(t *testing.T) {
 	}
 }
 
+func TestProgramUsesFallbackForEmptyEstimate(t *testing.T) {
+	template := map[string]any{"sessions": []any{map[string]any{"week_number": 1, "day_of_week": "Monday", "exercises": []any{map[string]any{"name": "Row", "sets": 3, "reps": 5, "load_type": "percentage", "load_value": 80}}}}}
+	glossary := []map[string]any{{"name": "Row", "e1rm_estimate": map[string]any{}, "e1rm": 100}}
+	program, _, err := Program(template, glossary, nil, nil, time.Date(2026, 11, 23, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := program["sessions"].([]any)[0].(map[string]any)
+	exercises := session["exercises"].([]any)
+	if len(exercises) != 1 || exercises[0].(map[string]any)["kg"] != float64(80) {
+		t.Fatalf("exercises: %#v", exercises)
+	}
+}
+
 func TestResultFiltersLoggedOnlyAnalysis(t *testing.T) {
 	program := map[string]any{"sessions": []any{map[string]any{"week_number": 2, "date": "2026-12-05"}}, "current_maxes": map[string]any{"squat": 185}}
 	called := false
