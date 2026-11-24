@@ -550,14 +550,14 @@ func (d sectionData) sessionLine(session M) sessionLine {
 			if suffix := failedSetReasons(exercise["failed_set_reasons"]); suffix != "" {
 				notes = strings.TrimSpace(notes + " (" + suffix + ")")
 			}
-			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), getd(exercise, "kg", ""), getd(exercise, "rpe", ""), notes, status})
+			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), exerciseNumber(getd(exercise, "kg", "")), exerciseNumber(getd(exercise, "rpe", "")), notes, status})
 		}
 		line.Table = table([]string{"Exercise", "Sets x Reps", "kg", "RPE", "Notes", "Status"}, rows)
 	}
 	if planned := maps(session["planned_exercises"]); len(planned) > 0 {
 		var rows [][]any
 		for _, exercise := range planned {
-			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), getd(exercise, "kg", ""), getd(exercise, "rpe_target", ""), firstLine(getd(exercise, "notes", "")), status})
+			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), exerciseNumber(getd(exercise, "kg", "")), exerciseNumber(getd(exercise, "rpe_target", "")), firstLine(getd(exercise, "notes", "")), status})
 		}
 		line.Planned = table([]string{"Exercise", "Sets x Reps", "kg", "Target RPE", "Notes", "Status"}, rows)
 	}
@@ -570,7 +570,7 @@ func timedExercise(exercise M) bool {
 }
 
 func prescription(exercise M) string {
-	sets := str(getd(exercise, "sets", ""))
+	sets := exerciseNumber(getd(exercise, "sets", ""))
 	reps := getd(exercise, "reps", "")
 	if timedExercise(exercise) {
 		unit := exercise["rep_unit"]
@@ -581,15 +581,22 @@ func prescription(exercise M) string {
 		if unit == "seconds" {
 			label = "sec"
 		}
-		return sets + " x " + str(reps) + " " + label
+		return sets + " x " + exerciseNumber(reps) + " " + label
 	}
 	if exercise["rep_mode"] == "amrap" {
 		if !blank(reps) {
-			return sets + " x AMRAP (" + str(reps) + ")"
+			return sets + " x AMRAP (" + exerciseNumber(reps) + ")"
 		}
 		return sets + " x AMRAP"
 	}
-	return sets + " x " + str(reps)
+	return sets + " x " + exerciseNumber(reps)
+}
+
+func exerciseNumber(value any) string {
+	if number, ok := value.(float64); ok {
+		return strconv.FormatFloat(number, 'f', -1, 64)
+	}
+	return str(num(value))
 }
 
 type competitionView struct {

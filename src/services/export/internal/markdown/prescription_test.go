@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"strings"
 	"testing"
 
 	"powerlifting/export/internal/report"
@@ -20,6 +21,19 @@ func TestTimedAndAmrapPrescriptions(t *testing.T) {
 		if got := prescription(tc.exercise); got != tc.want {
 			t.Errorf("prescription(%v) = %q, want %q", tc.exercise, got, tc.want)
 		}
+	}
+}
+
+func TestSessionRowsFormatWholeAndFractionalNumbers(t *testing.T) {
+	line := (sectionData{}).sessionLine(M{
+		"exercises":         []any{M{"name": "Squat", "sets": float64(1), "reps": float64(5), "kg": 102.5, "rpe": 8.5}},
+		"planned_exercises": []any{M{"name": "Squat", "sets": float64(3), "reps": float64(5), "kg": float64(95), "rpe_target": float64(8)}},
+	})
+	if !strings.Contains(line.Table, "| Squat | 1 x 5 | 102.5 | 8.5 |") {
+		t.Fatalf("actual exercise row: %s", line.Table)
+	}
+	if !strings.Contains(line.Planned, "| Squat | 3 x 5 | 95 | 8 |") {
+		t.Fatalf("planned exercise row: %s", line.Planned)
 	}
 }
 
