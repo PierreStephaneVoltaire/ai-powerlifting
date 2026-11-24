@@ -55,7 +55,13 @@ const sources = `
 {{if .Wellness}}{{.Wellness}}
 {{end}}{{if .Notes}}{{.Notes}}
 {{end}}{{if .Table}}
+**Actual exercises**
+
 {{.Table}}
+{{end}}{{if .Planned}}
+**Planned exercises**
+
+{{.Planned}}
 {{end}}
 {{end}}{{end}}{{end}}
 
@@ -127,7 +133,7 @@ No projections: {{.Reason}}
 
 {{end}}{{.Table}}
 
-_Estimated 1RM via Epley formula. DOTS uses nearest bodyweight._
+_Estimated 1RM uses the RPE table. IPF GL uses Classic Powerlifting for full SBD weeks and Classic Bench for bench-only weeks._
 {{end}}
 
 {{define "weighttrend"}}### Body Weight Trend
@@ -140,8 +146,9 @@ _Estimated 1RM via Epley formula. DOTS uses nearest bodyweight._
 {{define "analysis"}}## Analysis
 
 {{if .Weekly}}{{template "weekly" .Weekly}}
-{{end}}{{if .Dots}}{{template "dots" .Dots}}
+{{end}}{{if .Details}}{{.Details}}{{end}}{{if .Dots}}{{template "dots" .Dots}}
 {{end}}{{if .Weight}}{{template "weighttrend" .Weight}}
+{{end}}{{if .AI}}{{.AI}}
 {{end}}{{end}}
 
 {{define "notes"}}## Notes

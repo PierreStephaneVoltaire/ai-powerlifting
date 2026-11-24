@@ -51,3 +51,28 @@ func TestHistoryExportsOnlyRequestedWeeks(t *testing.T) {
 		}
 	}
 }
+
+type capturedAnalysis struct{ arguments map[string]any }
+
+func (c *capturedAnalysis) Weekly(_ context.Context, _ auth.Caller, arguments map[string]any) (map[string]any, error) {
+	c.arguments = arguments
+	return nil, nil
+}
+
+func TestHistoryAnalysisUsesCurrentBlockAndDefaultWeeks(t *testing.T) {
+	registry, err := contract.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := New(registry, accessValue{"is_self": true}, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	svc.Programs = testLoader{program: map[string]any{"meta": map[string]any{"current_block_id": "block-1"}, "sessions": []any{}}}
+	analysis := &capturedAnalysis{}
+	svc.Analytics = analysis
+	_, err = svc.Call(context.Background(), "export_program_history", map[string]any{"format": "markdown", "block": "block-1"}, auth.Caller{Person: "person", Athlete: "athlete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if analysis.arguments["block"] != "current" || analysis.arguments["week_start"] != 1 || analysis.arguments["week_end"] != 1 {
+		t.Fatalf("unexpected analysis selection: %#v", analysis.arguments)
+	}
+}

@@ -6,6 +6,7 @@ import (
 
 	"powerlifting/export/internal/calc"
 	"powerlifting/export/internal/liftprofile"
+	"powerlifting/export/internal/markdown"
 	"powerlifting/export/internal/report"
 	"powerlifting/export/internal/values"
 )
@@ -24,7 +25,7 @@ func dots(total, bodyweight any, sex string) any {
 }
 
 func liftTotal(lifts map[string]any) any {
-	if values.Truthy(lifts["total_kg"]) {
+	if !values.Blank(lifts["total_kg"]) {
 		return lifts["total_kg"]
 	}
 	total := 0.0
@@ -38,48 +39,51 @@ func liftTotal(lifts map[string]any) any {
 	return total
 }
 
-func extraTables(program, weekly map[string]any, export Context) []report.Table {
+func extraTables(program, weekly map[string]any, export Context, sessions []map[string]any) []report.Table {
 	meta, _ := program["meta"].(map[string]any)
 	sex := values.Str2(meta["sex"])
 	if sex == "" {
 		sex = "male"
 	}
-	goalRows := [][]any{}
-	for _, goal := range maps(program["goals"]) {
-		goalRows = append(goalRows, []any{goal["title"], goal["type"], goal["priority"], goal["strategy"], goal["target_date"], goal["competition"], goal["federation"], goal["standard"], goal["target_total"], goal["target_dots"], goal["target_ipf_gl"], goal["weight_class_kg"], goal["acceptable_weight_classes"], goal["risk"], goal["notes"]})
-	}
-	federationRows := [][]any{}
-	for _, federation := range maps(export.Federations["federations"]) {
-		federationRows = append(federationRows, []any{"Federation", federation["name"], federation["abbreviation"], federation["region"], federation["status"], federation["notes"]})
-	}
-	for _, standard := range maps(export.Federations["qualification_standards"]) {
-		federationRows = append(federationRows, []any{"Standard", standard["name"], standard["federation_id"], standard["weight_class_kg"], standard["total_kg"], standard})
-	}
+
 	historyRows := [][]any{}
-	for _, entry := range export.MaxHistory {
-		weight := entry["bodyweight_kg"]
-		if !values.Truthy(weight) {
-			weight = meta["current_body_weight_kg"]
-		}
-		historyRows = append(historyRows, []any{entry["date"], entry["squat_kg"], entry["bench_kg"], entry["deadlift_kg"], entry["total_kg"], weight, dots(entry["total_kg"], weight, sex), entry["context"]})
+	history := append([]map[string]any{}, export.MaxHistory...)
+	sort.SliceStable(history, func(i, j int) bool { return values.Str2(history[i]["date"]) < values.Str2(history[j]["date"]) })
+	for _, entry := range history {
+		weight := first(entry["bodyweight_kg"], meta["current_body_weight_kg"], meta["bodyweight_kg"])
+		total := first(entry["total_kg"], float64(0))
+		historyRows = append(historyRows, []any{entry["date"], entry["squat_kg"], entry["bench_kg"], entry["deadlift_kg"], total, weight, dots(total, weight, sex), entry["context"]})
 	}
+
 	competitionRows := [][]any{}
-	for _, entry := range maps(program["competitions"]) {
+	fedNames := map[string]any{}
+	for _, fed := range maps(export.Federations["federations"]) {
+		fedNames[values.Str2(fed["id"])] = first(fed["abbreviation"], fed["name"])
+	}
+	competitions := maps(program["competitions"])
+	sort.SliceStable(competitions, func(i, j int) bool {
+		return values.Str2(competitions[i]["date"]) < values.Str2(competitions[j]["date"])
+	})
+	for _, entry := range competitions {
 		targets, _ := entry["targets"].(map[string]any)
 		results, _ := entry["results"].(map[string]any)
-		weight := entry["body_weight_kg"]
-		source := "competition"
+		weight, source := entry["body_weight_kg"], "competition"
 		if !values.Truthy(weight) {
-			weight = meta["current_body_weight_kg"]
-			source = "program"
+			weight, source = markdown.ResolveBodyweightForDate(entry["date"], sessions, export.WeightLog, meta)
 		}
 		targetTotal, resultTotal := liftTotal(targets), liftTotal(results)
 		var resultDots any
 		if entry["status"] == "completed" {
 			resultDots = dots(resultTotal, weight, sex)
 		}
-		competitionRows = append(competitionRows, []any{entry["name"], entry["date"], entry["status"], entry["federation"], entry["counts_toward_federation_ids"], entry["location"], entry["hotel_required"], entry["weight_class_kg"], weight, source, targets["squat_kg"], targets["bench_kg"], targets["deadlift_kg"], targetTotal, dots(targetTotal, weight, sex), results["squat_kg"], results["bench_kg"], results["deadlift_kg"], resultTotal, resultDots, entry["place"], entry["decision_date"], entry["projection_snapshot_date"], entry["notes"], entry["post_meet_report"], entry["between_comp_plan"], entry["comp_day_protocol"]})
+		ids, _ := entry["counts_toward_federation_ids"].([]any)
+		names := []string{}
+		for _, id := range ids {
+			names = append(names, values.Str2(first(fedNames[values.Str2(id)], id)))
+		}
+		competitionRows = append(competitionRows, []any{entry["name"], entry["date"], entry["status"], first(fedNames[values.Str2(entry["federation_id"])], entry["federation"]), strings.Join(names, ", "), entry["location"], entry["hotel_required"], entry["weight_class_kg"], weight, source, targets["squat_kg"], targets["bench_kg"], targets["deadlift_kg"], targetTotal, dots(targetTotal, weight, sex), results["squat_kg"], results["bench_kg"], results["deadlift_kg"], resultTotal, resultDots, entry["place"], entry["decision_date"], entry["projection_snapshot_date"], entry["notes"], serialized(entry["post_meet_report"], map[string]any{}), serialized(entry["between_comp_plan"], map[string]any{}), serialized(entry["comp_day_protocol"], map[string]any{})})
 	}
+
 	weights := append([]map[string]any{}, export.WeightLog...)
 	sort.SliceStable(weights, func(i, j int) bool { return values.Str2(weights[i]["date"]) < values.Str2(weights[j]["date"]) })
 	weightRows := [][]any{}
@@ -109,10 +113,8 @@ func extraTables(program, weekly map[string]any, export Context) []report.Table 
 		glossaryRows = append(glossaryRows, []any{exercise["id"], exercise["name"], exercise["category"], exercise["fatigue_category"], exercise["primary_muscles"], exercise["secondary_muscles"], exercise["tertiary_muscles"], exercise["equipment"], exercise["description"], exercise["how_to_perform"], exercise["why_do_it"], exercise["video_url"], fatigue["axial"], fatigue["neural"], fatigue["peripheral"], fatigue["systemic"], exercise["fatigue_profile_source"], exercise["fatigue_reasoning"], e1rm["value_kg"], e1rm["method"], e1rm["basis"], e1rm["confidence"], e1rm["updated_at"], exercise["archived"]})
 	}
 	weeklyRows := [][]any{}
-	for _, key := range []string{"week", "block", "sessions_analyzed", "fatigue_index", "readiness_score", "current_maxes", "compliance", "flags"} {
-		if value, ok := weekly[key]; ok {
-			weeklyRows = append(weeklyRows, []any{key, value})
-		}
+	if len(weekly) > 0 {
+		weeklyRows = weeklyAnalysisRows(weekly)
 	}
 	liftRows := [][]any{}
 	lifts, _ := weekly["lifts"].(map[string]any)
@@ -123,27 +125,43 @@ func extraTables(program, weekly map[string]any, export Context) []report.Table 
 	sort.Strings(liftKeys)
 	for _, name := range liftKeys {
 		lift, _ := lifts[name].(map[string]any)
-		liftRows = append(liftRows, []any{name, lift["progression_rate_kg_per_week"], lift["fit_quality"], lift["kendall_tau"], lift["volume_change_pct"], lift["intensity_change_pct"], lift["failed_sets"], lift["rpe_trend"]})
+		liftRows = append(liftRows, []any{name, lift["progression_rate_kg_per_week"], first(lift["fit_quality"], lift["r_squared"], lift["r2"]), lift["kendall_tau"], lift["volume_change_pct"], lift["intensity_change_pct"], lift["failed_sets"], lift["rpe_trend"]})
+	}
+	if len(liftRows) == 0 {
+		liftRows = append(liftRows, []any{"No tracked lifts in the window."})
+	}
+	liftRows = append(liftRows, nil, []any{"Projections"}, []any{"Comp", "Weeks Out", "Projected Total (kg)", "Confidence", "Method"})
+	projections := maps(weekly["projections"])
+	for _, projection := range projections {
+		liftRows = append(liftRows, []any{first(projection["comp_name"], "(unscheduled)"), projection["weeks_to_comp"], projection["total"], projection["confidence"], projection["method"]})
+	}
+	if len(projections) == 0 {
+		liftRows = append(liftRows, []any{first(weekly["projection_reason"], "No upcoming competitions to project.")})
 	}
 	missing := "Not yet generated — open the Analysis page and let the report render before exporting."
-	reportRows := func(value map[string]any) [][]any {
-		if len(value) == 0 {
-			return [][]any{{"Status", missing}}
-		}
-		keys := make([]string, 0, len(value))
-		for key := range value {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		rows := [][]any{}
-		for _, key := range keys {
-			rows = append(rows, []any{strings.ReplaceAll(key, "_", " "), value[key]})
-		}
-		return rows
+	if len(historyRows) == 0 {
+		historyRows = append(historyRows, []any{"—", nil, nil, nil, nil, nil, nil, "No max history recorded"})
+	}
+	if len(weightRows) == 0 {
+		weightRows = append(weightRows, []any{"—", nil, nil, "No weight log recorded"})
+	}
+	if len(profileRows) == 0 {
+		profileRows = append(profileRows, []any{"—", "No lift profiles recorded on this program."})
+	}
+	if len(glossaryRows) == 0 {
+		glossaryRows = append(glossaryRows, []any{"—", nil, nil, nil, nil, nil, nil, nil, "No glossary entries recorded"})
+	}
+	if len(competitionRows) == 0 {
+		row := make([]any, 24)
+		row[0], row[23] = "—", "No competitions recorded"
+		competitionRows = append(competitionRows, row)
+	}
+	if len(weeklyRows) == 0 {
+		weeklyRows = append(weeklyRows, []any{"Status", missing})
 	}
 	return []report.Table{
-		{Title: "Goals", Headers: []string{"Title", "Type", "Priority", "Strategy", "Target Date", "Competition", "Federation", "Standard", "Target Total", "Target DOTS", "Target IPF GL", "Target Weight Class", "Acceptable Classes", "Risk", "Notes"}, Rows: goalRows},
-		{Title: "Federation Standards", Headers: []string{"Type", "Name", "Federation", "Region or Weight Class", "Status or Total", "Details"}, Rows: federationRows},
+		goalTable(meta, maps(program["goals"]), maps(program["competitions"]), sex, export.Federations),
+		federationTable(export.Federations),
 		{Title: "Max History", Headers: []string{"Date", "Squat", "Bench", "Deadlift", "Total", "Bodyweight", "DOTS", "Context"}, Rows: historyRows},
 		{Title: "Competitions", Headers: []string{"Name", "Date", "Status", "Federation", "Counts Toward", "Location", "Hotel Required", "Weight Class", "Body Weight", "Body Weight Source", "Target Squat", "Target Bench", "Target Deadlift", "Target Total", "Target DOTS", "Result Squat", "Result Bench", "Result Deadlift", "Result Total", "Result DOTS", "Place", "Decision Date", "Projection Snapshot Date", "Notes", "Post-Meet Report", "Between Comp Plan", "Comp Day Protocol"}, Rows: competitionRows},
 		{Title: "Weight Log", Headers: []string{"Date", "Kg", "Delta From Previous", "Notes"}, Rows: weightRows},
@@ -151,7 +169,7 @@ func extraTables(program, weekly map[string]any, export Context) []report.Table 
 		{Title: "Exercise Glossary", Headers: []string{"ID", "Name", "Category", "Fatigue Category", "Primary Muscles", "Secondary Muscles", "Tertiary Muscles", "Equipment", "Description", "How To Perform", "Why Do It", "Video URL", "Fatigue Axial", "Fatigue Neural", "Fatigue Peripheral", "Fatigue Systemic", "Fatigue Source", "Fatigue Reasoning", "E1RM Value", "E1RM Method", "E1RM Basis", "E1RM Confidence", "E1RM Updated At", "Archived"}, Rows: glossaryRows},
 		{Title: "Weekly Analysis", Headers: []string{"Field", "Value"}, Rows: weeklyRows},
 		{Title: "Per-Lift Metrics", Headers: []string{"Lift", "Progression (kg/wk)", "Fit Quality", "Kendall τ", "Volume Change %", "Intensity Change %", "Failed Sets", "RPE Trend"}, Rows: liftRows},
-		{Title: "ROI Correlation", Headers: []string{"Field", "Value"}, Rows: reportRows(export.Correlation)},
-		{Title: "Program Evaluation", Headers: []string{"Field", "Value"}, Rows: reportRows(export.Evaluation)},
+		correlationTable(export.Correlation, missing),
+		evaluationTable(export.Evaluation, missing),
 	}
 }

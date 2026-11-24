@@ -2,11 +2,36 @@ package workbook
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
 )
+
+func TestWorkbookStoresNumbersAsNumbersAndOmitsDefaultSheet(t *testing.T) {
+	data, err := Render(map[string]any{"meta": map[string]any{"training_notes": "Focus"}, "sessions": []any{map[string]any{"exercises": []any{map[string]any{"name": "Squat", "sets": json.Number("3"), "kg": json.Number("97.5")}}}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for _, cell := range []string{"F2", "H2"} {
+		cellType, err := book.GetCellType("Exercises", cell)
+		if err != nil || (cellType != excelize.CellTypeNumber && cellType != excelize.CellTypeUnset) {
+			t.Errorf("%s has type %v, error %v", cell, cellType, err)
+		}
+	}
+	if index, _ := book.GetSheetIndex("Sheet1"); index != -1 {
+		t.Fatal("default sheet remains in workbook")
+	}
+	if note, _ := book.GetCellValue("Notes", "D2"); note != "Focus" {
+		t.Fatalf("training note = %q", note)
+	}
+}
 
 func TestWorkbookMarksTruncatedTextAndFormatsRawBooleans(t *testing.T) {
 	program := map[string]any{"meta": map[string]any{"training_notes": strings.Repeat("x", 32001), "archived": true}}
@@ -154,6 +179,77 @@ func TestFailedSetsKeepReasons(t *testing.T) {
 		got, err := book.GetCellValue("Exercises", check.cell)
 		if err != nil || got != check.want {
 			t.Errorf("%s = %q, %v", check.cell, got, err)
+		}
+	}
+}
+
+func TestWorkbookWeeklyAnalysisIncludesReadinessAndCompliance(t *testing.T) {
+	weekly := map[string]any{
+		"week":            4,
+		"compliance":      map[string]any{"planned": 5, "completed": 4, "pct": 80},
+		"readiness_score": map[string]any{"score": 72, "zone": "green", "components": map[string]any{"wellness": 0.8}},
+		"current_maxes":   map[string]any{"squat": 190},
+	}
+	data, err := Render(map[string]any{}, weekly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Weekly Analysis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]string{}
+	for _, row := range rows {
+		if len(row) > 1 {
+			found[row[0]] = row[1]
+		}
+	}
+	for key, expected := range map[string]string{"Current Week": "4", "Compliance — Planned": "5", "Compliance — %": "80", "Readiness Score": "72", "Readiness - Wellness": "0.8", "Current Max — Squat (kg)": "190"} {
+		if found[key] != expected {
+			t.Errorf("%s = %q, want %q", key, found[key], expected)
+		}
+	}
+}
+
+func TestWorkbookIncludesStructuredAnalysisReports(t *testing.T) {
+	context := Context{
+		Correlation: map[string]any{"summary": "Finding summary", "findings": []any{map[string]any{"exercise": "Squat", "lift": "Deadlift", "evidence": "Consistent", "reasoning": "Across weeks"}}},
+		Evaluation:  map[string]any{"stance": "Continue", "what_is_working": []any{"Recovery"}, "goal_status": []any{map[string]any{"goal": "Meet total", "status": "On track"}}, "weight_class_strategy": map[string]any{"recommendation": "Maintain", "viable_options": []any{map[string]any{"weight_class_kg": 83, "suitability": "Good"}}}},
+	}
+	data, err := Render(map[string]any{}, nil, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for _, check := range []struct{ sheet, cell, want string }{
+		{"ROI Correlation", "B1", "Finding summary"}, {"ROI Correlation", "A9", "Squat"}, {"ROI Correlation", "E9", "Consistent Across weeks"},
+		{"Program Evaluation", "B1", "Continue"}, {"Program Evaluation", "A10", "Recovery"},
+	} {
+		got, err := book.GetCellValue(check.sheet, check.cell)
+		if err != nil || got != check.want {
+			t.Errorf("%s %s = %q (%v), want %q", check.sheet, check.cell, got, err, check.want)
+		}
+	}
+	rows, err := book.GetRows("Program Evaluation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, row := range rows {
+		joined += strings.Join(row, "|") + "\n"
+	}
+	for _, want := range []string{"Meet total||On track", "Recommendation|Maintain", "83|Good"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("evaluation missing %q", want)
 		}
 	}
 }

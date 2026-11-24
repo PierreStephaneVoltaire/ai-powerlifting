@@ -120,8 +120,10 @@ impl ImportStore {
             .key("pk", string(&self.pk))
             .key("sk", string(format!("import#pending#{id}")))
             .update_expression(expression)
+            .condition_expression("#status = :awaiting")
             .expression_attribute_names("#status", "status")
             .expression_attribute_values(":status", string("rejected"))
+            .expression_attribute_values(":awaiting", string("awaiting_review"))
             .expression_attribute_values(":at", string(at));
         if let Some(reason) = reason.filter(|reason| !reason.is_empty()) {
             update = update.expression_attribute_values(":reason", string(reason));
@@ -195,5 +197,64 @@ impl ImportStore {
         }
         update.send().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+    use serde_json::json;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    #[tokio::test]
+    async fn rejection_only_changes_imports_awaiting_review() {
+        async fn update(
+            State(status): State<Arc<Mutex<Option<String>>>>,
+            body: axum::body::Bytes,
+        ) -> (StatusCode, Json<Value>) {
+            let request: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(request["ConditionExpression"], "#status = :awaiting");
+            assert_eq!(
+                request["ExpressionAttributeValues"][":awaiting"]["S"],
+                "awaiting_review"
+            );
+            let mut status = status.lock().await;
+            if status.as_deref() != Some("awaiting_review") {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"__type":"ConditionalCheckFailedException"})),
+                );
+            }
+            *status = Some("rejected".into());
+            (StatusCode::OK, Json(json!({})))
+        }
+
+        let status = Arc::new(Mutex::new(Some("awaiting_review".to_owned())));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let app = Router::new()
+            .route("/", post(update))
+            .with_state(status.clone());
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(aws_config::Region::new("ca-central-1"))
+            .endpoint_url(url)
+            .credentials_provider(aws_sdk_dynamodb::config::Credentials::new(
+                "test", "test", None, None, "test",
+            ))
+            .load()
+            .await;
+        let store = ImportStore::new(Client::new(&config), "test".into(), "athlete".into());
+        store.reject("id", "now", None).await.unwrap();
+        assert_eq!(status.lock().await.as_deref(), Some("rejected"));
+        *status.lock().await = Some("applying".into());
+        assert!(store.reject("id", "now", None).await.is_err());
+        assert_eq!(status.lock().await.as_deref(), Some("applying"));
+        *status.lock().await = None;
+        assert!(store.reject("missing", "now", None).await.is_err());
+        assert!(status.lock().await.is_none());
+        task.abort();
     }
 }

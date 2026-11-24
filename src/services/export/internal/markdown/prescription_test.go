@@ -1,6 +1,10 @@
 package markdown
 
-import "testing"
+import (
+	"testing"
+
+	"powerlifting/export/internal/report"
+)
 
 func TestTimedAndAmrapPrescriptions(t *testing.T) {
 	tests := []struct {
@@ -20,12 +24,12 @@ func TestTimedAndAmrapPrescriptions(t *testing.T) {
 }
 
 func TestTimedWorkDoesNotContributeToDotsEstimate(t *testing.T) {
-	d := sectionData{sessions: []M{{"completed": true, "week_number": 1, "exercises": []any{
-		M{"name": "Squat", "kg": 100, "reps": 60, "rep_unit": "seconds"},
-		M{"name": "Bench Press", "kg": 50, "reps": 5},
-	}}}}
-	rows := d.dotsTrendRows()
-	if len(rows) != 1 || rows[0].squat != 0 || rows[0].bench == 0 {
+	sessions := []M{{"completed": true, "week_number": 1, "exercises": []any{
+		M{"name": "Squat", "sets": 1, "kg": 100, "reps": 60, "rep_unit": "seconds"},
+		M{"name": "Bench Press", "sets": 1, "kg": 50, "reps": 5},
+	}}}
+	rows := report.LiftTrends(sessions, nil, "male")
+	if len(rows) != 1 || rows[0][1] != nil || rows[0][2] == nil {
 		t.Fatalf("timed work contributed to estimates: %#v", rows)
 	}
 }

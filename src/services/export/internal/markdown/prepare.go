@@ -50,10 +50,10 @@ func metaBodyweight(meta M) any {
 	return firstNonBlank(meta["current_body_weight_kg"], meta["bodyweight_kg"])
 }
 
-func resolveSessionBodyweight(sessions []M, index int, weightLog []M, meta M) any {
+func resolveSessionBodyweight(sessions []M, index int, weightLog []M, meta M) (any, string) {
 	session := sessions[index]
 	if !blank(session["body_weight_kg"]) {
-		return num(session["body_weight_kg"])
+		return num(session["body_weight_kg"]), "session"
 	}
 	prevDistance, nextDistance := 0, 0
 	var prev, next any
@@ -72,32 +72,32 @@ func resolveSessionBodyweight(sessions []M, index int, weightLog []M, meta M) an
 	switch {
 	case prev != nil && next != nil:
 		if prevDistance <= nextDistance {
-			return num(prev)
+			return num(prev), "previous session"
 		}
-		return num(next)
+		return num(next), "next session"
 	case prev != nil:
-		return num(prev)
+		return num(prev), "previous session"
 	case next != nil:
-		return num(next)
+		return num(next), "next session"
 	}
 	date, ok := parseDate(dateText(getd(session, "date", "")))
 	if value := nearestWeightLog(date, ok, weightLog); !blank(value) {
-		return num(value)
+		return num(value), "weight log"
 	}
 	if fallback := metaBodyweight(meta); !blank(fallback) {
-		return num(fallback)
+		return num(fallback), "meta"
 	}
-	return 0.0
+	return 0.0, "fallback"
 }
 
-func resolveDateBodyweight(target any, sessions []M, weightLog []M, meta M) any {
+func resolveDateBodyweight(target any, sessions []M, weightLog []M, meta M) (any, string) {
 	text, _ := target.(string)
 	parsed, ok := parseDate(text)
 	if !ok {
 		if fallback := metaBodyweight(meta); !blank(fallback) {
-			return num(fallback)
+			return num(fallback), "meta"
 		}
-		return 0.0
+		return 0.0, "fallback"
 	}
 	bestDelta := -1
 	var bestValue any
@@ -115,15 +115,15 @@ func resolveDateBodyweight(target any, sessions []M, weightLog []M, meta M) any 
 		}
 	}
 	if bestDelta >= 0 {
-		return num(bestValue)
+		return num(bestValue), "session"
 	}
 	if value := nearestWeightLog(parsed, true, weightLog); !blank(value) {
-		return num(value)
+		return num(value), "weight log"
 	}
 	if fallback := metaBodyweight(meta); !blank(fallback) {
-		return num(fallback)
+		return num(fallback), "meta"
 	}
-	return 0.0
+	return 0.0, "fallback"
 }
 
 func phaseNameOf(value any) string {
@@ -146,7 +146,7 @@ func prepareSessions(sessions []M, weightLog []M, meta M, phases []M) []M {
 		completed := truthy(session["completed"]) || status == "logged" || status == "completed"
 		session["status"] = status
 		session["completed"] = completed
-		session["body_weight_kg"] = resolveSessionBodyweight(ordered, index, weightLog, meta)
+		session["body_weight_kg"], session["body_weight_source"] = resolveSessionBodyweight(ordered, index, weightLog, meta)
 		session["block"] = firstNonBlank(session["block"], "current")
 		phaseName := phaseNameOf(getd(session, "phase", ""))
 		week := session["week_number"]
@@ -225,11 +225,10 @@ func resolveTotal(payload M) any {
 	return calc.Round(sum, 1)
 }
 
-func epley(weight, reps any) float64 {
-	w, okW := floatOf(weight)
-	r, okR := floatOf(reps)
-	if !okW || !okR || w <= 0 || r <= 0 {
-		return 0
-	}
-	return calc.Round(w*(1+r/30), 1)
+func PrepareSessions(program map[string]any, weightLog []map[string]any) []map[string]any {
+	return prepareSessions(maps(program["sessions"]), weightLog, asMap(program["meta"]), maps(program["phases"]))
+}
+
+func ResolveBodyweightForDate(date any, sessions, weights []map[string]any, meta map[string]any) (any, string) {
+	return resolveDateBodyweight(date, sessions, weights, meta)
 }

@@ -16,6 +16,7 @@ import (
 	"powerlifting/export/internal/markdown"
 	"powerlifting/export/internal/publication"
 	"powerlifting/export/internal/report"
+	"powerlifting/export/internal/scope"
 	"powerlifting/export/internal/values"
 	"powerlifting/export/internal/workbook"
 )
@@ -133,7 +134,11 @@ func (s *Service) history(ctx context.Context, args, access map[string]any, call
 				weeks = max(1, int(math.Ceil(lastDate.Sub(firstDate).Hours()/24/7)))
 			}
 		}
-		params := map[string]any{"block": block, "weeks": weeks}
+		analysisBlock := block
+		if block == scope.CurrentBlockID(program) {
+			analysisBlock = "current"
+		}
+		params := map[string]any{"block": analysisBlock, "weeks": weeks}
 		for _, field := range []string{"window_start", "window_end", "week_start", "week_end"} {
 			if value, ok := window[field]; ok {
 				params[field] = value
@@ -156,7 +161,13 @@ func (s *Service) history(ctx context.Context, args, access map[string]any, call
 		if endWeek, ok := window["week_end"]; ok {
 			last = values.Int(endWeek, last)
 		}
-		if len(window) == 0 && first > 0 && last >= first {
+		if len(window) == 0 {
+			if first == 0 {
+				first = 1
+			}
+			if last == 0 {
+				last = 1
+			}
 			params["week_start"], params["week_end"] = first, last
 		} else if window["week_start"] != nil && window["week_end"] != nil && last >= first {
 			params["weeks"] = last - first + 1

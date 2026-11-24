@@ -138,8 +138,11 @@ fn row_context(row: &Value) -> (Option<String>, Option<String>) {
             .map(|week| week.as_str().to_owned())
     });
     let day = row_value(row, &["day of week", "day", "weekday"])
-        .and_then(Value::as_str)
-        .map(key)
+        .and_then(|value| match value {
+            Value::String(value) => Some(key(value)),
+            Value::Number(value) => Some(value.to_string()),
+            _ => None,
+        })
         .filter(|s| !s.is_empty());
     (week, day)
 }
@@ -305,5 +308,20 @@ mod tests {
                 .get("glossary_id")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn notes_follow_numeric_training_days() {
+        let rows = vec![
+            json!({"week":1,"day":1,"exercise":"Squat","notes":"Pause"}),
+            json!({"week":1,"day":2,"exercise":"Squat","notes":"Fast"}),
+        ];
+        let mut parsed = json!({"sessions":[
+            {"week":1,"day":1,"exercises":[{"name":"Squat"}]},
+            {"week":1,"day":2,"exercises":[{"name":"Squat"}]}
+        ]});
+        reconcile(&mut parsed, &rows, &[], true);
+        assert_eq!(parsed["sessions"][0]["exercises"][0]["notes"], "Pause");
+        assert_eq!(parsed["sessions"][1]["exercises"][0]["notes"], "Fast");
     }
 }

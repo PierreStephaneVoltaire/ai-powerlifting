@@ -20,6 +20,19 @@ type weekTrend struct {
 	weight, squat, bench, deadlift float64
 }
 
+func LiftTrends(sessions, weights []map[string]any, sex string) [][]any {
+	return trendWeeks(sessions, weightPoints(sessions, weights), sex)
+}
+
+func BodyweightTrend(sessions, weights []map[string]any) [][]any {
+	points := weightPoints(sessions, weights)
+	rows := make([][]any, 0, len(points))
+	for _, point := range points {
+		rows = append(rows, []any{point.date, point.kg})
+	}
+	return rows
+}
+
 func weightPoints(sessions, weights []map[string]any) []weightPoint {
 	byDate := map[string]float64{}
 	add := func(date any, weight any) {
@@ -90,6 +103,9 @@ func trendWeeks(sessions []map[string]any, weights []weightPoint, sex string) []
 			bucket.weight = weight
 		}
 		for _, exercise := range records(session["exercises"]) {
+			if exercise["rep_unit"] == "minutes" || exercise["rep_unit"] == "seconds" || exercise["duration_minutes"] != nil {
+				continue
+			}
 			statuses, _ := exercise["set_statuses"].([]any)
 			if len(statuses) > 0 {
 				done := false

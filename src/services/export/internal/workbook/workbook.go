@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/xuri/excelize/v2"
+	"powerlifting/export/internal/markdown"
 	"powerlifting/export/internal/report"
 	"powerlifting/export/internal/values"
 )
@@ -120,6 +121,8 @@ func flattenRows(source, path string, value any, rows *[][]any) {
 }
 
 type Context struct {
+	PK          string
+	Version     string
 	WeightLog   []map[string]any
 	MaxHistory  []map[string]any
 	Federations map[string]any
@@ -145,9 +148,6 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 	defer book.Close()
 	headerStyle, err := book.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true, Size: 11}, Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"D9D9D9"}}, Alignment: &excelize.Alignment{WrapText: true, Vertical: "top"}})
 	if err != nil {
-		return nil, err
-	}
-	if err := book.DeleteSheet("Sheet1"); err != nil {
 		return nil, err
 	}
 	add := func(title string, headers []string, rows [][]any) error {
@@ -178,6 +178,13 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 				cell, err := excelize.CoordinatesToCellName(j+1, i+1)
 				if err != nil {
 					return err
+				}
+				if number, ok := value.(json.Number); ok {
+					parsed, err := number.Float64()
+					if err != nil {
+						return fmt.Errorf("%s %s: invalid number: %w", title, cell, err)
+					}
+					value = parsed
 				}
 				switch value.(type) {
 				case string, float32, float64, int, int32, int64, bool:
@@ -233,13 +240,12 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 		return nil
 	}
 	rawSessions, _ := program["sessions"].([]any)
-	sessions := maps(report.ExpandSessionSets(rawSessions))
+	sessionProgram := values.CopyMap(program)
+	sessionProgram["sessions"] = report.ExpandSessionSets(rawSessions)
+	sessions := markdown.PrepareSessions(sessionProgram, export.WeightLog)
 	sessionsRows, plannedRows, actualRows := rowsForSessions(sessions)
 	meta, _ := program["meta"].(map[string]any)
-	metaRows := [][]any{}
-	for _, item := range []struct{ label, key string }{{"Program Name", "program_name"}, {"Creator", "creator"}, {"Program PK", "pk"}, {"Program Version Token", "version"}, {"Version Label", "version_label"}, {"Sex", "sex"}, {"Program Start", "program_start"}, {"Federation", "federation"}, {"Practicing For", "practicing_for"}, {"Weight Class (kg)", "weight_class_kg"}, {"Current Body Weight (kg)", "current_body_weight_kg"}, {"Target Squat (kg)", "target_squat_kg"}, {"Target Bench (kg)", "target_bench_kg"}, {"Target Deadlift (kg)", "target_dl_kg"}, {"Target Total (kg)", "target_total_kg"}, {"Height (cm)", "height_cm"}, {"Arm Wingspan (cm)", "arm_wingspan_cm"}, {"Leg Length (cm)", "leg_length_cm"}, {"Equipment", "equipment"}, {"Training Notes", "training_notes"}} {
-		metaRows = append(metaRows, []any{item.label, meta[item.key]})
-	}
+	metaRows := metadataRows(meta, program, export)
 	phaseRows := [][]any{}
 	for _, phase := range maps(program["phases"]) {
 		block := phase["block"]
@@ -291,6 +297,8 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 		for _, note := range raw {
 			notes = append(notes, []any{"Meta", meta["updated_at"], "Training Note", note})
 		}
+	} else if note, ok := meta["training_notes"].(string); ok && note != "" {
+		notes = append(notes, []any{"Meta", meta["updated_at"], "Training Note", note})
 	}
 	for _, note := range maps(meta["block_notes"]) {
 		if text, ok := note["notes"].(string); ok && text != "" {
@@ -344,6 +352,18 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 	if len(notes) == 0 {
 		notes = append(notes, []any{"—", "", "No notes recorded", ""})
 	}
+	if len(maxes) == 0 {
+		maxes = append(maxes, []any{"—", "No current maxes recorded"})
+	}
+	if len(biometrics) == 0 {
+		biometrics = append(biometrics, []any{"—", "No biometrics entries recorded"})
+	}
+	if len(supplements) == 0 {
+		supplements = append(supplements, []any{"—", "No supplements recorded"})
+	}
+	if len(phaseSupplementRows) == 0 {
+		phaseSupplementRows = append(phaseSupplementRows, []any{"—", nil, nil, nil, nil, "No supplement phases recorded"})
+	}
 	preferences := program["operator_prefs"]
 	if preferences == nil {
 		preferences = map[string]any{}
@@ -370,7 +390,7 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 			return nil, err
 		}
 	}
-	for _, table := range extraTables(program, weekly, export) {
+	for _, table := range extraTables(program, weekly, export, sessions) {
 		if err := add(table.Title, table.Headers, table.Rows); err != nil {
 			return nil, err
 		}
@@ -385,7 +405,7 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 	if sex == "" {
 		sex = "male"
 	}
-	if err := add("Trends", nil, report.Trends(sessions, export.WeightLog, maps(program["diet_notes"]), sex)); err != nil {
+	if err := add("Trends", nil, report.Trends(maps(rawSessions), export.WeightLog, maps(program["diet_notes"]), sex)); err != nil {
 		return nil, err
 	}
 	raw := [][]any{}
@@ -401,6 +421,9 @@ func Render(program, weekly map[string]any, options ...Context) ([]byte, error) 
 		raw = append(raw, []any{"—", "(empty)", ""})
 	}
 	if err := add("Raw Export", []string{"Source", "Path", "Value"}, raw); err != nil {
+		return nil, err
+	}
+	if err := book.DeleteSheet("Sheet1"); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer

@@ -33,7 +33,10 @@ func scopedEntries(raw []any, start, end string) []map[string]any {
 }
 
 func (s *Service) historyData(ctx context.Context, caller auth.Caller, program, access, window map[string]any, sessions []any, block string, version int, start, end string) workbook.Context {
-	result := workbook.Context{}
+	result := workbook.Context{PK: caller.Athlete}
+	if version > 0 {
+		result.Version = fmt.Sprintf("v%03d", version)
+	}
 	athlete := caller.Athlete
 	if s.Store != nil && hasPermission(access, "federation:read") {
 		result.Federations, _ = s.Store.Get(ctx, athlete, "federations#v1")

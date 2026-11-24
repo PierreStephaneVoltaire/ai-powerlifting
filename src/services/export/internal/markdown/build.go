@@ -9,7 +9,6 @@ import (
 
 	"powerlifting/export/internal/calc"
 	"powerlifting/export/internal/liftprofile"
-	"powerlifting/export/internal/report"
 	"powerlifting/export/internal/values"
 )
 
@@ -110,10 +109,10 @@ func Render(in Input) (string, error) {
 		number, _ := strconv.Atoi(version)
 		version = fmt.Sprintf("v%03d", number)
 	}
-	prepared := prepareSessions(sessionsRaw, in.WeightLog, meta, phases)
+	prepared := prepareSessions(maps(program["sessions"]), in.WeightLog, meta, phases)
 
 	data := sectionData{
-		meta: meta, phases: phases, sessions: prepared, goals: goals, competitions: competitions, dietNotes: dietNotes,
+		meta: meta, phases: phases, sessions: prepared, rawSessions: sessionsRaw, correlation: in.Correlation, evaluation: in.Evaluation, goals: goals, competitions: competitions, dietNotes: dietNotes,
 		supplements: supplements, supplementPhases: supplementPhases, liftProfiles: liftProfiles, currentMaxes: currentMaxes,
 		weightLog: in.WeightLog, maxHistory: in.MaxHistory, federations: in.Federations, weekly: in.Weekly, liftOrder: in.LiftOrder, sex: sex,
 	}
@@ -151,12 +150,7 @@ func Render(in Input) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var detail strings.Builder
-	for _, analysisTable := range report.AnalysisTables(in.Weekly, dietNotes, meta) {
-		detail.WriteString("\n\n### " + analysisTable.Title + "\n\n")
-		detail.WriteString(table(analysisTable.Headers, analysisTable.Rows))
-	}
-	return strings.TrimRight(document, " \t\r\n") + detail.String() + aiReports(in.Correlation, in.Evaluation) + "\n", nil
+	return strings.TrimRight(document, " \t\r\n") + "\n", nil
 }
 
 func isDigits(text string) bool {
@@ -175,6 +169,9 @@ type sectionData struct {
 	meta             M
 	phases           []M
 	sessions         []M
+	rawSessions      []M
+	correlation      M
+	evaluation       M
 	goals            []M
 	competitions     []M
 	dietNotes        []M
@@ -455,6 +452,7 @@ type sessionLine struct {
 	Wellness string
 	Notes    string
 	Table    string
+	Planned  string
 }
 
 type weekView struct {
@@ -555,12 +553,13 @@ func (d sectionData) sessionLine(session M) sessionLine {
 			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), getd(exercise, "kg", ""), getd(exercise, "rpe", ""), notes, status})
 		}
 		line.Table = table([]string{"Exercise", "Sets x Reps", "kg", "RPE", "Notes", "Status"}, rows)
-	} else if planned := maps(session["planned_exercises"]); len(planned) > 0 {
+	}
+	if planned := maps(session["planned_exercises"]); len(planned) > 0 {
 		var rows [][]any
 		for _, exercise := range planned {
 			rows = append(rows, []any{getd(exercise, "name", ""), prescription(exercise), getd(exercise, "kg", ""), getd(exercise, "rpe_target", ""), firstLine(getd(exercise, "notes", "")), status})
 		}
-		line.Table = table([]string{"Exercise", "Sets x Reps", "kg", "Target RPE", "Notes", "Status"}, rows)
+		line.Planned = table([]string{"Exercise", "Sets x Reps", "kg", "Target RPE", "Notes", "Status"}, rows)
 	}
 	return line
 }
@@ -641,7 +640,8 @@ func (d sectionData) competitionsSection() any {
 		item.Targets = liftSummary(targets, "Targets", nil, nil)
 		results := asMap(comp["results"])
 		item.Results = liftSummary(results, "Results", func(total any) string {
-			bw := firstNonBlank(comp["body_weight_kg"], resolveDateBodyweight(comp["date"], d.sessions, d.weightLog, d.meta))
+			fallback, _ := resolveDateBodyweight(comp["date"], d.sessions, d.weightLog, d.meta)
+			bw := firstNonBlank(comp["body_weight_kg"], fallback)
 			dots := dotsValue(total, bw, d.sex)
 			if truthy(dots) {
 				return "**Total: " + str(total) + "** (DOTS: " + str(dots) + ")"

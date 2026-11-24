@@ -2,10 +2,10 @@ package markdown
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"powerlifting/export/internal/calc"
+	"powerlifting/export/internal/report"
 	"powerlifting/export/internal/values"
 )
 
@@ -28,22 +28,28 @@ type weightTrendView struct {
 }
 
 type analysisView struct {
-	Weekly *weeklyView
-	Dots   *dotsView
-	Weight *weightTrendView
+	Details string
+	AI      string
+	Weekly  *weeklyView
+	Dots    *dotsView
+	Weight  *weightTrendView
 }
 
 func (d sectionData) analysisSection() any {
 	weekly := d.weekly
 	hasTrends := len(d.sessions) > 0
-	if len(weekly) == 0 && !hasTrends {
+	if len(weekly) == 0 && !hasTrends && len(d.dietNotes) == 0 && len(d.correlation) == 0 && len(d.evaluation) == 0 {
 		return nil
 	}
 	view := analysisView{}
+	for _, item := range report.AnalysisTables(weekly, d.dietNotes, d.meta) {
+		view.Details += "### " + item.Title + "\n\n" + table(item.Headers, item.Rows) + "\n\n"
+	}
+	view.AI = strings.TrimSpace(aiReports(d.correlation, d.evaluation))
 	if len(weekly) > 0 {
 		view.Weekly = buildWeekly(weekly, d.liftOrder)
 	}
-	if rows := d.dotsTrendRows(); len(rows) > 0 {
+	if rows := report.LiftTrends(d.rawSessions, d.weightLog, d.sex); len(rows) > 0 {
 		view.Dots = buildDots(rows)
 	}
 	view.Weight = d.weightTrend()
@@ -136,211 +142,67 @@ func buildWeekly(weekly M, liftOrder []string) *weeklyView {
 	return view
 }
 
-type dotsRow struct {
-	week       any
-	squat      float64
-	bench      float64
-	deadlift   float64
-	total      float64
-	bodyweight any
-	dots       any
-}
-
-func (d sectionData) dotsTrendRows() []dotsRow {
-	type bucket struct {
-		week                       any
-		squat, bench, deadlift, bw float64
-	}
-	buckets := map[string]*bucket{}
-	var order []string
-	for _, session := range d.sessions {
-		status := session["status"]
-		if !truthy(session["completed"]) && status != "logged" && status != "completed" {
-			continue
-		}
-		week := firstTruthy(session["week_number"], session["week"], int64(0))
-		key := fmt.Sprintf("%T:%s", week, str(week))
-		current := buckets[key]
-		if current == nil {
-			current = &bucket{week: week}
-			buckets[key] = current
-			order = append(order, key)
-		}
-		if bw := session["body_weight_kg"]; !blank(bw) {
-			if value, _ := floatOf(bw); value > current.bw {
-				current.bw = value
-			}
-		}
-		for _, exercise := range maps(session["exercises"]) {
-			if timedExercise(exercise) {
-				continue
-			}
-			name := strings.ToLower(str(getd(exercise, "name", "")))
-			weight, reps := exercise["kg"], exercise["reps"]
-			if blank(weight) || blank(reps) {
-				continue
-			}
-			estimate := epley(weight, reps)
-			switch {
-			case strings.Contains(name, "squat") && !strings.Contains(name, "hack") && !strings.Contains(name, "split"):
-				current.squat = maxFloat(current.squat, estimate)
-			case strings.Contains(name, "bench"):
-				current.bench = maxFloat(current.bench, estimate)
-			case strings.Contains(name, "deadlift") && !strings.Contains(name, "romanian") && !strings.Contains(name, "rdl"):
-				current.deadlift = maxFloat(current.deadlift, estimate)
-			}
-		}
-	}
-	sort.SliceStable(order, func(i, j int) bool {
-		wi, wj := buckets[order[i]].week, buckets[order[j]].week
-		ni, oki := intOf(wi)
-		nj, okj := intOf(wj)
-		if _, isString := wi.(string); isString {
-			oki = isDigits(wi.(string))
-		}
-		if _, isString := wj.(string); isString {
-			okj = isDigits(wj.(string))
-		}
-		switch {
-		case oki && okj:
-			return ni < nj
-		case oki:
-			return true
-		case okj:
-			return false
-		}
-		return str(wi) < str(wj)
-	})
-	rows := make([]dotsRow, 0, len(order))
-	for _, key := range order {
-		b := buckets[key]
-		total := calc.Round(b.squat+b.bench+b.deadlift, 1)
-		var bodyweight any
-		if b.bw != 0 {
-			bodyweight = b.bw
-		} else {
-			bodyweight = firstNonBlank(d.meta["current_body_weight_kg"], d.meta["bodyweight_kg"], "")
-		}
-		var dots any = ""
-		if total != 0 && truthy(bodyweight) {
-			dots = dotsValue(total, bodyweight, d.sex)
-		}
-		row := dotsRow{week: b.week, squat: calc.Round(b.squat, 1), bench: calc.Round(b.bench, 1), deadlift: calc.Round(b.deadlift, 1), total: total, dots: dots}
-		if truthy(bodyweight) {
-			row.bodyweight = num(bodyweight)
-		} else {
-			row.bodyweight = ""
-		}
-		rows = append(rows, row)
-	}
-	return rows
-}
-
-func maxFloat(a, b float64) float64 {
-	if b > a {
-		return b
-	}
-	return a
-}
-
-func floatOrBlank(value float64) any {
-	if value == 0 {
-		return ""
-	}
-	return value
-}
-
-func buildDots(rows []dotsRow) *dotsView {
+func buildDots(rows [][]any) *dotsView {
 	view := &dotsView{}
-	var withDots []dotsRow
+	var first, last float64
+	count := 0
+	tableRows := make([][]any, 0, len(rows))
 	for _, row := range rows {
-		if !blank(row.dots) {
-			withDots = append(withDots, row)
+		copy := append([]any{}, row...)
+		copy[0] = "W" + str(copy[0])
+		tableRows = append(tableRows, copy)
+		if value, ok := floatOf(row[6]); ok {
+			if count == 0 {
+				first = value
+			}
+			last = value
+			count++
 		}
 	}
-	if len(withDots) >= 2 {
-		first, last := withDots[0], withDots[len(withDots)-1]
-		firstValue, _ := floatOf(first.dots)
-		lastValue, _ := floatOf(last.dots)
-		change := calc.Round(lastValue-firstValue, 2)
-		span := len(withDots)
+	if count >= 2 {
+		change := calc.Round(last-first, 2)
 		direction := ""
 		if change >= 0 {
 			direction = "+"
 		}
-		perWeek := calc.Round(change/float64(max(1, span-1)), 2)
-		view.Change = fmt.Sprintf("DOTS %s%s over %d tracked weeks (%s%s/week).", direction, values.FloatRepr(change), span, direction, values.FloatRepr(perWeek))
+		perWeek := calc.Round(change/float64(count-1), 2)
+		view.Change = fmt.Sprintf("DOTS %s%s over %d tracked weeks (%s%s/week).", direction, values.FloatRepr(change), count, direction, values.FloatRepr(perWeek))
 	}
-	var tableRows [][]any
-	for _, row := range rows {
-		tableRows = append(tableRows, []any{"W" + str(row.week), floatOrBlank(row.squat), floatOrBlank(row.bench), floatOrBlank(row.deadlift), floatOrBlank(row.total), orBlank(row.bodyweight), orBlank(row.dots)})
-	}
-	view.Table = table([]string{"Week", "Squat", "Bench", "Deadlift", "Total", "BW", "DOTS"}, tableRows)
+	view.Table = table([]string{"Week", "Squat (kg)", "Bench (kg)", "Deadlift (kg)", "Total (kg)", "Bodyweight (kg)", "DOTS", "IPF GL", "IPF GL mode", "Squat change (kg)", "Bench change (kg)", "Deadlift change (kg)"}, tableRows)
 	return view
 }
 
-func orBlank(value any) any {
-	if !truthy(value) {
-		return ""
-	}
-	return value
-}
-
 func (d sectionData) weightTrend() *weightTrendView {
-	type point struct {
-		date string
-		kg   float64
-	}
-	var points []point
-	if len(d.weightLog) > 0 {
-		for _, entry := range sortedStable(d.weightLog, func(a, b M) bool { return str(getd(a, "date", "")) < str(getd(b, "date", "")) }) {
-			if kg := entry["kg"]; !blank(kg) {
-				value, _ := floatOf(kg)
-				points = append(points, point{str(getd(entry, "date", "")), value})
-			}
-		}
-	} else {
-		for _, session := range d.sessions {
-			if !truthy(session["completed"]) {
-				continue
-			}
-			if bw := session["body_weight_kg"]; !blank(bw) {
-				value, _ := floatOf(bw)
-				points = append(points, point{str(getd(session, "date", "")), value})
-			}
-		}
-	}
-	if len(points) < 2 {
+	points := report.BodyweightTrend(d.rawSessions, d.weightLog)
+	if len(points) == 0 {
 		return nil
 	}
 	oldest, latest := points[0], points[len(points)-1]
-	change := calc.Round(latest.kg-oldest.kg, 1)
+	first, _ := floatOf(oldest[1])
+	last, _ := floatOf(latest[1])
+	change := calc.Round(last-first, 2)
 	direction := "stable"
-	if change > 0.25 {
+	if change > .25 {
 		direction = "gain"
-	} else if change < -0.25 {
+	} else if change < -.25 {
 		direction = "loss"
 	}
 	sign := ""
 	if change > 0 {
 		sign = "+"
 	}
-	view := &weightTrendView{Summary: fmt.Sprintf("**%s kg** (%s%s kg over %d entries, %s). Started at %s kg on %s.", values.FloatRepr(latest.kg), sign, values.FloatRepr(change), len(points), direction, values.FloatRepr(oldest.kg), oldest.date)}
-	if len(points) > 2 {
-		shown := points[max(0, len(points)-12):]
-		var rows [][]any
-		prev := 0.0
-		hasPrev := false
-		for _, p := range shown {
-			delta := ""
-			if hasPrev {
-				delta = signed(calc.Round(p.kg-prev, 1))
-			}
-			rows = append(rows, []any{p.date, p.kg, delta})
-			prev, hasPrev = p.kg, true
+	view := &weightTrendView{Summary: fmt.Sprintf("**%s kg** (%s%s kg over %d entries, %s). Started at %s kg on %s.", values.FloatRepr(last), sign, values.FloatRepr(change), len(points), direction, values.FloatRepr(first), oldest[0])}
+	rows := make([][]any, 0, len(points))
+	for i, point := range points {
+		var delta any
+		if i > 0 {
+			prior, _ := floatOf(points[i-1][1])
+			current, _ := floatOf(point[1])
+			delta = calc.Round(current-prior, 2)
 		}
-		view.Table = table([]string{"Date", "Weight (kg)", "Change"}, rows)
+		rows = append(rows, []any{point[0], point[1], delta})
 	}
+	view.Table = table([]string{"Date", "Weight (kg)", "Change (kg)"}, rows)
 	return view
 }
 
