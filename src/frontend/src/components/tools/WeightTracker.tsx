@@ -22,7 +22,7 @@ import type { WeightEntry } from '@powerlifting/types'
 import * as api from '@/api/client'
 
 export default function WeightTracker() {
-  const { program, version } = useProgramStore()
+  const { program } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
 
@@ -35,7 +35,7 @@ export default function WeightTracker() {
   useEffect(() => {
     async function loadEntries() {
       try {
-        const log = await api.fetchWeightLog(version)
+        const log = await api.fetchWeightLog()
         setEntries(log || [])
       } catch (err) {
         console.error('Failed to load weight log:', err)
@@ -44,7 +44,7 @@ export default function WeightTracker() {
       }
     }
     loadEntries()
-  }, [version])
+  }, [])
 
   // Get current body weight and target
   const meta = program?.meta
@@ -112,7 +112,7 @@ export default function WeightTracker() {
 
     const kg = fromDisplayBodyweight(Number(newWeight), unit)
     try {
-      await api.addWeightEntry(version, { date: newDate, kg })
+      await api.addWeightEntry({ date: newDate, kg })
       setEntries((prev) => {
         const withoutDate = prev.filter((entry) => entry.date !== newDate)
         return [...withoutDate, { date: newDate, kg }].sort((a, b) => b.date.localeCompare(a.date))
@@ -127,7 +127,7 @@ export default function WeightTracker() {
   // Delete entry handler
   const handleDeleteEntry = async (date: string) => {
     try {
-      await api.removeWeightEntry(version, date)
+      await api.removeWeightEntry(date)
       setEntries((prev) => prev.filter((e) => e.date !== date))
       pushToast({ message: 'Entry removed', type: 'success' })
     } catch (err) {

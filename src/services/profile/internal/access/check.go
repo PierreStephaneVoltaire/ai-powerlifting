@@ -2,7 +2,6 @@ package access
 
 import (
 	"context"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -11,12 +10,6 @@ import (
 	"powerlifting/profile/internal/store"
 	"powerlifting/profile/internal/value"
 )
-
-var programFields = map[string]string{
-	"phases": "program", "diet_notes": "program", "supplements": "program", "supplement_phases": "program",
-	"sessions": "sessions", "competitions": "competition", "competition": "competition", "lift_profiles": "lift-profiles",
-	"current_maxes": "performance", "goals": "goals", "weight_log": "weight-log", "max_history": "performance", "federation_library": "federation",
-}
 
 var metaDomains = []struct {
 	Domain string
@@ -27,8 +20,6 @@ var metaDomains = []struct {
 	{"performance", []string{"target_squat_kg", "target_bench_kg", "target_dl_kg", "target_total_kg", "manual_maxes"}},
 	{"federation", []string{"federation"}},
 }
-
-var patchPathSplit = regexp.MustCompile(`[.\[]`)
 
 type Checker struct {
 	Rules   func(string) (contract.Rule, bool)
@@ -207,29 +198,6 @@ func authorizeProgramChange(operation string, arguments map[string]any, access *
 			}
 		} else {
 			fields[value.Str(arguments["field"])] = true
-		}
-	case operation == "health_new_version":
-		patches, _ := arguments["patches"].([]any)
-		for _, entry := range patches {
-			patch, ok := entry.(map[string]any)
-			path, isText := patch["path"].(string)
-			if !ok || !isText {
-				return apperr.New(400, "invalid_patch", "Each patch requires a path and value")
-			}
-			parts := patchPathSplit.Split(path, -1)
-			if parts[0] == "meta" {
-				if len(parts) > 1 {
-					fields[parts[1]] = true
-				} else if object, ok := patch["value"].(map[string]any); ok {
-					for field := range object {
-						fields[field] = true
-					}
-				}
-			} else if domain, ok := programFields[parts[0]]; ok {
-				required[domain] = true
-			} else {
-				return apperr.New(400, "invalid_patch", "This Program field cannot be patched")
-			}
 		}
 	case operation == "template_apply" || operation == "template_apply_confirm":
 		for _, permission := range []string{"program:read", "performance:read", "glossary:read"} {

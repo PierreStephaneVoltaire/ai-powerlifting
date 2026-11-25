@@ -59,13 +59,12 @@ async def video_remove(args: dict) -> dict:
     health_table = get_health_table()
     store = get_session_store(args)
     pk = resolve_pk(args)
-    version = args.get("version") or "current"
     session_date = args.get("session_date") or ""
     video_id = args.get("video_id") or ""
     requested_session_id = str(args.get("session_id") or "").strip() or None
 
     def remove():
-        program_sk, phases = context(health_table, pk, version)
+        program_sk, phases = context(health_table, pk)
         media = get_media(pk, video_id)
         if not media:
             raise ValueError("Video allocation not found")

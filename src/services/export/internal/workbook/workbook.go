@@ -122,7 +122,6 @@ func flattenRows(source, path string, value any, rows *[][]any) {
 
 type Context struct {
 	PK          string
-	Version     string
 	WeightLog   []map[string]any
 	MaxHistory  []map[string]any
 	Federations map[string]any

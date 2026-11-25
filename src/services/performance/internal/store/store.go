@@ -43,20 +43,3 @@ func (s Store) Competitions(ctx context.Context, pk string) ([]map[string]any, e
 		}
 	}
 }
-func (s Store) Programs(ctx context.Context, pk string) ([]map[string]any, error) {
-	out := []map[string]any{}
-	var start map[string]types.AttributeValue
-	for {
-		r, e := s.DB.Query(ctx, &dynamodb.QueryInput{TableName: aws.String(s.Table), KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"), ExpressionAttributeValues: map[string]types.AttributeValue{":pk": &types.AttributeValueMemberS{Value: pk}, ":prefix": &types.AttributeValueMemberS{Value: "program#"}}, ExclusiveStartKey: start})
-		if e != nil {
-			return nil, e
-		}
-		for _, v := range r.Items {
-			out = append(out, FromItem(v))
-		}
-		start = r.LastEvaluatedKey
-		if len(start) == 0 {
-			return out, nil
-		}
-	}
-}

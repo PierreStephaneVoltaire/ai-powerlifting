@@ -89,17 +89,13 @@ func (s *Service) Call(ctx context.Context, name string, args map[string]any, ca
 }
 func (s *Service) log(ctx context.Context, name string, args map[string]any) (map[string]any, error) {
 	pk := text(args["pk"])
-	version := text(args["version"])
-	if version == "" {
-		version = "current"
-	}
-	sk := "weight_log#" + version
+	sk := "weight_log#current"
 	log, err := s.Store.Get(ctx, pk, sk)
 	if err != nil {
 		return nil, err
 	}
 	if log == nil {
-		log = map[string]any{"pk": pk, "sk": sk, "version": version, "entries": []any{}, "updated_at": s.Now().UTC().Format(time.RFC3339Nano)}
+		log = map[string]any{"pk": pk, "sk": sk, "entries": []any{}, "updated_at": s.Now().UTC().Format(time.RFC3339Nano)}
 	}
 	pointer, err := s.Store.Get(ctx, pk, "program#current")
 	if err != nil {
@@ -158,7 +154,7 @@ func (s *Service) log(ctx context.Context, name string, args map[string]any) (ma
 			})
 		}
 		entries = kept
-		log["entries"], log["version"], log["updated_at"] = entries, version, s.Now().UTC().Format(time.RFC3339Nano)
+		log["entries"], log["updated_at"] = entries, s.Now().UTC().Format(time.RFC3339Nano)
 		if err = s.Store.Put(ctx, log, previous); err != nil {
 			if errors.Is(err, store.ErrConflict) {
 				return nil, &apperr.Error{Status: http.StatusConflict, Code: "concurrent_update", Message: err.Error()}

@@ -5,12 +5,12 @@ import type { MaxEntry } from '@powerlifting/types'
 
 export const maxesRouter = Router()
 
-// GET /api/maxes/:version - Get current targets and history
-maxesRouter.get('/:version', cacheGet((req) => [`maxes:${req.params.version}`]), async (req, res, next) => {
+// GET /api/maxes/current - Get current targets and history
+maxesRouter.get('/current', cacheGet((req) => [`maxes:current`]), async (req, res, next) => {
   try {
     const [targets, history] = await Promise.all([
-      maxController.getTargetMaxes(req.mapped_pk!, req.params.version),
-      maxController.getMaxHistory(req.mapped_pk!, req.params.version),
+      maxController.getTargetMaxes(req.mapped_pk!),
+      maxController.getMaxHistory(req.mapped_pk!),
     ])
     res.json({
       data: { targets, history },
@@ -21,8 +21,8 @@ maxesRouter.get('/:version', cacheGet((req) => [`maxes:${req.params.version}`]),
   }
 })
 
-// PUT /api/maxes/:version - Update target maxes
-maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.version}`, `program:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/maxes/current - Update target maxes
+maxesRouter.put('/current', invalidateAfter((req) => [`maxes:current`, `program:current`]), async (req, res, next) => {
   try {
     const { squat_kg, bench_kg, deadlift_kg } = req.body
 
@@ -37,7 +37,7 @@ maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.versi
       })
     }
 
-    const result = await maxController.updateTargetMaxes(req.mapped_pk!, req.params.version, {
+    const result = await maxController.updateTargetMaxes(req.mapped_pk!, {
       squat_kg,
       bench_kg,
       deadlift_kg,
@@ -48,8 +48,8 @@ maxesRouter.put('/:version', invalidateAfter((req) => [`maxes:${req.params.versi
   }
 })
 
-// POST /api/maxes/:version/history - Add to max history
-maxesRouter.post('/:version/history', invalidateAfter((req) => [`maxes:${req.params.version}`]), async (req, res, next) => {
+// POST /api/maxes/current/history - Add to max history
+maxesRouter.post('/current/history', invalidateAfter((req) => [`maxes:current`]), async (req, res, next) => {
   try {
     const entry = req.body
 
@@ -60,7 +60,7 @@ maxesRouter.post('/:version/history', invalidateAfter((req) => [`maxes:${req.par
       })
     }
 
-    const history = await maxController.addMaxEntry(req.mapped_pk!, req.params.version, entry as MaxEntry)
+    const history = await maxController.addMaxEntry(req.mapped_pk!, entry as MaxEntry)
     res.json({ data: history, error: null })
   } catch (err) {
     next(err)

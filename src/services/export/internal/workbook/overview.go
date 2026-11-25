@@ -31,10 +31,6 @@ func serialized(value any, fallback any) string {
 func metadataRows(meta, program map[string]any, context Context) [][]any {
 	creator := first(meta["creator"], context.PK, program["pk"], "operator")
 	pk := first(context.PK, program["pk"], creator)
-	version := first(context.Version, meta["version"], meta["version_label"])
-	if number, ok := values.Float(version); ok && number >= 0 {
-		version = fmt.Sprintf("v%03d", int(number))
-	}
 	sex := strings.ToLower(values.Str2(first(meta["sex"], "male")))
 	today := time.Now().UTC().Format("2006-01-02")
 	competition := ""
@@ -58,8 +54,8 @@ func metadataRows(meta, program map[string]any, context Context) [][]any {
 		notes = strings.Join(parts, "; ")
 	}
 	return [][]any{
-		{"Program Name", meta["program_name"]}, {"Creator", creator}, {"Program PK", pk}, {"Program Version Token", version},
-		{"Version Label", meta["version_label"]}, {"Sex", sex}, {"Program Start", meta["program_start"]}, {"Competition Date", competition},
+		{"Program Name", meta["program_name"]}, {"Creator", creator}, {"Program PK", pk},
+		{"Sex", sex}, {"Program Start", meta["program_start"]}, {"Competition Date", competition},
 		{"Federation", meta["federation"]}, {"Practicing For", meta["practicing_for"]}, {"Weight Class (kg)", meta["weight_class_kg"]}, {"Weight Class Confirm By", meta["weight_class_confirm_by"]},
 		{"Current Body Weight (kg)", first(meta["current_body_weight_kg"], meta["bodyweight_kg"])}, {"Current Body Weight (lb)", meta["current_body_weight_lb"]},
 		{"Target Squat (kg)", meta["target_squat_kg"]}, {"Target Bench (kg)", meta["target_bench_kg"]}, {"Target Deadlift (kg)", meta["target_dl_kg"]}, {"Target Total (kg)", meta["target_total_kg"]},

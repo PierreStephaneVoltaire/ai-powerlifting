@@ -348,17 +348,13 @@
   {
     "name": "program_update_lift_profiles",
     "domain": "lift-profiles",
-    "description": "Replace the lift_profiles array on a program version. Lift profiles define per-exercise stimulus targets and configuration used by the AI analysis tools.",
+    "description": "Replace the lift_profiles array on the current program. Lift profiles define per-exercise stimulus targets and configuration used by the AI analysis tools.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "lift_profiles": {
           "type": "array",

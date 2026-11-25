@@ -21,25 +21,28 @@ func NewMemory() *Memory {
 	return &Memory{tables: map[Table]map[Key]Item{}}
 }
 
-func (m *Memory) PublishVersion(_ context.Context, tables Tables, athlete, expectedSK string, pointer Item, programSK, importID, importClaim string) error {
+func (m *Memory) SaveProgram(_ context.Context, tables Tables, athlete string, program Item, expectedSK, currentBlockID, now, importID, importClaim string) error {
+	round, err := stored(program)
+	if err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	current := m.rows(tables.Health)[Key{PK: athlete, SK: PointerSK}]
+	pointerKey := Key{PK: athlete, SK: PointerSK}
+	current := m.rows(tables.Health)[pointerKey]
 	if importID != "" {
 		claim := m.rows(tables.Health)[Key{PK: athlete, SK: "import#pending#" + importID}]
 		if claim["status"] != "applying" || claim["apply_claim_id"] != importClaim {
 			return fmt.Errorf("import claim changed")
 		}
 	}
-	if pyval.Str2(current["ref_sk"]) != expectedSK {
-		return fmt.Errorf("program changed during publication")
+	if current == nil || pyval.Str2(current["ref_sk"]) != expectedSK {
+		return fmt.Errorf("program changed during save")
 	}
-	program := m.rows(tables.Health)[Key{PK: athlete, SK: programSK}]
-	if program == nil {
-		return fmt.Errorf("program version missing")
-	}
-	program["published"] = true
-	m.rows(tables.Health)[Key{PK: athlete, SK: PointerSK}] = pyval.CopyMap(pointer)
+	m.rows(tables.Health)[keyOf(round)] = round
+	current["current_block_id"] = currentBlockID
+	current["updated_at"] = now
+	m.Writes++
 	return nil
 }
 

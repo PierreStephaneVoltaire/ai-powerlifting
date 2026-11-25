@@ -15,7 +15,7 @@ export default function SessionDetailPage() {
   const sessionIndex = useProgramStore(s => s.program && date ? sessionIndexForRoute(s.program.sessions, date, index, routeSession) : -1)
   const sessionKey = useProgramStore(s => {
     const session = sessionIndex >= 0 ? s.program?.sessions[sessionIndex] : undefined
-    return session ? `${s.version}:${session.id || session.date}:${sessionIndex}` : null
+    return session ? `current:${session.id || session.date}:${sessionIndex}` : null
   })
   const fallbackBackTo = location.pathname.startsWith('/list/') ? '/sessions?view=Compact' : '/sessions'
   const backTo = typeof location.state === 'object' && location.state && 'backTo' in location.state

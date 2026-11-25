@@ -30,7 +30,7 @@ type ClaimVerifier interface {
 }
 type Sources interface {
 	ProgramContext(context.Context, string) (map[string]any, error)
-	Program(context.Context, string, string) (map[string]any, error)
+	Program(context.Context, string) (map[string]any, error)
 	Glossary(context.Context, string) ([]map[string]any, error)
 }
 type Service struct {
@@ -186,7 +186,7 @@ func (s *Service) call(ctx context.Context, name string, args map[string]any, ca
 		if s.Sources == nil {
 			return nil, apperr.Upstream("Program source unavailable")
 		}
-		program, err := s.Sources.Program(ctx, caller.Athlete, value(args["program_sk"]))
+		program, err := s.Sources.Program(ctx, caller.Athlete)
 		if err != nil {
 			return nil, apperr.Upstream("Program service unavailable")
 		}

@@ -421,7 +421,7 @@ func (d *Deps) setupProgram(athlete, mode, programName, startDate, weekStartDay 
 		phaseList[index] = phase
 	}
 	meta := map[string]any{
-		"program_name": name, "program_start": startDate, "federation": "", "practicing_for": "", "version_label": "v001",
+		"program_name": name, "program_start": startDate, "federation": "", "practicing_for": "",
 		"weight_class_kg": int64(0), "weight_class_confirm_by": "", "current_body_weight_kg": int64(0), "current_body_weight_lb": int64(0),
 		"target_squat_kg": squat, "target_bench_kg": bench, "target_dl_kg": deadlift, "target_total_kg": totalValue,
 		"attempt_pct":    map[string]any{"opener": 0.9, "second": 0.955, "third": 1.0},
@@ -439,7 +439,7 @@ func (d *Deps) setupProgram(athlete, mode, programName, startDate, weekStartDay 
 		meta["template_lineage"] = map[string]any{"applied_template_sk": templateSK, "applied_at": now, "week_start_day": weekStartDay, "start_date": startDate}
 	}
 	return map[string]any{
-		"pk": athlete, "sk": "program#v001", "meta": meta, "phases": phaseList, "sessions": sessions,
+		"pk": athlete, "meta": meta, "phases": phaseList, "sessions": sessions,
 		"goals": []any{map[string]any{
 			"id": d.Env.UUID(), "title": "Lift 1 lb", "goal_type": "coach_defined", "priority": "optional",
 			"target_total_kg": 0.45, "strategy_mode": "train_through", "risk_tolerance": "low",

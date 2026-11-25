@@ -19,17 +19,17 @@ type API interface {
 
 type AWS struct{ API API }
 
-func (a AWS) PublishVersion(ctx context.Context, tables Tables, athlete, expectedSK string, pointer Item, programSK, importID, importClaim string) error {
+func (a AWS) SaveProgram(ctx context.Context, tables Tables, athlete string, program Item, expectedSK, currentBlockID, now, importID, importClaim string) error {
 	health := string(tables.Health)
-	pointerAttrs, err := ToAttrMap(pointer)
+	programAttrs, err := ToAttrMap(program)
 	if err != nil {
 		return err
 	}
 	condition := "ref_sk = :expected"
-	expression := "SET #published = :published"
+	expression := "SET current_block_id = :block, updated_at = :now"
 	writes := []types.TransactWriteItem{
-		{Put: &types.Put{TableName: &health, Item: pointerAttrs, ConditionExpression: &condition, ExpressionAttributeValues: map[string]types.AttributeValue{":expected": &types.AttributeValueMemberS{Value: expectedSK}}}},
-		{Update: &types.Update{TableName: &health, Key: keyAttrs(Key{PK: athlete, SK: programSK}), UpdateExpression: &expression, ExpressionAttributeNames: map[string]string{"#published": "published"}, ExpressionAttributeValues: map[string]types.AttributeValue{":published": &types.AttributeValueMemberBOOL{Value: true}}}},
+		{Put: &types.Put{TableName: &health, Item: programAttrs}},
+		{Update: &types.Update{TableName: &health, Key: keyAttrs(Key{PK: athlete, SK: PointerSK}), UpdateExpression: &expression, ConditionExpression: &condition, ExpressionAttributeValues: map[string]types.AttributeValue{":expected": &types.AttributeValueMemberS{Value: expectedSK}, ":block": &types.AttributeValueMemberS{Value: currentBlockID}, ":now": &types.AttributeValueMemberS{Value: now}}}},
 	}
 	if importID != "" {
 		condition := "#status = :applying AND apply_claim_id = :claim"
@@ -37,7 +37,7 @@ func (a AWS) PublishVersion(ctx context.Context, tables Tables, athlete, expecte
 	}
 	_, err = a.API.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
 	if err != nil {
-		return fmt.Errorf("publish program: %w", err)
+		return fmt.Errorf("save program: %w", err)
 	}
 	return nil
 }

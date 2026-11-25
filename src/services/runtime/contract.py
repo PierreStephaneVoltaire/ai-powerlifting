@@ -6,9 +6,6 @@ from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict
 
 
-JOB_SUBMITTED_SCHEMA = {"type": "object", "properties": {"job_id": {"type": ["string", "null"]}, "generation_id": {"type": "string"}, "status": {"enum": ["starting", "running", "succeeded", "failed", "cancel_requested", "cancelled", "uncertain", "missing"]}}, "required": ["status"], "anyOf": [{"required": ["job_id"]}, {"required": ["generation_id"]}]}
-
-
 DOMAINS = (
     "program", "sessions", "competition", "federation", "glossary", "goals",
     "calculations", "performance", "weight-log", "templates",

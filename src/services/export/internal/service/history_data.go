@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"powerlifting/export/internal/auth"
 	"powerlifting/export/internal/report"
@@ -32,17 +31,14 @@ func scopedEntries(raw []any, start, end string) []map[string]any {
 	return result
 }
 
-func (s *Service) historyData(ctx context.Context, caller auth.Caller, program, access, window map[string]any, sessions []any, block string, version int, start, end string) workbook.Context {
+func (s *Service) historyData(ctx context.Context, caller auth.Caller, program, access, window map[string]any, sessions []any, block string, start, end string) workbook.Context {
 	result := workbook.Context{PK: caller.Athlete}
-	if version > 0 {
-		result.Version = fmt.Sprintf("v%03d", version)
-	}
 	athlete := caller.Athlete
 	if s.Store != nil && hasPermission(access, "federation:read") {
 		result.Federations, _ = s.Store.Get(ctx, athlete, "federations#v1")
 	}
-	if s.Store != nil && version > 0 && hasPermission(access, "weight-log:read") {
-		item, err := s.Store.Get(ctx, athlete, fmt.Sprintf("weight_log#v%03d", version))
+	if s.Store != nil && hasPermission(access, "weight-log:read") {
+		item, err := s.Store.Get(ctx, athlete, "weight_log#current")
 		if err == nil {
 			entries, _ := item["entries"].([]any)
 			entries = scope.Entries(entries, scope.Resolve(program, block), program, "weight_log")
@@ -52,8 +48,8 @@ func (s *Service) historyData(ctx context.Context, caller auth.Caller, program, 
 	if s.Domain == nil {
 		return result
 	}
-	if version > 0 && hasPermission(access, "performance:read") {
-		item, err := s.Domain.Call(ctx, "performance", "max_history_get", caller, map[string]any{"pk": athlete, "version": fmt.Sprintf("v%03d", version)})
+	if hasPermission(access, "performance:read") {
+		item, err := s.Domain.Call(ctx, "performance", "max_history_get", caller, map[string]any{"pk": athlete})
 		if err == nil {
 			entries, _ := item["entries"].([]any)
 			result.MaxHistory = scopedEntries(entries, start, end)

@@ -39,13 +39,13 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
       if (!resolvedTemplateSk) return
       setLoading(true)
       try {
-        const applied = await confirmApplyTemplate(resolvedTemplateSk, {
+        await confirmApplyTemplate(resolvedTemplateSk, {
           start_date: res.start_date,
           week_start_day: res.week_start_day,
           target: res.target,
           operation_id: res.confirmKey
         })
-        navigate(`/designer/sessions?version=${applied.program_sk}`)
+        navigate('/designer/sessions')
       } finally {
         setLoading(false)
       }
@@ -71,14 +71,14 @@ export const TemplateDetail: React.FC<Props> = ({ template, templateSk, onRefres
     if (!resolvedTemplateSk) return
     setLoading(true)
     try {
-      const res = await confirmApplyTemplate(resolvedTemplateSk, {
+      await confirmApplyTemplate(resolvedTemplateSk, {
         backfilled_maxes,
         start_date: applyData.start_date,
         week_start_day: applyData.week_start_day,
         target: applyData.target,
         operation_id: applyData.confirmKey
       })
-      navigate(`/designer/sessions?version=${res.program_sk}`)
+      navigate('/designer/sessions')
     } catch (err) {
       console.error(err)
     } finally {

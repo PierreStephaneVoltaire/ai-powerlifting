@@ -10,10 +10,6 @@
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
         },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
-        },
         "session": {
           "type": "object",
           "description": "Full session object with date, day, week_number, exercises, session_notes."
@@ -40,10 +36,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "date": {
           "type": "string",
@@ -90,10 +82,6 @@
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
         },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
-        },
         "date": {
           "type": "string",
           "description": "Session date (YYYY-MM-DD)."
@@ -134,10 +122,6 @@
         "limit": {
           "type": "integer",
           "description": "Maximum number of sessions to return. Default 50, max 200."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to the current program."
         }
       }
     },
@@ -194,10 +178,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         }
       }
     },
@@ -221,10 +201,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "date": {
           "type": "string",
@@ -268,10 +244,6 @@
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
         },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
-        },
         "date": {
           "type": "string",
           "description": "Session date (YYYY-MM-DD)."
@@ -308,10 +280,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "date": {
           "type": "string",
@@ -354,10 +322,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "sessions": {
           "type": "array",

@@ -43,7 +43,6 @@ func (m *memory) Put(_ context.Context, v map[string]any) error {
 	return nil
 }
 func (m *memory) Competitions(context.Context, string) ([]map[string]any, error) { return m.meets, nil }
-func (m *memory) Programs(context.Context, string) ([]map[string]any, error)     { return nil, nil }
 
 type versions struct{}
 

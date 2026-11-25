@@ -53,7 +53,7 @@ export const AmbiguityResolver: React.FC<Props> = ({ selected, onPick }) => {
             <Badge color="green" size="lg">Session Log</Badge>
             <Text size="sm" ta="center" c="dimmed">
               Calendar dates and absolute kg values. Gets merged into your
-              training history as a new program version.
+              training history.
             </Text>
             <Button
               variant={selected === 'session_import' ? 'filled' : 'outline'}

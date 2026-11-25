@@ -16,7 +16,6 @@ const (
 	batchSize     = 25
 	batchAttempts = 6
 	pointerSK     = "program#current"
-	fallbackSK    = "program#v001"
 )
 
 type API interface {
@@ -165,11 +164,11 @@ func (d *Dynamo) CurrentSK(ctx context.Context, pk string) (string, error) {
 	if ref, ok := value.FromAV(item)["ref_sk"].(string); ok && ref != "" {
 		return ref, nil
 	}
-	return fallbackSK, nil
+	return "", nil
 }
 
 func (d *Dynamo) Program(ctx context.Context, pk, sk string) (session.Program, error) {
-	item, err := d.get(ctx, sk, pk, ptr("phases,#published"), map[string]string{"#published": "published"})
+	item, err := d.get(ctx, sk, pk, ptr("phases"), nil)
 	if err != nil {
 		return session.Program{}, err
 	}
@@ -178,9 +177,6 @@ func (d *Dynamo) Program(ctx context.Context, pk, sk string) (session.Program, e
 	}
 	decoded := value.FromAV(item)
 	program := session.Program{Found: true}
-	if published, ok := decoded["published"].(bool); ok && !published {
-		program.Unpublished = true
-	}
 	if phases, ok := decoded["phases"].([]any); ok {
 		program.Phases = phases
 	}

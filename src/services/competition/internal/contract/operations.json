@@ -215,9 +215,6 @@
           "type": "string",
           "minLength": 10
         },
-        "version": {
-          "type": "string"
-        },
         "allow_retrospective": {
           "type": "boolean"
         },

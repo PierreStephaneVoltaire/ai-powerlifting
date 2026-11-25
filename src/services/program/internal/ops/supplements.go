@@ -10,7 +10,7 @@ func supplementPhasesUpdate(d *Deps, r *Request) (any, error) {
 	if !ok {
 		return nil, validation("phases must be a list")
 	}
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		active := scope.CurrentBlockID(program)
 		if scope.Resolve(program, r.String("block_id")) != active {
 			return nil, validation("supplement phases can only be changed in the current block")

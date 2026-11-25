@@ -52,8 +52,9 @@ func handlerContextFixture(t *testing.T, permissions ...string) (map[string]any,
 	t.Helper()
 	h := newHarness(t, options{Now: "2026-11-16T12:00:00+00:00"})
 	h.seed("user", value.Item{"pk": "person_a", "mapped_pk": "person_a", "username": "person_a", "nickname": "a", "display_name": "A", "roles": []any{"athlete"}, "profile_visibility": "private"})
+	h.seed("health", value.Item{"pk": "person_a", "sk": "program#current", "ref_sk": "program#v001"})
 	h.seed("health", value.Item{
-		"pk": "person_a", "sk": "program#v001", "published": true,
+		"pk": "person_a", "sk": "program#v001",
 		"meta": map[string]any{"program_start": "2026-11-02"},
 		"phases": []any{
 			map[string]any{"name": "Hypertrophy", "intent": "", "start_week": 1, "end_week": 2, "block": "current"},

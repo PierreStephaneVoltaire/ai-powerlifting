@@ -20,12 +20,11 @@ async def video_library_get(args: dict) -> dict:
     health_table = get_health_table()
     store = get_session_store(args)
     pk = resolve_pk(args)
-    version = args.get("version") or "current"
     exercise = args.get("exercise")
     sort = args.get("sort") or "newest"
 
     def read():
-        program_sk, phases = context(health_table, pk, version)
+        program_sk, phases = context(health_table, pk)
         items = []
         exercises = set()
         for session in store.list_sessions_sync(program_sk, phases):

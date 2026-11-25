@@ -96,17 +96,13 @@
   {
     "name": "max_history_add",
     "domain": "performance",
-    "description": "Append a max entry to the max history for a program version. The entry must include a date and at least one of squat_kg, bench_kg, deadlift_kg. total_kg is optional (computed if omitted).",
+    "description": "Append a max entry to the max history for the current program. The entry must include a date and at least one of squat_kg, bench_kg, deadlift_kg. total_kg is optional (computed if omitted).",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         },
         "entry": {
           "type": "object",
@@ -243,7 +239,6 @@
       "required": [
         "pk",
         "sk",
-        "version",
         "entries",
         "updated_at"
       ],
@@ -252,9 +247,6 @@
           "type": "string"
         },
         "sk": {
-          "type": "string"
-        },
-        "version": {
           "type": "string"
         },
         "entries": {
@@ -272,17 +264,13 @@
   {
     "name": "max_history_get",
     "domain": "performance",
-    "description": "Get the max history for a program version. Returns an array of max entries sorted by date.",
+    "description": "Get the max history for the current program. Returns an array of max entries sorted by date.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         },
         "start_date": {
           "type": "string",
@@ -301,7 +289,6 @@
       "required": [
         "pk",
         "sk",
-        "version",
         "entries",
         "updated_at"
       ],
@@ -310,9 +297,6 @@
           "type": "string"
         },
         "sk": {
-          "type": "string"
-        },
-        "version": {
           "type": "string"
         },
         "entries": {
@@ -360,24 +344,19 @@
   {
     "name": "max_target_get",
     "domain": "performance",
-    "description": "Get the target maxes (squat/bench/deadlift/total) for a program version. These are goal targets used for progression tracking.",
+    "description": "Get the target maxes (squat/bench/deadlift/total) for the current program. These are goal targets used for progression tracking.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         }
       }
     },
     "result_schema": {
       "type": "object",
       "required": [
-        "version",
         "sk",
         "squat_kg",
         "bench_kg",
@@ -385,9 +364,6 @@
         "total_kg"
       ],
       "properties": {
-        "version": {
-          "type": "string"
-        },
         "sk": {
           "type": "string"
         },
@@ -427,17 +403,13 @@
   {
     "name": "max_target_update",
     "domain": "performance",
-    "description": "Replace the target maxes for a program version. Provide squat_kg, bench_kg, deadlift_kg; total_kg is recomputed as the sum of the three lifts.",
+    "description": "Replace the target maxes for the current program. Provide squat_kg, bench_kg, deadlift_kg; total_kg is recomputed as the sum of the three lifts.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         },
         "squat_kg": {
           "type": "number",
@@ -464,7 +436,6 @@
     "result_schema": {
       "type": "object",
       "required": [
-        "version",
         "sk",
         "squat_kg",
         "bench_kg",
@@ -473,9 +444,6 @@
         "updated_at"
       ],
       "properties": {
-        "version": {
-          "type": "string"
-        },
         "sk": {
           "type": "string"
         },

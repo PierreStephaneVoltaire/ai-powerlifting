@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"strconv"
-	"strings"
 	"time"
 
 	"powerlifting/competition/internal/apperr"
@@ -25,63 +23,28 @@ func (s *Service) calculateAttempts(ctx context.Context, arguments map[string]an
 	return attempts.Calculate(request, attempts.PreferencesFrom(program)), nil
 }
 
-func (s *Service) currentProgram(ctx context.Context, athlete string) (map[string]any, error) {
-	missing := apperr.NotFound("No program found for this athlete")
+func (s *Service) locateProgram(ctx context.Context, athlete string) (string, map[string]any, error) {
 	pointer, err := s.Programs.Pointer(ctx, athlete)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	var sk string
-	if pointer == nil {
-		sk, err = s.latestVersion(ctx, athlete)
-		if err != nil {
-			return nil, err
-		}
-		if sk == "" {
-			return nil, missing
-		}
-	} else if ref, present := pointer["ref_sk"]; present {
-		sk = pyval.Str(ref)
-	} else {
-		sk = store.ProgramSKPrefix + pad(pointer["version"])
+	sk, _ := pointer["ref_sk"].(string)
+	if sk == "" {
+		return "", nil, apperr.NotFound("No program found for this athlete")
 	}
 	item, err := s.Programs.Item(ctx, athlete, sk)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if item == nil {
-		return nil, apperr.Internal("Program item not found at " + sk)
+		return "", nil, apperr.Internal("Program item not found at " + sk)
 	}
-	if item["published"] == false {
-		return nil, missing
-	}
-	return item, nil
+	return sk, item, nil
 }
 
-func pad(version any) string {
-	number, _ := pyval.Float(version)
-	text := strconv.Itoa(int(number))
-	return strings.Repeat("0", max(3-len(text), 0)) + text
-}
-
-func (s *Service) latestVersion(ctx context.Context, athlete string) (string, error) {
-	items, err := s.Programs.Versions(ctx, athlete)
-	if err != nil {
-		return "", err
-	}
-	best, latest := 0, ""
-	for _, item := range items {
-		if item["published"] == false {
-			continue
-		}
-		sk, _ := item["sk"].(string)
-		number, _, _ := strings.Cut(strings.TrimPrefix(sk, store.ProgramSKPrefix), "-")
-		version, err := strconv.Atoi(number)
-		if err == nil && version > best {
-			best, latest = version, sk
-		}
-	}
-	return latest, nil
+func (s *Service) currentProgram(ctx context.Context, athlete string) (map[string]any, error) {
+	_, item, err := s.locateProgram(ctx, athlete)
+	return item, err
 }
 
 func competitionOperation(arguments map[string]any) string {
@@ -133,7 +96,7 @@ func (s *Service) snapshot(ctx context.Context, arguments map[string]any) (any, 
 	if err != nil {
 		return nil, err
 	}
-	program, err := s.snapshotProgram(ctx, athlete, textArg(arguments["version"]), rows)
+	program, err := s.snapshotProgram(ctx, athlete, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -200,31 +163,10 @@ func (s *Service) snapshot(ctx context.Context, arguments map[string]any) (any, 
 	return map[string]any{"snapshot_date": snapshotDate.Format("2006-01-02"), "updated": len(updates), "competitions": competitions}, nil
 }
 
-func (s *Service) snapshotProgram(ctx context.Context, athlete, version string, rows []store.Item) (projection.Program, error) {
-	if version == "" {
-		version = "current"
-	}
-	var sk string
-	if version == "current" {
-		pointer, err := s.Programs.Pointer(ctx, athlete)
-		if err != nil {
-			return projection.Program{}, err
-		}
-		if ref := pointer["ref_sk"]; pyval.Truthy(ref) {
-			sk = pyval.Str(ref)
-		}
-	} else {
-		sk = "program#" + version
-	}
-	var item store.Item
-	if sk != "" {
-		var err error
-		if item, err = s.Programs.Item(ctx, athlete, sk); err != nil {
-			return projection.Program{}, err
-		}
-	}
-	if item == nil {
-		return projection.Program{}, apperr.Validation("Program version " + version + " not found")
+func (s *Service) snapshotProgram(ctx context.Context, athlete string, rows []store.Item) (projection.Program, error) {
+	sk, item, err := s.locateProgram(ctx, athlete)
+	if err != nil {
+		return projection.Program{}, err
 	}
 	items, err := s.Programs.Sessions(ctx, athlete, sk)
 	if err != nil {

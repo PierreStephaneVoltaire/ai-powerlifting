@@ -144,10 +144,10 @@ func TestApplyChunksBatchesAndRetriesUnprocessed(t *testing.T) {
 	}
 }
 
-func TestCurrentSKFallsBackToFirstVersion(t *testing.T) {
+func TestCurrentSKIsEmptyWithoutPointer(t *testing.T) {
 	api := &stubAPI{getOutput: &dynamodb.GetItemOutput{}}
 	sk, err := newDynamo(api).CurrentSK(context.Background(), "athlete")
-	if err != nil || sk != "program#v001" {
+	if err != nil || sk != "" {
 		t.Fatalf("sk %s err %v", sk, err)
 	}
 	api.getOutput = &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{"ref_sk": s("program#v007")}}
@@ -159,13 +159,12 @@ func TestCurrentSKFallsBackToFirstVersion(t *testing.T) {
 	}
 }
 
-func TestProgramReadsPublishedFlagAndPhases(t *testing.T) {
+func TestProgramReadsPhases(t *testing.T) {
 	api := &stubAPI{getOutput: &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{
-		"published": &types.AttributeValueMemberBOOL{Value: false},
-		"phases":    &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{"name": s("P")}}}},
+		"phases": &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{"name": s("P")}}}},
 	}}}
 	program, err := newDynamo(api).Program(context.Background(), "athlete", "program#v001")
-	if err != nil || !program.Found || !program.Unpublished || len(program.Phases) != 1 {
+	if err != nil || !program.Found || len(program.Phases) != 1 {
 		t.Fatalf("program %+v err %v", program, err)
 	}
 	api.getOutput = &dynamodb.GetItemOutput{}
@@ -173,7 +172,7 @@ func TestProgramReadsPublishedFlagAndPhases(t *testing.T) {
 		t.Fatal("missing program reported found")
 	}
 	api.getOutput = &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{"phases": &types.AttributeValueMemberNULL{Value: true}}}
-	if program, _ := newDynamo(api).Program(context.Background(), "athlete", "program#v001"); !program.Found || program.Unpublished || program.Phases != nil {
+	if program, _ := newDynamo(api).Program(context.Background(), "athlete", "program#v001"); !program.Found || program.Phases != nil {
 		t.Fatalf("program %+v", program)
 	}
 }

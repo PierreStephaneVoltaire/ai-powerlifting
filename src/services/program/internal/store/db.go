@@ -46,7 +46,7 @@ type DB interface {
 	Query(ctx context.Context, query Query) ([]Item, error)
 	BatchPut(ctx context.Context, table Table, items []Item) error
 	BatchDelete(ctx context.Context, table Table, keys []Key) error
-	PublishVersion(ctx context.Context, tables Tables, athlete, expectedSK string, pointer Item, programSK string, importID, importClaim string) error
+	SaveProgram(ctx context.Context, tables Tables, athlete string, program Item, expectedSK, currentBlockID, now, importID, importClaim string) error
 }
 
 func (q Query) skAttr() string {

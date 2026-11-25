@@ -17,7 +17,6 @@ async function fetchCurrent(pk: string, date: string, index: number, session_id?
 
 export async function createSession(
   pk: string,
-  _version: string,
   session: Session,
   target: SessionTarget,
 ): Promise<Session> {
@@ -26,7 +25,6 @@ export async function createSession(
 
 export async function deleteSession(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   target: SessionTarget,
@@ -36,7 +34,6 @@ export async function deleteSession(
 
 export async function getSession(
   pk: string,
-  _version: string,
   date: string,
   index: number,
 ): Promise<Session | null> {
@@ -45,7 +42,6 @@ export async function getSession(
 
 export async function updateSession(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   session: Session,
@@ -56,7 +52,6 @@ export async function updateSession(
 
 export async function rescheduleSession(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   newDate: string,
@@ -68,7 +63,6 @@ export async function rescheduleSession(
 
 export async function completeSession(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | undefined },
@@ -92,7 +86,6 @@ export async function completeSession(
 
 export async function updateSessionStatus(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   status: SessionStatus,
@@ -111,7 +104,6 @@ export async function updateSessionStatus(
 
 export async function addExercise(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   exercise: Exercise,
@@ -128,7 +120,6 @@ export async function addExercise(
 
 export async function removeExercise(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   exerciseIndex: number,
@@ -145,7 +136,6 @@ export async function removeExercise(
 
 export async function updateExerciseField(
   pk: string,
-  _version: string,
   date: string,
   index: number,
   exerciseIndex: number,

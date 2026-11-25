@@ -34,13 +34,13 @@ func (d *captureDomain) Call(_ context.Context, domain, operation string, args m
 		return nil, errors.New("unexpected operation")
 	}
 	d.request = args
-	return map[string]any{"program": map[string]any{"sk": "program#v002", "meta": map[string]any{"version_label": "2.0"}}, "next_block_id": "next"}, nil
+	return map[string]any{"program": map[string]any{"sk": "program#v002"}, "next_block_id": "next"}, nil
 }
 
 func (fakeSources) ProgramContext(context.Context, string) (map[string]any, error) {
 	return map[string]any{"current_maxes": map[string]any{}}, nil
 }
-func (fakeSources) Program(context.Context, string, string) (map[string]any, error) {
+func (fakeSources) Program(context.Context, string) (map[string]any, error) {
 	return map[string]any{"sk": "program#v001", "meta": map[string]any{}, "sessions": []any{}, "current_maxes": map[string]any{"squat": float64(200)}}, nil
 }
 func (fakeSources) Glossary(context.Context, string) ([]map[string]any, error) {
@@ -49,7 +49,7 @@ func (fakeSources) Glossary(context.Context, string) ([]map[string]any, error) {
 
 func (fakeDomain) Call(_ context.Context, domain, operation string, _ map[string]any, _ auth.Caller) (map[string]any, error) {
 	if domain == "program" && operation == "block_transition" {
-		return map[string]any{"program": map[string]any{"sk": "program#v002", "meta": map[string]any{"version_label": "2.0"}}, "next_block_id": "next"}, nil
+		return map[string]any{"program": map[string]any{"sk": "program#v002"}, "next_block_id": "next"}, nil
 	}
 	if domain == "program" || domain == "glossary" {
 		return nil, errors.New("additional read permission denied")

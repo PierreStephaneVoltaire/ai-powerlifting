@@ -212,9 +212,6 @@
   "health_list_competitions": {
     "permission": "competition:read"
   },
-  "health_new_version": {
-    "permission": "program:write"
-  },
   "health_setup_initialize": {
     "permission": "program:write"
   },

@@ -102,10 +102,6 @@ func TestQueriesPaginateAndTargetTheRightKeys(t *testing.T) {
 	if *api.queries[0].TableName != "sessions" || api.queries[0].ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS).Value != "session#program#v002#" {
 		t.Fatalf("%+v", api.queries[0])
 	}
-	api.queries, api.pages = nil, [][]map[string]types.AttributeValue{{}}
-	if _, err := d.Versions(context.Background(), "a"); err != nil || api.queries[0].ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS).Value != "program#v" {
-		t.Fatalf("%v %+v", err, api.queries)
-	}
 	api.failure = errors.New("throttled")
 	if _, err := d.Query(context.Background(), "a", ""); err == nil {
 		t.Fatal("query failure swallowed")

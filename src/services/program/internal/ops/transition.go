@@ -287,7 +287,7 @@ func blockTransition(d *Deps, r *Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, r.Selected(), true)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, true)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -455,7 +455,7 @@ func blockTransition(d *Deps, r *Request) (any, error) {
 		}
 		receipts[operationID] = pyval.CopyMap(result)
 	}
-	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, program, false, loaded)
+	written, err := d.Programs.Save(r.Ctx, r.Athlete, program, loaded)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -476,7 +476,7 @@ func (d *Deps) renameBlock(r *Request, blockID string) (any, error) {
 	if !ok || strings.TrimSpace(name) == "" {
 		return nil, validation("rename requires a block name")
 	}
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		blocks, _ := meta["blocks"].([]any)
 		var block map[string]any

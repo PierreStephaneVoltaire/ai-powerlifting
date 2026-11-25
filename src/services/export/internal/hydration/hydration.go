@@ -3,9 +3,7 @@ package hydration
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"powerlifting/export/internal/publication"
@@ -23,7 +21,6 @@ type Tables struct{ Health, Sessions, Supplements string }
 type Loaded struct {
 	Program   map[string]any
 	ProgramSK string
-	Version   int
 }
 type Loader struct {
 	Reader Reader
@@ -39,27 +36,6 @@ func (l Loader) Load(ctx context.Context, athlete, block, start, end string, acc
 		return nil, err
 	}
 	sk := values.Str2(pointer["ref_sk"])
-	version := values.Int(pointer["version"], 0)
-	if pointer != nil && sk == "" {
-		sk = fmt.Sprintf("program#v%03d", version)
-	}
-	if pointer == nil {
-		programs, err := l.Reader.Query(ctx, l.Tables.Health, athlete, "program#")
-		if err != nil {
-			return nil, err
-		}
-		for _, candidate := range programs {
-			key := values.Str2(candidate["sk"])
-			value := strings.TrimPrefix(key, "program#v")
-			if value == key || candidate["published"] == false {
-				continue
-			}
-			parsed, err := strconv.Atoi(strings.SplitN(value, "-", 2)[0])
-			if err == nil && parsed > version {
-				sk, version = key, parsed
-			}
-		}
-	}
 	if sk == "" {
 		return nil, errors.New("program not found")
 	}
@@ -67,7 +43,7 @@ func (l Loader) Load(ctx context.Context, athlete, block, start, end string, acc
 	if err != nil {
 		return nil, err
 	}
-	if stored == nil || stored["published"] == false {
+	if stored == nil {
 		return nil, errors.New("program not found")
 	}
 	program := values.CopyMap(stored)
@@ -116,7 +92,7 @@ func (l Loader) Load(ctx context.Context, athlete, block, start, end string, acc
 	if access != nil {
 		program = publication.ProgramView(program, publication.Access(access))
 	}
-	return &Loaded{Program: program, ProgramSK: sk, Version: version}, nil
+	return &Loaded{Program: program, ProgramSK: sk}, nil
 }
 
 func normalizedEntries(entries []map[string]any) []any {

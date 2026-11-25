@@ -148,8 +148,8 @@ func (d *Deps) sanitizedItem(ctx context.Context, athlete, sk string) (map[strin
 	return sanitized, nil
 }
 
-func (d *Deps) maxHistory(ctx context.Context, athlete, version string, access Access) ([]map[string]any, error) {
-	item, err := d.sanitizedItem(ctx, athlete, "max_history#"+version)
+func (d *Deps) maxHistory(ctx context.Context, athlete string, access Access) ([]map[string]any, error) {
+	item, err := d.sanitizedItem(ctx, athlete, "max_history#current")
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (d *Deps) federationLibrary(ctx context.Context, athlete string) map[string
 }
 
 func exportMarkdown(d *Deps, r *Request) (any, error) {
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, "", true)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, true)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -301,31 +301,25 @@ func exportMarkdown(d *Deps, r *Request) (any, error) {
 	permissions := access.permissions()
 	allowed := func(domain string) bool { return len(access) == 0 || permissions[domain+":read"] }
 
-	version := ""
-	if loaded.Version > 0 {
-		version = fmt.Sprintf("v%03d", loaded.Version)
-	}
 	meta, _ := program["meta"].(map[string]any)
 	sex := strings.ToLower(pyval.Str(firstTruthy(meta["sex"], "male")))
 
-	input := markdown.Input{Program: program, PK: r.Athlete, Version: version, Sex: sex}
+	input := markdown.Input{Program: program, PK: r.Athlete, Sex: sex}
 	input.Federations = d.federationLibrary(r.Ctx, r.Athlete)
 	if !allowed("federation") {
 		input.Federations = nil
 	}
-	if version != "" {
-		if item, err := d.sanitizedItem(r.Ctx, r.Athlete, "weight_log#"+version); err != nil {
-			d.Log.Warn("export: weight log fetch failed", "error", err)
-		} else if item != nil && allowed("weight-log") {
-			input.WeightLog = pyval.Maps(item["entries"])
+	if item, err := d.sanitizedItem(r.Ctx, r.Athlete, "weight_log#current"); err != nil {
+		d.Log.Warn("export: weight log fetch failed", "error", err)
+	} else if item != nil && allowed("weight-log") {
+		input.WeightLog = pyval.Maps(item["entries"])
+	}
+	if allowed("performance") {
+		history, err := d.maxHistory(r.Ctx, r.Athlete, access)
+		if err != nil {
+			d.Log.Warn("export: max history fetch failed", "error", err)
 		}
-		if allowed("performance") {
-			history, err := d.maxHistory(r.Ctx, r.Athlete, version, access)
-			if err != nil {
-				d.Log.Warn("export: max history fetch failed", "error", err)
-			}
-			input.MaxHistory = history
-		}
+		input.MaxHistory = history
 	}
 	current := pyval.Maps(scope.Program(program, "")["sessions"])
 	weeks := effectiveWeeks(current)
@@ -354,7 +348,7 @@ func exportMarkdown(d *Deps, r *Request) (any, error) {
 	input.Today, _ = time.Parse("2006-01-02", d.Today())
 	rendered, err := markdown.Render(markdown.Input{
 		Program: scope.Program(program, ""), Weekly: input.Weekly, WeightLog: input.WeightLog, MaxHistory: input.MaxHistory,
-		Federations: input.Federations, LiftOrder: input.LiftOrder, PK: input.PK, Version: input.Version, Sex: input.Sex, Today: input.Today,
+		Federations: input.Federations, LiftOrder: input.LiftOrder, PK: input.PK, Sex: input.Sex, Today: input.Today,
 	})
 	if err != nil {
 		return nil, err

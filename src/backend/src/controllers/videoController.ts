@@ -14,7 +14,6 @@ const s3Client = new S3Client({ region: process.env.AWS_REGION || 'ca-central-1'
 
 export async function uploadSessionVideo(
   pk: string,
-  version: string,
   sessionDate: string,
   filePath: string,
   filename: string,
@@ -28,7 +27,7 @@ export async function uploadSessionVideo(
   targetRevision?: number,
 ): Promise<SessionVideo> {
   const expectedSize = statSync(filePath).size
-  const presign = await presignSessionVideo(pk, version, sessionDate, filename, mimeType, expectedSize, sessionId, lift, angle, targetRevision)
+  const presign = await presignSessionVideo(pk, sessionDate, filename, mimeType, expectedSize, sessionId, lift, angle, targetRevision)
   await s3Client.send(new PutObjectCommand({
     Bucket: videosBucket,
     Key: presign.s3_key,
@@ -37,12 +36,11 @@ export async function uploadSessionVideo(
     ContentLength: expectedSize,
     Metadata: presign.metadata,
   }))
-  return confirmSessionVideo(pk, version, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes, undefined, sessionId, lift, angle, targetRevision)
+  return confirmSessionVideo(pk, sessionDate, presign.video_id, presign.s3_key, exerciseName, setNumber, notes, undefined, sessionId, lift, angle, targetRevision)
 }
 
 export async function presignSessionVideo(
   pk: string,
-  version: string,
   sessionDate: string,
   filename: string,
   mimeType: string,
@@ -54,7 +52,6 @@ export async function presignSessionVideo(
 ): Promise<VideoUploadPresign> {
   return (await callOperation('video_upload_presign', {
     pk,
-    version,
     session_date: sessionDate,
     filename,
     mimetype: mimeType,
@@ -68,7 +65,6 @@ export async function presignSessionVideo(
 
 export async function confirmSessionVideo(
   pk: string,
-  version: string,
   sessionDate: string,
   videoId: string,
   s3Key: string,
@@ -83,7 +79,6 @@ export async function confirmSessionVideo(
 ): Promise<SessionVideo> {
   return (await callOperation('video_upload_confirm', {
     pk,
-    version,
     session_date: sessionDate,
     video_id: videoId,
     s3_key: s3Key,
@@ -104,14 +99,12 @@ export async function resolveMedia(pk: string, key: string): Promise<string> {
 
 export async function removeSessionVideo(
   pk: string,
-  version: string,
   sessionDate: string,
   videoId: string,
   sessionId?: string,
 ): Promise<void> {
   await callOperation('video_remove', {
     pk,
-    version,
     session_date: sessionDate,
     video_id: videoId,
     session_id: sessionId,
@@ -120,13 +113,11 @@ export async function removeSessionVideo(
 
 export async function getVideoLibrary(
   pk: string,
-  version: string,
   exercise?: string,
   sort: VideoSort = 'newest',
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
   return (await callOperation('video_library_get', {
     pk,
-    version,
     exercise,
     sort,
   })) as { videos: VideoLibraryItem[]; exercises: string[] }
@@ -134,7 +125,6 @@ export async function getVideoLibrary(
 
 export async function updateSessionVideoMetadata(
   pk: string,
-  version: string,
   sessionDate: string,
   videoId: string,
   updates: { exerciseName?: string; setNumber?: number; notes?: string },
@@ -142,7 +132,6 @@ export async function updateSessionVideoMetadata(
 ): Promise<SessionVideo> {
   return (await callOperation('video_update_metadata', {
     pk,
-    version,
     session_date: sessionDate,
     video_id: videoId,
     exercise_name: updates.exerciseName,

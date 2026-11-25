@@ -9,7 +9,7 @@ import (
 
 var allowedMetaFields = map[string]bool{
 	"program_name": true, "program_start": true, "federation": true, "practicing_for": true,
-	"version_label": true, "sex": true, "weight_class_kg": true, "weight_classes_kg": true, "weight_class_confirm_by": true,
+	"sex": true, "weight_class_kg": true, "weight_classes_kg": true, "weight_class_confirm_by": true,
 	"current_body_weight_kg": true, "current_body_weight_lb": true, "manual_maxes": true, "lift_attempt_settings": true,
 	"target_squat_kg": true, "target_bench_kg": true, "target_dl_kg": true, "target_total_kg": true,
 	"attempt_pct": true, "height_cm": true, "arm_wingspan_cm": true, "leg_length_cm": true, "body_fat_range": true,
@@ -18,8 +18,8 @@ var allowedMetaFields = map[string]bool{
 
 type mutator func(program map[string]any) (map[string]any, error)
 
-func (d *Deps) mutateSource(r *Request, selected string, mutate mutator) (any, error) {
-	snapshot, err := d.Programs.Snapshot(r.Ctx, r.Athlete, selected)
+func (d *Deps) mutateSource(r *Request, mutate mutator) (any, error) {
+	snapshot, err := d.Programs.Snapshot(r.Ctx, r.Athlete)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -44,42 +44,6 @@ func metaOf(program map[string]any) map[string]any {
 		program["meta"] = meta
 	}
 	return meta
-}
-
-func programArchive(d *Deps, r *Request) (any, error) {
-	return d.setArchived(r, true)
-}
-
-func programUnarchive(d *Deps, r *Request) (any, error) {
-	return d.setArchived(r, false)
-}
-
-func (d *Deps) setArchived(r *Request, archived bool) (any, error) {
-	sk := r.String("program_sk")
-	if sk == "" {
-		current, err := d.Programs.CurrentSK(r.Ctx, r.Athlete, "")
-		if err != nil {
-			return nil, mapError(err)
-		}
-		sk = current
-	}
-	snapshot, err := d.Programs.Snapshot(r.Ctx, r.Athlete, sk)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	program := pyval.CopyMap(snapshot.Program)
-	meta := metaOf(program)
-	meta["archived"] = archived
-	if archived {
-		meta["archived_at"] = d.Env.Stamp()
-	} else {
-		meta["archived_at"] = nil
-	}
-	updatedAt, err := d.Programs.Commit(r.Ctx, r.Athlete, snapshot, program)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	return map[string]any{"success": true, "archived": archived, "sk": snapshot.SK, "updated_at": updatedAt}, nil
 }
 
 func programUpdateMeta(d *Deps, r *Request) (any, error) {
@@ -113,7 +77,7 @@ func programUpdateMeta(d *Deps, r *Request) (any, error) {
 			return nil, validation("weight_classes_kg must contain at most two positive numbers")
 		}
 	}
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		for key, value := range updates {
 			meta[key] = pyval.DeepCopy(value)
@@ -147,7 +111,7 @@ func programUpdatePhases(d *Deps, r *Request) (any, error) {
 		phases = []any{}
 	}
 	block := r.String("block")
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		existing, _ := program["phases"].([]any)
 		var updated []any
 		if block != "" {
@@ -214,19 +178,8 @@ func blockNotesUpdate(d *Deps, r *Request) (any, error) {
 	if !ok {
 		return nil, validation("block_notes must be a list")
 	}
-	selected := r.Selected()
-	if version := r.String("version"); version != "" && version != "current" {
-		sk, item, err := d.Programs.BlockNotes(r.Ctx, r.Athlete, version)
-		if err != nil {
-			return nil, mapError(err)
-		}
-		if item == nil {
-			return nil, validation("Program version " + version + " not found")
-		}
-		selected = sk
-	}
 	self := Access(r.Access).isSelf()
-	return d.mutateSource(r, selected, func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		active := scope.CurrentBlockID(program)
 		kept := []any{}
@@ -256,7 +209,7 @@ func dietNotesUpdate(d *Deps, r *Request) (any, error) {
 	if !ok {
 		return nil, validation("notes must be a list")
 	}
-	return d.mutateSource(r, r.Selected(), func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		program["diet_notes"] = replaceActiveRecords(program, "diet_notes", notes)
 		return map[string]any{"success": true, "diet_notes": scope.Program(program, "")["diet_notes"]}, nil
 	})

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -51,35 +50,12 @@ func (d Repository) get(ctx context.Context, table, partition, sortKey string) (
 	return item, nil
 }
 
-func (d Repository) program(ctx context.Context, athlete, selected string) (string, map[string]any, error) {
-	if selected == "current" || selected == "program#current" {
-		selected = ""
+func (d Repository) program(ctx context.Context, athlete string) (string, map[string]any, error) {
+	pointer, err := d.get(ctx, d.HealthTable, athlete, "program#current")
+	if err != nil {
+		return "", nil, err
 	}
-	if selected == "" {
-		pointer, err := d.get(ctx, d.HealthTable, athlete, "program#current")
-		if err != nil {
-			return "", nil, err
-		}
-		selected, _ = pointer["ref_sk"].(string)
-	}
-	if selected == "" {
-		versions, err := d.query(ctx, d.HealthTable, athlete, "program#v")
-		if err != nil {
-			return "", nil, err
-		}
-		latest := 0
-		for _, item := range versions {
-			if item["published"] == false {
-				continue
-			}
-			sk, _ := item["sk"].(string)
-			part := strings.SplitN(strings.TrimPrefix(sk, "program#v"), "-", 2)[0]
-			version, _ := strconv.Atoi(part)
-			if version > latest {
-				latest, selected = version, sk
-			}
-		}
-	}
+	selected, _ := pointer["ref_sk"].(string)
 	if selected == "" {
 		return "", nil, errors.New("program not found")
 	}
@@ -87,22 +63,22 @@ func (d Repository) program(ctx context.Context, athlete, selected string) (stri
 	if err != nil {
 		return "", nil, err
 	}
-	if program == nil || program["published"] == false {
+	if program == nil {
 		return "", nil, errors.New("program not found")
 	}
 	return selected, program, nil
 }
 
 func (d Repository) ProgramContext(ctx context.Context, athlete string) (map[string]any, error) {
-	_, program, err := d.program(ctx, athlete, "")
+	_, program, err := d.program(ctx, athlete)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{"current_maxes": program["current_maxes"], "lift_profiles": program["lift_profiles"]}, nil
 }
 
-func (d Repository) Program(ctx context.Context, athlete, selected string) (map[string]any, error) {
-	sk, program, err := d.program(ctx, athlete, selected)
+func (d Repository) Program(ctx context.Context, athlete string) (map[string]any, error) {
+	sk, program, err := d.program(ctx, athlete)
 	if err != nil {
 		return nil, err
 	}

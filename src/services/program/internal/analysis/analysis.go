@@ -8,7 +8,7 @@ import (
 )
 
 var inputWrites = map[string]bool{
-	"block_notes_update": true, "block_transition": true, "health_invalidate_program_cache": true, "health_new_version": true,
+	"block_notes_update": true, "block_transition": true, "health_invalidate_program_cache": true,
 	"health_setup_initialize": true, "program_archive": true, "program_unarchive": true,
 	"program_update_meta_field": true, "program_update_phases": true,
 }

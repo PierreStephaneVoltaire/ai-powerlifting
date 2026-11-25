@@ -7,7 +7,6 @@ import { draftSessionNotes } from '@/api/client'
 interface SessionNotesHelperModalProps {
   opened: boolean
   onClose: () => void
-  version: string
   session: Session
   sessionIndex: number
   onInsert: (notes: string) => void
@@ -26,7 +25,6 @@ const emptyAnswers = {
 export default function SessionNotesHelperModal({
   opened,
   onClose,
-  version,
   session,
   sessionIndex,
   onInsert,
@@ -52,7 +50,7 @@ export default function SessionNotesHelperModal({
     setIsGenerating(true)
     setError('')
     try {
-      const result = await draftSessionNotes(version, session.date, sessionIndex, {
+      const result = await draftSessionNotes(session.date, sessionIndex, {
         session,
         answers,
       })

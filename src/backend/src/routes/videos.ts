@@ -27,27 +27,26 @@ function receiveVideo(req: Request, res: Response, next: NextFunction) {
   })
 }
 
-videosRouter.use('/:version/:sessionDate/uploads', videoUploadsRouter)
+videosRouter.use('/current/:sessionDate/uploads', videoUploadsRouter)
 
 videosRouter.get('/', async (req, res, next) => {
   try {
-    const version = (req.query.version as string) || 'current'
     const exercise = req.query.exercise as string | undefined
     const sort: VideoSort = isVideoSort(req.query.sort) ? req.query.sort : 'newest'
-    const result = await videoController.getVideoLibrary(req.mapped_pk!, version, exercise, sort)
+    const result = await videoController.getVideoLibrary(req.mapped_pk!, exercise, sort)
     res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-videosRouter.post('/:version/:sessionDate', receiveVideo, restoreOperationScope, async (req, res, next) => {
+videosRouter.post('/current/:sessionDate', receiveVideo, restoreOperationScope, async (req, res, next) => {
   if (req.file) {
     try {
       if (!videoMimeTypes.includes(req.file.mimetype)) return res.status(400).json({ data: null, error: 'Invalid video MIME type' })
       const sessionId = req.body.sessionId || req.get('X-Session-Id') || undefined
       const video = await videoController.uploadSessionVideo(
-        req.mapped_pk!, req.params.version, req.params.sessionDate, req.file.path, req.file.originalname,
+        req.mapped_pk!, req.params.sessionDate, req.file.path, req.file.originalname,
         req.file.mimetype, req.body.exerciseName || undefined,
         req.body.setNumber ? Number(req.body.setNumber) : undefined, req.body.notes || undefined,
         sessionId,
@@ -88,7 +87,7 @@ async function serveMedia(req: import('express').Request, res: import('express')
 videosRouter.get(/^\/media\/(.+)$/, serveMedia)
 videosRouter.head(/^\/media\/(.+)$/, serveMedia)
 
-videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
+videosRouter.post('/current/:sessionDate/confirm', async (req, res, next) => {
   try {
       const { videoId, s3Key, exerciseName, setNumber, notes, expectedSize, sessionId, lift, angle, targetRevision } = (req.body || {}) as {
       videoId?: string
@@ -107,7 +106,6 @@ videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
     }
     const video = await videoController.confirmSessionVideo(
       req.mapped_pk!,
-      req.params.version,
       req.params.sessionDate,
       videoId,
       s3Key,
@@ -126,11 +124,10 @@ videosRouter.post('/:version/:sessionDate/confirm', async (req, res, next) => {
   }
 })
 
-videosRouter.delete('/:version/:sessionDate/:videoId', async (req, res, next) => {
+videosRouter.delete('/current/:sessionDate/:videoId', async (req, res, next) => {
   try {
     await videoController.removeSessionVideo(
       req.mapped_pk!,
-      req.params.version,
       req.params.sessionDate,
       req.params.videoId,
       ((req.body || {}) as { sessionId?: string }).sessionId || req.get('X-Session-Id') || undefined,
@@ -141,7 +138,7 @@ videosRouter.delete('/:version/:sessionDate/:videoId', async (req, res, next) =>
   }
 })
 
-videosRouter.patch('/:version/:sessionDate/:videoId', async (req, res, next) => {
+videosRouter.patch('/current/:sessionDate/:videoId', async (req, res, next) => {
   try {
     const { exerciseName, setNumber, notes } = (req.body || {}) as {
       exerciseName?: string
@@ -150,7 +147,6 @@ videosRouter.patch('/:version/:sessionDate/:videoId', async (req, res, next) => 
     }
     const video = await videoController.updateSessionVideoMetadata(
       req.mapped_pk!,
-      req.params.version,
       req.params.sessionDate,
       req.params.videoId,
       {

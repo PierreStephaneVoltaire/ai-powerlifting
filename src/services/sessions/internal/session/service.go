@@ -29,28 +29,17 @@ type Selector struct {
 	SessionID string
 }
 
-func isCurrentAlias(programSK string) bool {
-	return programSK == "" || programSK == "current" || programSK == "program#current"
-}
-
-func (s *Service) resolveProgramSK(ctx context.Context, pk, requested string) (string, error) {
-	if !isCurrentAlias(requested) {
-		return requested, nil
-	}
-	return s.Programs.CurrentSK(ctx, pk)
-}
-
-func (s *Service) Resolve(ctx context.Context, pk, requested string) (Scope, error) {
-	programSK, err := s.resolveProgramSK(ctx, pk, requested)
+func (s *Service) Resolve(ctx context.Context, pk string) (Scope, error) {
+	programSK, err := s.Programs.CurrentSK(ctx, pk)
 	if err != nil {
 		return Scope{}, err
+	}
+	if programSK == "" {
+		return Scope{}, apperr.NotFound("Program not found")
 	}
 	program, err := s.Programs.Program(ctx, pk, programSK)
 	if err != nil {
 		return Scope{}, err
-	}
-	if program.Unpublished {
-		return Scope{}, apperr.Validation("Program version is unpublished")
 	}
 	phases := program.Phases
 	if phases == nil {
@@ -265,8 +254,8 @@ func (s *Service) ReplaceAll(ctx context.Context, pk string, scope Scope, sessio
 	return s.Sessions.Apply(ctx, pk, deletes, prepared)
 }
 
-func (s *Service) List(ctx context.Context, pk, requested string, limit int) (value.Item, error) {
-	scope, err := s.Resolve(ctx, pk, requested)
+func (s *Service) List(ctx context.Context, pk string, limit int) (value.Item, error) {
+	scope, err := s.Resolve(ctx, pk)
 	if err != nil {
 		return nil, err
 	}
@@ -340,15 +329,15 @@ func (s *Service) Range(ctx context.Context, pk, start, end string) ([]any, erro
 	if err != nil {
 		return nil, err
 	}
+	if programSK == "" {
+		return nil, apperr.NotFound("Program not found")
+	}
 	program, err := s.Programs.Program(ctx, pk, programSK)
 	if err != nil {
 		return nil, err
 	}
 	if !program.Found {
 		return nil, apperr.NotFound("Program item not found at %s", programSK)
-	}
-	if program.Unpublished {
-		return nil, apperr.Validation("Program version is unpublished")
 	}
 	phases := program.Phases
 	if phases == nil {

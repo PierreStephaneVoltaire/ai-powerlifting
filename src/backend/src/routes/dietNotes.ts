@@ -5,18 +5,18 @@ import type { DietNote } from '@powerlifting/types'
 
 export const dietNotesRouter = Router({ mergeParams: true })
 
-// GET /api/diet-notes/:version - Get diet notes
-dietNotesRouter.get('/:version', cacheGet((req) => [`diet-notes:${req.params.version}`]), async (req, res, next) => {
+// GET /api/diet-notes/current - Get diet notes
+dietNotesRouter.get('/current', cacheGet((req) => [`diet-notes:current`]), async (req, res, next) => {
   try {
-    const notes = await dietNotesController.getDietNotes(req.mapped_pk!, req.params.version)
+    const notes = await dietNotesController.getDietNotes(req.mapped_pk!)
     res.json({ data: notes, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// PUT /api/diet-notes/:version - Update all diet notes
-dietNotesRouter.put('/:version', invalidateAfter((req) => [`diet-notes:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/diet-notes/current - Update all diet notes
+dietNotesRouter.put('/current', invalidateAfter((req) => [`diet-notes:current`]), async (req, res, next) => {
   try {
     const { dietNotes } = req.body
 
@@ -29,7 +29,6 @@ dietNotesRouter.put('/:version', invalidateAfter((req) => [`diet-notes:${req.par
 
     const result = await dietNotesController.updateDietNotes(
       req.mapped_pk!,
-      req.params.version,
       dietNotes as DietNote[]
     )
     res.json({ data: result, error: null })

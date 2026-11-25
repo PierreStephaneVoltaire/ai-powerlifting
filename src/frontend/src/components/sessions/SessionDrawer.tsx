@@ -592,7 +592,6 @@ export default function SessionDrawer({
 }: SessionDrawerProps) {
   const { readOnly: authReadOnly } = useAuth('sessions')
   const readOnly = readOnlyProp ?? authReadOnly
-  const version = useProgramStore(s => s.version)
   const persistSession = useProgramStore(s => s.persistSession)
   const deleteSession = useProgramStore(s => s.deleteSession)
   const phases = useProgramStore(s => s.program?.phases)
@@ -733,7 +732,7 @@ export default function SessionDrawer({
       setLocalSession(null)
       setBaseline(session)
       const clone = editableSession(session)
-      const draftKey = sessionId ? sessionDraftKey(version, sessionId) : ''
+      const draftKey = sessionId ? sessionDraftKey(sessionId) : ''
       draftKeyRef.current = draftKey
       draftPartitionRef.current = partition
       void (draftKey ? readDraft<Session>(draftKey, partition) : Promise.resolve(undefined)).then((draft) => {
@@ -762,7 +761,7 @@ export default function SessionDrawer({
       })
       return () => { active = false }
     }
-  }, [version, sessionArrayIndex])
+  }, [sessionArrayIndex])
 
   useEffect(() => {
     if (!localSession || !hasChanges || !draftKeyRef.current) return
@@ -797,8 +796,8 @@ export default function SessionDrawer({
     const pending = pendingSaveRef.current ? handleSaveRef.current?.(false, false) : undefined
     void Promise.resolve(pending).then(() => flushRef.current).finally(() => {
       if (!savedAnythingRef.current) return
-      const { loadProgram, version: currentVersion } = useProgramStore.getState()
-      void loadProgram(currentVersion)
+      const { loadProgram } = useProgramStore.getState()
+      void loadProgram()
     })
   }, [])
 

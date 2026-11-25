@@ -11,7 +11,7 @@ interface LiftSettings {
 }
 
 export default function AttemptSelector() {
-  const { program, version } = useProgramStore()
+  const { program } = useProgramStore()
   
   const [maxes, setMaxes] = useState({ squat: 0, bench: 0, deadlift: 0 })
   const [liftSettings, setLiftSettings] = useState<Record<string, LiftSettings>>({
@@ -49,12 +49,12 @@ export default function AttemptSelector() {
     // Auto-save to meta
     setSaving(true)
     try {
-      await updateMetaField(version, 'lift_attempt_settings', nextSettings)
+      await updateMetaField('lift_attempt_settings', nextSettings)
       useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, lift_attempt_settings: nextSettings } } } : state)
       if (field === 'max') {
         const nextMaxes = { ...maxes, [lift]: value }
         setMaxes(nextMaxes)
-        await updateMetaField(version, 'manual_maxes', nextMaxes)
+        await updateMetaField('manual_maxes', nextMaxes)
         useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, manual_maxes: nextMaxes } } } : state)
       }
     } finally {
@@ -67,7 +67,7 @@ export default function AttemptSelector() {
     setAttemptPct(nextPct)
     setSaving(true)
     try {
-      await updateMetaField(version, 'attempt_pct', nextPct)
+      await updateMetaField('attempt_pct', nextPct)
       useProgramStore.setState((state) => state.program ? { program: { ...state.program, meta: { ...state.program.meta, attempt_pct: nextPct } } } : state)
     } finally {
       setSaving(false)

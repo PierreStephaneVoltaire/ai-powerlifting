@@ -18,34 +18,3 @@ def test_template_actor_is_person_separate_from_selected_athlete():
     assert scoped['actor_pk'] == 'person-a' and scoped['pk'] == 'athlete-a'
     with pytest.raises(OperationError):
         authorize(operation, {**payload, 'actor_pk': 'athlete-a'}, 'athlete-a', 'person-a')
-
-
-def test_program_store_does_not_retarget_another_request(monkeypatch):
-    from services.runtime import program_tool_helpers
-    first = program_tool_helpers.get_store({"pk": "athlete-a", "program_sk": "program#v001"})
-    second = program_tool_helpers.get_store({"pk": "athlete-b"})
-    assert first is not second
-    assert first.pk == "athlete-a"
-    assert second.pk == "athlete-b"
-    assert first._current_program_sk_sync() == "program#v001"
-
-
-def test_nested_store_constructors_inherit_only_current_athlete(monkeypatch):
-    import sys
-    from types import SimpleNamespace
-    from concurrent.futures import ThreadPoolExecutor
-    from services.runtime.contract import Operation
-    from services.runtime.dispatch import dispatch
-    from services.runtime.program_store import ProgramStore
-    from services.runtime.glossary_store import GlossaryStore
-    from services.runtime.storage_scope import current_athlete
-
-    def handler(arguments, context):
-        return [ProgramStore('unused').pk, GlossaryStore(table_name='unused').pk]
-
-    monkeypatch.setitem(sys.modules, 'services.scope_canary.handler', SimpleNamespace(handler=handler))
-    operation = Operation(name='scope_canary', domain='program', description='scope check', handler='services.scope_canary.handler', input_schema={'type': 'object'}, result_schema={'type': 'array'})
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(dispatch, operation, {'pk': athlete}) for athlete in ('athlete-a', 'athlete-b')]
-        assert [future.result() for future in futures] == [['athlete-a', 'athlete-a'], ['athlete-b', 'athlete-b']]
-    assert current_athlete.get() is None

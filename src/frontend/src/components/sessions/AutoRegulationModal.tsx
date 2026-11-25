@@ -9,7 +9,6 @@ type AutoRegulationMode = 'change_exercise' | 'change_weight'
 interface AutoRegulationModalProps {
   opened: boolean
   onClose: () => void
-  version: string
   session: Session
   sessionIndex: number
   exerciseIndex: number | null
@@ -29,7 +28,6 @@ const TOGGLES: Array<{ key: string; label: string }> = [
 export default function AutoRegulationModal({
   opened,
   onClose,
-  version,
   session,
   sessionIndex,
   exerciseIndex,
@@ -69,7 +67,7 @@ export default function AutoRegulationModal({
       ? [...conversation, { role: 'user' as const, content: message.trim() }]
       : conversation
     try {
-      const result = await requestAutoRegulation(version, session.date, sessionIndex, {
+      const result = await requestAutoRegulation(session.date, sessionIndex, {
         session,
         exerciseIndex,
         mode,

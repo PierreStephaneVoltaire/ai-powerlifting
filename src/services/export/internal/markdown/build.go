@@ -22,7 +22,6 @@ type Input struct {
 	Correlation M
 	Evaluation  M
 	PK          string
-	Version     string
 	Sex         string
 	Today       time.Time
 }
@@ -104,11 +103,6 @@ func Render(in Input) (string, error) {
 	currentMaxes := copyOf(getd(program, "current_maxes", M{}))
 	creator := str(firstNonBlank(meta["creator"], in.PK, program["pk"], "operator"))
 	sex := strings.ToLower(str(firstNonBlank(meta["sex"], in.Sex, "male")))
-	version := strings.TrimSpace(str(firstNonBlank(in.Version, meta["version"], meta["version_label"], "")))
-	if version != "" && !strings.HasPrefix(version, "v") && isDigits(version) {
-		number, _ := strconv.Atoi(version)
-		version = fmt.Sprintf("v%03d", number)
-	}
 	prepared := prepareSessions(maps(program["sessions"]), in.WeightLog, meta, phases)
 
 	data := sectionData{
@@ -117,7 +111,7 @@ func Render(in Input) (string, error) {
 		weightLog: in.WeightLog, maxHistory: in.MaxHistory, federations: in.Federations, weekly: in.Weekly, liftOrder: in.LiftOrder, sex: sex,
 	}
 	sections := []any{
-		data.overview(creator, version, nextCompetitionDate(competitions, in.Today)),
+		data.overview(creator, nextCompetitionDate(competitions, in.Today)),
 		data.goalsSection(),
 		data.currentMaxesSection(),
 		data.maxHistorySection(),
@@ -233,15 +227,12 @@ type overviewView struct {
 	Notes   []string
 }
 
-func (d sectionData) overview(creator, version, competition string) any {
+func (d sectionData) overview(creator, competition string) any {
 	name := str(firstTruthy(d.meta["program_name"], "Training Program"))
 	meta := d.meta
 	var details []string
 	if creator != "" && creator != "operator" {
 		details = append(details, "**Creator:** "+creator)
-	}
-	if version != "" {
-		details = append(details, "**Version:** "+version)
 	}
 	if truthy(meta["program_start"]) {
 		details = append(details, "**Started:** "+str(meta["program_start"]))

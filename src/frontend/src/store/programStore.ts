@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Program, Session, Exercise, Phase, WeightEntry, ProgramListItem, SupplementPhase, DietNote, BlockNote, SessionVideo, LiftProfile, Sex, AthleteGoal, WeekStartDay } from '@powerlifting/types'
+import type { Program, Session, Exercise, Phase, WeightEntry, SupplementPhase, DietNote, BlockNote, SessionVideo, LiftProfile, Sex, AthleteGoal, WeekStartDay } from '@powerlifting/types'
 import * as api from '@/api/client'
 import { requestPartition } from '@/api/context'
 import { activeBlockId } from '@/utils/weekStart'
@@ -8,8 +8,6 @@ import { kgToLb } from '@/utils/units'
 
 interface ProgramState {
   program: Program | null
-  version: string
-  versions: ProgramListItem[]
   isLoading: boolean
   error: string | null
   needsSetup: boolean
@@ -19,10 +17,9 @@ interface ProgramState {
   activeSessionIndex: number | null
 
   // Actions
-  loadProgram: (version: string) => Promise<void>
+  loadProgram: () => Promise<void>
   loadSetupStatus: () => Promise<api.SetupStatus>
   initializeSetup: (input: api.InitializeSetupInput) => Promise<api.InitializeSetupResult>
-  loadVersions: () => Promise<void>
   setActiveSession: (date: string | null, index: number | null) => void
   createSession: (session: Partial<Session> & { date: string }) => Promise<Session>
   deleteSession: (date: string, index: number, sessionId?: string) => Promise<void>
@@ -53,9 +50,6 @@ interface ProgramState {
   updatePhases: (phases: Phase[], block?: string) => Promise<void>
   addWeightEntry: (entry: WeightEntry) => Promise<void>
   removeWeightEntry: (date: string) => Promise<void>
-  forkVersion: (label?: string) => Promise<string>
-  archiveProgram: () => Promise<void>
-  unarchiveProgram: () => Promise<void>
   reset: () => void
 
   // Supplements
@@ -84,8 +78,6 @@ interface ProgramState {
 
 export const useProgramStore = create<ProgramState>((set, get) => ({
   program: null,
-  version: 'current',
-  versions: [],
   isLoading: false,
   error: null,
   needsSetup: false,
@@ -94,17 +86,17 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   activeSessionDate: null,
   activeSessionIndex: null,
 
-  loadProgram: async (version) => {
+  loadProgram: async () => {
     const partition = requestPartition()
     set({ isLoading: true, error: null })
     try {
-      const program = await api.fetchProgram(version)
+      const program = await api.fetchProgram()
       if (requestPartition() !== partition) return
-      set({ program, version, isLoading: false, needsSetup: false })
+      set({ program, isLoading: false, needsSetup: false })
     } catch (e) {
       if (requestPartition() !== partition) return
-      if (version === 'current' && api.isApiNotFound(e)) {
-        set({ program: null, version, isLoading: false, needsSetup: true, error: null })
+      if (api.isApiNotFound(e)) {
+        set({ program: null, isLoading: false, needsSetup: true, error: null })
         return
       }
       set({ error: String(e), isLoading: false })
@@ -130,37 +122,22 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     return result
   },
 
-  loadVersions: async () => {
-    const partition = requestPartition()
-    try {
-      const versions = await api.fetchPrograms()
-      if (requestPartition() !== partition) return
-      // Sort by version number descending (newest first)
-      versions.sort((a, b) => b.version.localeCompare(a.version))
-      set({ versions })
-    } catch (e) {
-      if (requestPartition() !== partition) return
-      console.error('Failed to load versions:', e)
-    }
-  },
-
   setActiveSession: (date, index) => set({ activeSessionDate: date, activeSessionIndex: index }),
 
   createSession: async (sessionData) => {
-    const { version } = get()
-    const session = await api.createSession(version, sessionData, api.sessionTarget())
+    const session = await api.createSession(sessionData, api.sessionTarget())
 
     // Reload program to get updated sessions with derived fields
-    await get().loadProgram(version)
+    await get().loadProgram()
     return session
   },
 
   deleteSession: async (date, index, sessionId) => {
-    const { version, program } = get()
-    await api.deleteSession(version, date, index, api.sessionTarget(sessionId || program?.sessions[index]?.id))
+    const { program } = get()
+    await api.deleteSession(date, index, api.sessionTarget(sessionId || program?.sessions[index]?.id))
 
     // Reload to get correct indices after deletion
-    await get().loadProgram(version)
+    await get().loadProgram()
   },
 
   updateSession: (date, index, session) =>
@@ -210,10 +187,10 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
     }),
 
   rescheduleSession: async (date, index, newDate, newDay, sessionId) => {
-    const { version, program } = get()
+    const { program } = get()
     if (!program) return
 
-    const updated = await api.rescheduleSession(version, date, index, newDate, newDay, api.sessionTarget(sessionId || program.sessions[index]?.id))
+    const updated = await api.rescheduleSession(date, index, newDate, newDay, api.sessionTarget(sessionId || program.sessions[index]?.id))
 
     // Update local state
     set((state) => {
@@ -227,12 +204,12 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   markComplete: async (date, index, data, sessionId) => {
-    const { version, program } = get()
-    const updated = await api.completeSession(version, date, index, data, api.sessionTarget(sessionId || program?.sessions[index]?.id))
+    const { program } = get()
+    const updated = await api.completeSession(date, index, data, api.sessionTarget(sessionId || program?.sessions[index]?.id))
 
     // Sync body weight to weight log if provided
     if (data.bodyWeightKg) {
-      api.addWeightEntry(version, { date, kg: data.bodyWeightKg }).catch((e) =>
+      api.addWeightEntry({ date, kg: data.bodyWeightKg }).catch((e) =>
         console.error('Failed to sync body weight to weight log:', e)
       )
     }
@@ -270,10 +247,9 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   persistSession: async (date, index, session) => {
-    const { version } = get()
-    const updated = await api.updateSession(version, date, index, session, api.sessionTarget(session.id))
+    const updated = await api.updateSession(date, index, session, api.sessionTarget(session.id))
     if (session.body_weight_kg != null) {
-      api.addWeightEntry(version, { date: session.date, kg: session.body_weight_kg }).catch((e) =>
+      api.addWeightEntry({ date: session.date, kg: session.body_weight_kg }).catch((e) =>
         console.error('Failed to sync body weight to weight log:', e)
       )
     }
@@ -281,8 +257,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   updateMaxes: async (maxes) => {
-    const { version } = get()
-    await api.updateTargetMaxes(version, maxes)
+    await api.updateTargetMaxes(maxes)
 
     set((state) => {
       if (!state.program) return state
@@ -302,8 +277,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   updateBodyWeight: async (weightKg: number) => {
-    const { version } = get()
-    await api.updateBodyWeight(version, weightKg)
+    await api.updateBodyWeight(weightKg)
 
     set((state) => {
       if (!state.program) return state
@@ -321,8 +295,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   updatePhases: async (phases: Phase[], block?: string) => {
-    const { version } = get()
-    await api.updatePhases(version, phases, block)
+    await api.updatePhases(phases, block)
 
     set((state) => {
       if (!state.program) return state
@@ -346,41 +319,18 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   addWeightEntry: async (entry) => {
-    const { version } = get()
-    await api.addWeightEntry(version, entry)
+    await api.addWeightEntry(entry)
   },
 
   removeWeightEntry: async (date) => {
-    const { version } = get()
-    await api.removeWeightEntry(version, date)
-  },
-
-  forkVersion: async (label) => {
-    const { version } = get()
-    const newVersion = await api.forkProgram(version, label)
-    await get().loadProgram(newVersion)
-    return newVersion
-  },
-
-  archiveProgram: async () => {
-    const { version } = get()
-    await api.archiveProgram(version)
-    await get().loadVersions()
-    await get().loadProgram(version)
-  },
-
-  unarchiveProgram: async () => {
-    const { version } = get()
-    await api.unarchiveProgram(version)
-    await get().loadVersions()
-    await get().loadProgram(version)
+    await api.removeWeightEntry(date)
   },
 
   // Supplements
   updateSupplementPhases: async (phases) => {
-    const { version, program } = get()
+    const { program } = get()
     const active = currentBlockId(program)
-    await api.updateSupplementPhases(version, phases.filter((phase) => recordBlock(phase, 'supplement_phases', program) === active))
+    await api.updateSupplementPhases(phases.filter((phase) => recordBlock(phase, 'supplement_phases', program) === active))
 
     set((state) => {
       if (!state.program) return state
@@ -396,8 +346,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Lift Profiles
   updateLiftProfiles: async (liftProfiles: LiftProfile[]) => {
-    const { version } = get()
-    await api.updateLiftProfiles(version, liftProfiles)
+    await api.updateLiftProfiles(liftProfiles)
 
     set((state) => {
       if (!state.program) return state
@@ -413,8 +362,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Sex
   setSex: async (sex: Sex) => {
-    const { version } = get()
-    await api.updateMetaField(version, 'sex', sex)
+    await api.updateMetaField('sex', sex)
 
     set((state) => {
       if (!state.program) return state
@@ -431,11 +379,11 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   },
 
   setWeekStartDay: async (day: WeekStartDay) => {
-    const { version, program } = get()
+    const { program } = get()
     const blockId = activeBlockId(program) ?? 'current'
     const blocks = (program?.meta.blocks ?? []).map((block) => String(block.id ?? block.block_id ?? '') === blockId ? { ...block, week_start_day: day } : block)
 
-    await api.updateMetaField(version, 'blocks', blocks)
+    await api.updateMetaField('blocks', blocks)
 
     set((state) => {
       if (!state.program) return state
@@ -453,8 +401,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Diet Notes
   updateDietNotes: async (dietNotes) => {
-    const { version } = get()
-    await api.updateDietNotes(version, dietNotes)
+    await api.updateDietNotes(dietNotes)
 
     set((state) => {
       if (!state.program) return state
@@ -470,8 +417,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
 
   // Block Notes
   updateBlockNotes: async (blockNotes) => {
-    const { version } = get()
-    await api.updateBlockNotes(version, blockNotes)
+    await api.updateBlockNotes(blockNotes)
 
     set((state) => {
       if (!state.program) return state
@@ -530,9 +476,7 @@ export const useProgramStore = create<ProgramState>((set, get) => ({
   reset: () =>
     set({
       program: null,
-      version: 'current',
-      versions: [],
-      isLoading: false,
+              isLoading: false,
       error: null,
       needsSetup: false,
       setupStatus: null,

@@ -223,18 +223,6 @@ func OperationResult(name string, value any, access Access) any {
 		if program, ok := value.(map[string]any); ok {
 			return ProgramView(program, access)
 		}
-	case "program_list_full":
-		if list, ok := value.([]any); ok {
-			out := make([]any, len(list))
-			for index, item := range list {
-				if program, ok := item.(map[string]any); ok {
-					out[index] = ProgramView(program, access)
-				} else {
-					out[index] = item
-				}
-			}
-			return out
-		}
 	case "program_update_meta_field":
 		if result, ok := value.(map[string]any); ok {
 			meta, _ := result["meta"].(map[string]any)

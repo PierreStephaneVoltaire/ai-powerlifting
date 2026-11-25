@@ -19,7 +19,7 @@ type exportReader struct{}
 
 func (exportReader) Get(_ context.Context, table, _, key string) (map[string]any, error) {
 	if table == "health" && key == "program#current" {
-		return map[string]any{"ref_sk": "program#v001", "version": 1}, nil
+		return map[string]any{"ref_sk": "program#v001"}, nil
 	}
 	if table == "health" && key == "program#v001" {
 		return map[string]any{"meta": map[string]any{"program_name": "Prep", "current_block_id": "active", "blocks": []any{map[string]any{"id": "active", "status": "active"}}, "block_notes": []any{map[string]any{"notes": "private note", "private": true}, map[string]any{"notes": "shared note"}}}}, nil

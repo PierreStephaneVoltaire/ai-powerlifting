@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import copy
 import re
 import uuid
@@ -14,13 +13,6 @@ from boto3.dynamodb.conditions import Key
 DEFAULT_BLOCK = "current"
 SESSION_SK_PREFIX = "session#"
 
-
-class SessionIdentityConflictError(Exception):
-    code = "session_identity_conflict"
-
-    def __init__(self, session_id: str, message: str):
-        self.session_id = session_id
-        super().__init__(message)
 
 def _to_dynamo(obj: Any) -> Any:
     if isinstance(obj, float):
@@ -107,17 +99,6 @@ def _phase_ref(phase: dict[str, Any]) -> str:
     name = str(phase.get("name") or "Unscheduled").replace("#", "-")
     return f"phase#{block}#W{phase.get('start_week', 0)}-W{phase.get('end_week', 0)}#{name}"
 
-def _program_version(program_sk: str) -> str:
-    return program_sk.removeprefix("program#") if program_sk.startswith("program#") else program_sk
-
-def _program_version_number(program_sk: str) -> int | None:
-    if not program_sk.startswith("program#v"):
-        return None
-    try:
-        return int(program_sk.removeprefix("program#v"))
-    except ValueError:
-        return None
-
 def _sanitize_decimals(obj):
     if isinstance(obj, Decimal):
         return float(obj) if obj % 1 > 0 else int(obj)
@@ -165,8 +146,6 @@ def _sort_key(item: dict[str, Any]) -> tuple[str, int, int, str]:
     )
 
 class SessionStore:
-    """Standalone session storage keyed by operator pk and program version."""
-
     def __init__(
         self,
         table_name: str,
@@ -185,55 +164,6 @@ class SessionStore:
         if self._table is None:
             self._table = dynamodb_resource("dynamodb", region_name=self._region).Table(self._table_name)
         return self._table
-
-    @property
-    def source_table(self):
-        """The if-health program table (program#current pointer + program phases)."""
-        if getattr(self, "_source_table", None) is None:
-            self._source_table = dynamodb_resource(
-                "dynamodb", region_name=self._region
-            ).Table(self._source_table_name)
-        return self._source_table
-
-    def resolve_program_sk_sync(self) -> str:
-        """Resolve the CURRENT program SK from the program#current pointer.
-
-        Mirrors backend sessionController.resolveVersionSk(version='current').
-        The session controller no longer handles program version (frontend
-        always operates on current), so the session operations call this to
-        find which program version the sessions are scoped to.
-        """
-        try:
-            resp = self.source_table.get_item(
-                Key={"pk": self._pk, "sk": "program#current"}
-            )
-            item = resp.get("Item") or {}
-            return str(item.get("ref_sk") or "program#v001")
-        except Exception:
-            return "program#v001"
-
-    async def resolve_program_sk(self) -> str:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.resolve_program_sk_sync
-        )
-
-    def load_phases_sync(self, program_sk: str) -> list[dict[str, Any]]:
-        """Load the phases array for a program version. Mirrors backend loadPhases."""
-        try:
-            resp = self.source_table.get_item(
-                Key={"pk": self._pk, "sk": program_sk},
-                ProjectionExpression="phases",
-            )
-            item = resp.get("Item") or {}
-            phases = item.get("phases")
-            return phases if isinstance(phases, list) else []
-        except Exception:
-            return []
-
-    async def load_phases(self, program_sk: str) -> list[dict[str, Any]]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.load_phases_sync(program_sk)
-        )
 
     def _prefix(self, program_sk: str) -> str:
         return f"{SESSION_SK_PREFIX}{program_sk}#"
@@ -256,49 +186,8 @@ class SessionStore:
             kwargs["ExclusiveStartKey"] = last_key
         return sorted(items, key=_sort_key)
 
-    def _query_items_in_window_sync(self, program_sk: str, start: str | None, end: str | None) -> list[dict[str, Any]]:
-        prefix = self._prefix(program_sk)
-        lower = f"{prefix}{start or ''}"
-        upper = f"{prefix}{end or chr(0x10ffff)}{chr(0x10ffff)}"
-        items: list[dict[str, Any]] = []
-        arguments: dict[str, Any] = {
-            "KeyConditionExpression": Key("pk").eq(self._pk) & Key("sk").between(lower, upper),
-        }
-        while True:
-            response = self.table.query(**arguments)
-            items.extend(response.get("Items", []))
-            last_key = response.get("LastEvaluatedKey")
-            if not last_key:
-                break
-            arguments["ExclusiveStartKey"] = last_key
-        return sorted(items, key=_sort_key)
-
-    async def list_sessions(
-        self,
-        program_sk: str,
-        phases: Optional[list[dict[str, Any]]] = None,
-        window_start: str | None = None,
-        window_end: str | None = None,
-        block_id: str | None = None,
-        active_block_id: str = DEFAULT_BLOCK) -> list[dict[str, Any]]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.list_sessions_sync(program_sk, phases, window_start, window_end, block_id, active_block_id)
-        )
-
-    def list_sessions_sync(
-        self,
-        program_sk: str,
-        phases: Optional[list[dict[str, Any]]] = None,
-        window_start: str | None = None,
-        window_end: str | None = None,
-        block_id: str | None = None,
-        active_block_id: str = DEFAULT_BLOCK) -> list[dict[str, Any]]:
-        items = self._query_items_in_window_sync(program_sk, window_start, window_end) if window_start or window_end else self._query_items_sync(program_sk)
-        sessions = [_public_session(item, phases) for item in items]
-        if not block_id:
-            return sessions
-        from services.runtime.block_scope import in_block
-        return [session for session in sessions if in_block(session, block_id, active_block_id)]
+    def list_sessions_sync(self, program_sk: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
+        return [_public_session(item, phases) for item in self._query_items_sync(program_sk)]
 
     def list_sessions_on_date_sync(self, program_sk: str, date_value: str, phases: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
         if not date_value:
@@ -307,16 +196,6 @@ class SessionStore:
 
     def _same_day_ordinal_sync(self, program_sk: str, date_value: str) -> int:
         return len(self._query_items_sync(program_sk, date_prefix=date_value)) + 1
-
-    def _ensure_unique_session_ids(self, sessions: list[dict[str, Any]], program_sk: str) -> None:
-        seen: set[str] = set()
-        for session in sessions:
-            session_id = str(session.get("session_id") or session.get("id") or "").strip()
-            if not session_id:
-                continue
-            if session_id in seen:
-                raise SessionIdentityConflictError(session_id, f"Session identity {session_id} occurs more than once")
-            seen.add(session_id)
 
     def _build_item(
         self,
@@ -385,8 +264,6 @@ class SessionStore:
             "source_pk": self._pk,
             "source_table": self._source_table_name,
             "program_sk": program_sk,
-            "program_version": _program_version(program_sk),
-            "program_version_number": _program_version_number(program_sk),
             "source_index": _int_value((existing_item or {}).get("source_index"), default=source_index),
             "same_day_ordinal": ordinal,
             "phase_ref": _phase_ref(phase),
@@ -421,39 +298,6 @@ class SessionStore:
         if session_item is not None and not delete:
             self.table.put_item(Item=_to_dynamo(session_item))
 
-    async def create_session(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.create_session_sync(program_sk, session, phases)
-        )
-
-    def create_session_sync(self, program_sk: str, session: dict[str, Any], phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
-        date_value = str(session.get("date") or "")
-        if not date_value:
-            raise ValueError("Session date is required")
-        existing = self._query_items_sync(program_sk)
-        item = self._build_item(program_sk, session, phases, source_index=len(existing))
-        existing_ids = {str(candidate.get("session_id") or candidate.get("id") or "").strip() for candidate in existing}
-        session_id = str(item.get("session_id") or "").strip()
-        if session_id and session_id in existing_ids:
-            raise SessionIdentityConflictError(session_id, f"Session identity {session_id} already exists")
-        self._write_sync(item, None)
-        result = _public_session(item, None)
-        result["phase"] = resolve_phase(result, phases)
-        return result
-
-    async def patch_session(
-        self,
-        program_sk: str,
-        date_value: str,
-        patch: dict[str, Any],
-        phases: Optional[list[dict[str, Any]]] = None,
-        index: int | None = None,
-        session_id: str | None = None,
-        media_update: bool = False) -> dict[str, Any]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.patch_session_sync(program_sk, date_value, patch, phases, index, media_update, session_id)
-        )
-
     def patch_session_sync(
         self,
         program_sk: str,
@@ -475,51 +319,3 @@ class SessionStore:
         result = _public_session(item, None)
         result["phase"] = resolve_phase(result, phases)
         return result
-
-    async def delete_session(self, program_sk: str, date_value: str, index: int | None = None, session_id: str | None = None) -> dict[str, Any]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.delete_session_sync(program_sk, date_value, index, session_id)
-        )
-
-    def delete_session_sync(self, program_sk: str, date_value: str, index: int | None = None, session_id: str | None = None) -> dict[str, Any]:
-        existing = self._find_item_sync(program_sk, date_value, index, session_id)
-        self._write_sync(None, existing, delete=True)
-        return {"deleted": date_value}
-
-    async def replace_program_sessions(
-        self,
-        program_sk: str,
-        sessions: list[dict[str, Any]],
-        phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any] | None:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.replace_program_sessions_sync(program_sk, sessions, phases)
-        )
-
-    def replace_program_sessions_sync(
-        self,
-        program_sk: str,
-        sessions: list[dict[str, Any]],
-        phases: Optional[list[dict[str, Any]]] = None) -> dict[str, Any] | None:
-        existing = self._query_items_sync(program_sk)
-        self._ensure_unique_session_ids(existing, program_sk)
-        ordinals: dict[str, int] = {}
-        prepared = []
-        for source_index, session in enumerate(sessions):
-            if not isinstance(session, dict) or not session.get("date"):
-                raise ValueError("Every Session must have a date")
-            date_value = str(session["date"])
-            ordinals[date_value] = ordinals.get(date_value, 0) + 1
-            same_day = [item for item in existing if item.get("date") == date_value]
-            previous = next((item for item in existing if session.get("id") and item.get("session_id") == session["id"]), None)
-            if previous is None and len(same_day) >= ordinals[date_value]:
-                previous = same_day[ordinals[date_value] - 1]
-            prepared.append(self._build_item(program_sk, session, phases, source_index=source_index, same_day_ordinal=ordinals[date_value], existing_item=previous))
-        self._ensure_unique_session_ids(prepared, program_sk)
-        prepared_keys = {str(item["sk"]) for item in prepared}
-        with self.table.batch_writer() as batch:
-            for item in existing:
-                if str(item["sk"]) not in prepared_keys:
-                    batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
-            for item in prepared:
-                        batch.put_item(Item=_to_dynamo(item))
-        return None

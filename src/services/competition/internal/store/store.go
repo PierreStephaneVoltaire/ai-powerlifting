@@ -32,7 +32,6 @@ type Entries interface {
 type Programs interface {
 	Pointer(ctx context.Context, pk string) (Item, error)
 	Item(ctx context.Context, pk, sk string) (Item, error)
-	Versions(ctx context.Context, pk string) ([]Item, error)
 	Sessions(ctx context.Context, pk, programSK string) ([]Item, error)
 	GlossaryEntries(ctx context.Context, pk string) ([]Item, error)
 }
@@ -43,7 +42,6 @@ type AnalysisVersions interface {
 
 const (
 	PointerSK         = "program#current"
-	ProgramSKPrefix   = "program#v"
 	SessionSKPrefix   = "session#"
 	EntrySKPrefix     = "COMP#"
 	GlossarySKPrefix  = "EXERCISE#"

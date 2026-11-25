@@ -14,7 +14,6 @@ import (
 
 const (
 	pointerSK    = "program#current"
-	fallbackSK   = "program#v001"
 	defaultBlock = "current"
 	unscheduled  = "Unscheduled"
 )
@@ -27,36 +26,28 @@ var internalFields = []string{
 }
 
 type Program struct {
-	SK        string
-	Item      map[string]any
-	Published bool
+	SK   string
+	Item map[string]any
 }
 
 func (v *Views) ProgramSK(ctx context.Context, athlete string) (string, error) {
 	pointer, err := v.DB.Get(ctx, v.DB.Tables.Health, store.PKSK(athlete, pointerSK))
 	if err != nil || pointer == nil {
-		return fallbackSK, err
+		return "", err
 	}
-	if ref := value.Str(value.Or(pointer["ref_sk"], fallbackSK)); ref != "" {
-		return ref, nil
-	}
-	return fallbackSK, nil
+	return value.Str(value.Or(pointer["ref_sk"], "")), nil
 }
 
 func (v *Views) CurrentProgram(ctx context.Context, athlete string) (string, map[string]any, error) {
 	sk, err := v.ProgramSK(ctx, athlete)
-	if err != nil {
-		return "", nil, err
+	if err != nil || sk == "" {
+		return sk, nil, err
 	}
 	item, err := v.DB.Get(ctx, v.DB.Tables.Health, store.PKSK(athlete, sk))
 	if err != nil || item == nil {
 		return sk, nil, err
 	}
-	program := value.Sanitize(item).(map[string]any)
-	if published, ok := program["published"].(bool); ok && !published {
-		return sk, nil, nil
-	}
-	return sk, program, nil
+	return sk, value.Sanitize(item).(map[string]any), nil
 }
 
 func intOf(v any, fallback int) int { return value.IntOf(v, fallback) }

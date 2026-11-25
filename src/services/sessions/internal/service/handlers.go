@@ -37,7 +37,7 @@ func selector(arguments map[string]any, withIndex bool) session.Selector {
 
 func (s *Service) scope(ctx context.Context, arguments map[string]any) (string, session.Scope, error) {
 	pk := athleteOf(arguments)
-	scope, err := s.sessions.Resolve(ctx, pk, text(arguments, "program_sk"))
+	scope, err := s.sessions.Resolve(ctx, pk)
 	return pk, scope, err
 }
 
@@ -80,7 +80,7 @@ func (s *Service) list(ctx context.Context, arguments map[string]any) (any, erro
 		limit = value.IntOf(raw, defaultLimit)
 	}
 	limit = max(1, min(maxLimit, limit))
-	return s.sessions.List(ctx, athleteOf(arguments), text(arguments, "program_sk"), limit)
+	return s.sessions.List(ctx, athleteOf(arguments), limit)
 }
 
 func (s *Service) listFull(ctx context.Context, arguments map[string]any) (any, error) {

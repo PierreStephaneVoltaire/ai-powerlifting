@@ -7,7 +7,7 @@ import type { LiftProfileVideoAngle } from '@powerlifting/types'
 export const videoUploadsRouter = Router({ mergeParams: true })
 export const videoMimeTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo']
 
-type Params = { version: string; sessionDate: string; videoId?: string; partNumber?: string }
+type Params = { sessionDate: string; videoId?: string; partNumber?: string }
 
 interface UploadBody {
   filename?: string
@@ -50,7 +50,7 @@ videoUploadsRouter.post('/', async (req: Request<Params>, res, next) => {
       return res.status(413).json({ data: null, error: 'Video size must be between 1 byte and 500 MB' })
     }
     const session = await uploads.startVideoUpload(
-      req.mapped_pk!, req.params.version, req.params.sessionDate, body.filename, body.mimeType, body.size, uploadTarget(req, body),
+      req.mapped_pk!, req.params.sessionDate, body.filename, body.mimeType, body.size, uploadTarget(req, body),
     )
     res.json({ data: session, error: null })
   } catch (err) {
@@ -80,7 +80,7 @@ videoUploadsRouter.post('/:videoId/complete', async (req: Request<Params>, res, 
     const parts = normalizeParts(body.parts)
     if (!ref || !parts) return res.status(400).json({ data: null, error: 'Invalid upload completion request' })
     const video = await uploads.completeVideoUpload(
-      req.mapped_pk!, req.params.version, req.params.sessionDate, req.params.videoId!, ref.s3Key, ref.uploadId, parts,
+      req.mapped_pk!, req.params.sessionDate, req.params.videoId!, ref.s3Key, ref.uploadId, parts,
       {
         exerciseName: body.exerciseName || undefined,
         setNumber: typeof body.setNumber === 'number' ? body.setNumber : undefined,

@@ -404,7 +404,7 @@ function SortableExercise({ ex, onRemove, onPatch, onMoveUp, onMoveDown, canMove
 
 export default function DesignerPage() {
   const { readOnly } = useAuth()
-  const { program, version, createSession } = useProgramStore()
+  const { program, createSession } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -577,7 +577,7 @@ export default function DesignerPage() {
         
         try {
           // Optimistically attempt to create
-          await api.createSession(version, {
+          await api.createSession({
             date: targetDate,
             day: getDayOfWeek(targetDate),
             week: `W${selectedWeek}`,
@@ -600,7 +600,7 @@ export default function DesignerPage() {
               const existingIndex = program?.sessions.findIndex(s => s.date === targetDate) ?? -1
 
               if (copyCollisionMode === 'overwrite') {
-                await api.updateSession(version, targetDate, existingIndex, {
+                await api.updateSession(targetDate, existingIndex, {
                   ...existing,
                   week: `W${selectedWeek}`,
                   week_number: selectedWeek,
@@ -609,7 +609,7 @@ export default function DesignerPage() {
                 }, api.sessionTarget(existing.id))
               } else {
                 const combined = [...(existing.planned_exercises || []), ...(src.planned_exercises || [])]
-                await api.updateSession(version, targetDate, existingIndex, {
+                await api.updateSession(targetDate, existingIndex, {
                   ...existing,
                   week: `W${selectedWeek}`,
                   week_number: selectedWeek,
@@ -626,7 +626,7 @@ export default function DesignerPage() {
 
       setIsCopyModalOpen(false)
       pushToast({ message: `Sessions copied to Week ${selectedWeek}`, type: 'success' })
-      useProgramStore.getState().loadProgram(version)
+      useProgramStore.getState().loadProgram()
     } catch (err) {
       console.error('Copy failed:', err)
       pushToast({ message: 'Failed to copy sessions: ' + err, type: 'error' })
@@ -700,17 +700,17 @@ export default function DesignerPage() {
         if (editingSessionGlobalIndex < 0) {
           throw new Error('Could not resolve the session index for update')
         }
-        await api.updatePlannedExercises(version, editingSessionDate, editingSessionGlobalIndex, exercisesToSave, api.sessionTarget(editingSession.id))
+        await api.updatePlannedExercises(editingSessionDate, editingSessionGlobalIndex, exercisesToSave, api.sessionTarget(editingSession.id))
         if (dateStr !== editingSessionDate) {
-          await useProgramStore.getState().loadProgram(version)
-          await api.rescheduleSession(version, editingSessionDate, editingSessionGlobalIndex, dateStr, day, api.sessionTarget(editingSession.id))
+          await useProgramStore.getState().loadProgram()
+          await api.rescheduleSession(editingSessionDate, editingSessionGlobalIndex, dateStr, day, api.sessionTarget(editingSession.id))
         }
       } else {
         await createSession(sessionData)
       }
 
       closeSessionEditor()
-      useProgramStore.getState().loadProgram(version)
+      useProgramStore.getState().loadProgram()
     } catch (err) {
       console.error('Failed to save session:', err)
       pushToast({ message: 'Failed to save session', type: 'error' })
@@ -1030,10 +1030,10 @@ export default function DesignerPage() {
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
                     try {
-                      await api.deleteSession(version, editingSessionDate, editingSessionGlobalIndex, api.sessionTarget(editingSession.id))
+                      await api.deleteSession(editingSessionDate, editingSessionGlobalIndex, api.sessionTarget(editingSession.id))
                       pushToast({ message: 'Session deleted successfully', type: 'success' })
                       closeSessionEditor()
-                      useProgramStore.getState().loadProgram(version)
+                      useProgramStore.getState().loadProgram()
                     } catch (err) {
                       console.error('Failed to delete session:', err)
                       pushToast({ message: 'Failed to delete session', type: 'error' })

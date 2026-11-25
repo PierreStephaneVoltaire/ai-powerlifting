@@ -230,7 +230,6 @@ function BlockAnalysisDetails({
   bundle,
   unit,
   program,
-  version,
   sex,
   onBundleUpdated,
   readOnly = false,
@@ -240,7 +239,6 @@ function BlockAnalysisDetails({
   bundle: BlockAnalysisBundle
   unit: WeightUnit
   program: Program | null
-  version: string
   sex: 'male' | 'female'
   onBundleUpdated: (bundle: BlockAnalysisBundle) => void
   readOnly?: boolean
@@ -532,7 +530,6 @@ function BlockAnalysisDetails({
         bundle={bundle}
         unit={unit}
         sex={sex}
-        version={version}
         readOnlyAthlete={viewAthlete}
         publicView={publicView}
       />
@@ -541,7 +538,7 @@ function BlockAnalysisDetails({
 }
 
 export function PastBlocksPanel({ unit, readOnly = false, viewAthlete, viewProgram, viewSex, publicView = false }: { unit: WeightUnit; readOnly?: boolean; viewAthlete?: string; viewProgram?: Program | null; viewSex?: 'male' | 'female' | null; publicView?: boolean }) {
-  const { program: ownProgram, version } = useProgramStore()
+  const { program: ownProgram } = useProgramStore()
   const { sex: ownSex } = useSettingsStore()
   const program = viewAthlete ? viewProgram ?? null : ownProgram
   const sex = viewAthlete ? viewSex ?? ownSex : ownSex
@@ -690,8 +687,7 @@ export function PastBlocksPanel({ unit, readOnly = false, viewAthlete, viewProgr
           bundle={bundle}
           unit={unit}
           program={program}
-          version={version}
-          sex={sex}
+            sex={sex}
           onBundleUpdated={setBundle}
           readOnly={readOnly}
           viewAthlete={viewAthlete}

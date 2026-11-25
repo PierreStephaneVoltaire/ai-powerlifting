@@ -37,7 +37,6 @@ export default function VideoUploadModal({
   initialSetNumber,
 }: VideoUploadModalProps) {
   const { pushToast } = useUiStore()
-  const { version } = useProgramStore()
   const [file, setFile] = useState<File | null>(null)
   const [exerciseName, setExerciseName] = useState<string>('')
   const [setNumber, setSetNumber] = useState<number | undefined>()
@@ -128,7 +127,7 @@ export default function VideoUploadModal({
     if (!file) return
     const key = uploadId
     setIsUploading(true)
-    const video = await startUpload(version, {
+    const video = await startUpload({
       file,
       sessionDate: session.date,
       sessionId: session.id,

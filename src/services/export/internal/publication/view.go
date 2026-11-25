@@ -223,7 +223,7 @@ func MarkdownView(program map[string]any, access Access) map[string]any {
 		allowed["sex"] = true
 	}
 	if permissions["program:read"] {
-		for _, field := range []string{"program_start", "version_label", "training_notes", "change_log", "block_notes"} {
+		for _, field := range []string{"program_start", "training_notes", "change_log", "block_notes"} {
 			allowed[field] = true
 		}
 	}

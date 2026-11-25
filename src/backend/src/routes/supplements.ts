@@ -5,18 +5,18 @@ import type { SupplementPhase } from '@powerlifting/types'
 
 export const supplementsRouter = Router({ mergeParams: true })
 
-// GET /api/supplements/:version - Get supplement phases
-supplementsRouter.get('/:version', cacheGet((req) => [`supplements:${req.params.version}`]), async (req, res, next) => {
+// GET /api/supplements/current - Get supplement phases
+supplementsRouter.get('/current', cacheGet((req) => [`supplements:current`]), async (req, res, next) => {
   try {
-    const phases = await supplementController.getSupplementPhases(req.mapped_pk!, req.params.version)
+    const phases = await supplementController.getSupplementPhases(req.mapped_pk!)
     res.json({ data: phases, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// PUT /api/supplements/:version - Update all supplement phases
-supplementsRouter.put('/:version', invalidateAfter((req) => [`supplements:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/supplements/current - Update all supplement phases
+supplementsRouter.put('/current', invalidateAfter((req) => [`supplements:current`]), async (req, res, next) => {
   try {
     const { phases } = req.body
 
@@ -29,7 +29,6 @@ supplementsRouter.put('/:version', invalidateAfter((req) => [`supplements:${req.
 
     const result = await supplementController.updateSupplementPhases(
       req.mapped_pk!,
-      req.params.version,
       phases as SupplementPhase[]
     )
     res.json({ data: result, error: null })

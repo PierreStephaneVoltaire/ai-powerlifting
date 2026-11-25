@@ -75,21 +75,6 @@ func ResolvePhase(session map[string]any, phases []any) map[string]any {
 	return map[string]any{"name": "Unscheduled", "intent": "", "start_week": int64(week), "end_week": int64(week), "block": block}
 }
 
-func programVersion(programSK string) string {
-	return strings.TrimPrefix(programSK, "program#")
-}
-
-func programVersionNumber(programSK string) any {
-	if !strings.HasPrefix(programSK, "program#v") {
-		return nil
-	}
-	number, err := strconv.Atoi(strings.TrimPrefix(programSK, "program#v"))
-	if err != nil {
-		return nil
-	}
-	return int64(number)
-}
-
 var internalSessionFields = []string{"pk", "sk", "entity_type", "source_pk", "source_table", "program_sk", "program_version", "program_version_number", "source_index", "same_day_ordinal", "phase_ref", "session_id"}
 
 func PublicSession(item map[string]any, phases []any) map[string]any {
@@ -270,8 +255,6 @@ func (s Sessions) buildItem(athlete, programSK string, session map[string]any, p
 	item["source_pk"] = athlete
 	item["source_table"] = string(s.Tables.Health)
 	item["program_sk"] = programSK
-	item["program_version"] = programVersion(programSK)
-	item["program_version_number"] = programVersionNumber(programSK)
 	item["source_index"] = int64(sourceIndex)
 	item["same_day_ordinal"] = int64(ordinal)
 	item["phase_ref"] = phaseRef(phase)
@@ -329,13 +312,13 @@ func firstTruthy(values ...any) any {
 
 var ErrSessionDate = fmt.Errorf("Every Session must have a date")
 
-func (s Sessions) WriteFresh(ctx context.Context, athlete, programSK string, sessions []any, phases []any) error {
+func (s Sessions) prepare(athlete, programSK string, sessions []any, phases []any) ([]Item, error) {
 	ordinals := map[string]int{}
 	prepared := make([]Item, 0, len(sessions))
 	for index, raw := range sessions {
 		session, ok := raw.(map[string]any)
 		if !ok || !pyval.Truthy(session["date"]) {
-			return ErrSessionDate
+			return nil, ErrSessionDate
 		}
 		date := pyval.Str(session["date"])
 		ordinals[date]++
@@ -346,10 +329,48 @@ func (s Sessions) WriteFresh(ctx context.Context, athlete, programSK string, ses
 		asList[index] = item
 	}
 	if err := ValidateIdentities(asList); err != nil {
+		return nil, err
+	}
+	return prepared, nil
+}
+
+func (s Sessions) WriteFresh(ctx context.Context, athlete, programSK string, sessions []any, phases []any) error {
+	prepared, err := s.prepare(athlete, programSK, sessions, phases)
+	if err != nil {
 		return err
 	}
 	if len(prepared) == 0 {
 		return nil
 	}
 	return s.DB.BatchPut(ctx, s.Tables.Sessions, prepared)
+}
+
+func (s Sessions) Sync(ctx context.Context, athlete, programSK string, sessions []any, phases []any) error {
+	prepared, err := s.prepare(athlete, programSK, sessions, phases)
+	if err != nil {
+		return err
+	}
+	if len(prepared) > 0 {
+		if err := s.DB.BatchPut(ctx, s.Tables.Sessions, prepared); err != nil {
+			return err
+		}
+	}
+	keep := make(map[string]bool, len(prepared))
+	for _, item := range prepared {
+		keep[pyval.Str(item["sk"])] = true
+	}
+	existing, err := s.DB.Query(ctx, Query{Table: s.Tables.Sessions, PK: athlete, Prefix: sessionPrefix + programSK + "#", Consistent: true})
+	if err != nil {
+		return err
+	}
+	var stale []Key
+	for _, item := range existing {
+		if sk := pyval.Str(item["sk"]); !keep[sk] {
+			stale = append(stale, Key{PK: athlete, SK: sk})
+		}
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	return s.DB.BatchDelete(ctx, s.Tables.Sessions, stale)
 }

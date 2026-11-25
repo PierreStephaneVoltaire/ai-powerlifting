@@ -18,7 +18,6 @@ export interface ProgramMeta {
   federation: string
   practicing_for: string
   weight_classes_kg?: number[]
-  version_label: string
   sex?: Sex
   weight_class_kg: number
   weight_class_confirm_by: string
@@ -807,16 +806,6 @@ export interface ApiResponse<T> {
   data: T
   error?: string
 }
-
-export interface ProgramListItem {
-  version: string           // 'v001' or 'current'
-  sk: string                // 'program#v001'
-  updated_at: string
-  version_label: string
-  is_current?: boolean      // true if this is the current/active version
-  archived?: boolean
-}
-
 
 export interface GlossaryStore {
   pk: string

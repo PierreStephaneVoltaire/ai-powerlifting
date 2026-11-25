@@ -28,7 +28,7 @@ export function RelationshipRoster() {
   const select = async (item: RelationshipRequest) => {
     try {
       const state = useProgramStore.getState()
-      if (state.isDirty && state.program) await saveDraft(`program:${state.version}`, state.program)
+      if (state.isDirty && state.program) await saveDraft(`program:current`, state.program)
       await auth.selectAthlete(item.athlete_mapped_pk)
       navigate(auth.user?.active_role === 'handler' ? '/athlete' : '/sessions')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not select Athlete') }
