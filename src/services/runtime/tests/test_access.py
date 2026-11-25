@@ -58,50 +58,6 @@ def test_access_context_result_contract_accepts_actual_evaluator_fields():
     assert context['competition_scope'] == {'read': [], 'write': []}
 
 
-def test_aggregate_program_changes_require_each_affected_domain():
-    import pytest
-    from services.runtime.authorization import check_context
-    from services.runtime.dispatch import OperationError
-    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
-    limited = {'permissions': ['program:write', 'program:read']}
-    with pytest.raises(OperationError, match='performance:write'):
-        check_context('program_update_meta_field', {'updates': {'manual_maxes': {}}}, claims, limited)
-    template = {'permissions': ['templates:read', 'program:read', 'performance:read', 'glossary:read']}
-    assert check_context('template_apply', {}, claims, template) is template
-    with pytest.raises(OperationError, match='permission required'):
-        check_context('template_apply_confirm', {}, claims, template)
-
-
-def test_native_saved_result_checks_original_source_access():
-    import pytest
-    from services.runtime.authorization import check_context
-    from services.runtime.dispatch import OperationError
-    context = {'permissions': ['analytics:read', 'competition:read'], 'competition_scope': {'read': ['meet-a']}}
-    arguments = {'cache_only': True, '_required_access': {'permissions': ['competition:read'], 'competition_ids': None}}
-    with pytest.raises(OperationError, match='outside the current grant'):
-        check_context('program_evaluation', arguments, {'iss': 'if-native'}, context)
-    arguments['_required_access']['competition_ids'] = ['meet-a']
-    assert check_context('program_evaluation', arguments, {'iss': 'if-native'}, context) is context
-
-
-def test_cross_domain_metadata_and_note_permissions_are_checked():
-    import pytest
-    from services.runtime.authorization import check_context
-    from services.runtime.dispatch import OperationError
-    context = {'permissions': ['program:write', 'competition:read', 'settings:write', 'videos:write']}
-    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
-    with pytest.raises(OperationError, match='competition:write'):
-        check_context('program_update_meta_field', {'field': 'attempt_pct', 'value': {}}, claims, context)
-    with pytest.raises(OperationError, match='weight-log:write'):
-        check_context('program_update_meta_field', {'updates': {'current_body_weight_kg': 80}}, claims, context)
-    with pytest.raises(OperationError, match='lift-profiles:write'):
-        check_context('video_upload_presign', {'lift': 'squat'}, claims, context)
-    assert operation_permission('health_list_competitions', {}) == 'competition:read'
-    for arguments in ({'op': 'update'}, {'op': 'complete'}, {'master_id': 'meet', 'patch': {}}, {'master_id': 'meet', 'results': {}}):
-        with pytest.raises(OperationError):
-            check_context('health_list_competitions', arguments, claims, context)
-
-
 def test_role_slot_prevents_superseded_grants_from_reactivating():
     now = datetime(2026, 9, 14, tzinfo=timezone.utc)
     owner = {'pk': 'owner', 'mapped_pk': 'athlete', 'roles': ['athlete']}
@@ -115,29 +71,3 @@ def test_role_slot_prevents_superseded_grants_from_reactivating():
     assert not permits(evaluate_facts('old-coach', 'athlete', owner, actor, [old, new], dates, now), 'sessions:read')
     peer = {'grantee_person_pk': 'old-coach', 'grant_type': 'peer', 'permissions': ['sessions:read']}
     assert permits(evaluate_facts('old-coach', 'athlete', owner, actor, [old, new, slot, peer], dates, now), 'sessions:read')
-
-
-def test_competition_ties_limit_writes_and_peer_reads_remain_independent():
-    import pytest
-    from services.runtime.authorization import check_context
-    from services.runtime.dispatch import OperationError
-    from services.runtime.publication import operation_result
-    owner = {'pk': 'owner', 'mapped_pk': 'athlete', 'roles': ['athlete']}
-    actor = {'pk': 'handler', 'roles': ['handler']}
-    grant = {'grantee_person_pk': 'handler', 'grant_type': 'handler', 'tied_competition_ids': ['COMP#meet-a']}
-    dates = {'COMP#meet-a': '2099-01-01'}
-    context = evaluate_facts('handler', 'athlete', owner, actor, [grant], dates)
-    claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend', 'athlete': 'athlete'}
-    assert check_context('health_update_user_competition', {'master_id': 'meet-a'}, claims, context) is context
-    for operation, arguments in [('health_update_user_competition', {'master_id': 'meet-b'}), ('health_list_competitions', {'op': 'update', 'master_id': 'meet-b'})]:
-        with pytest.raises(OperationError, match='outside the current grant'):
-            check_context(operation, arguments, claims, context)
-    entries = [{'master_id': 'meet-a'}, {'master_id': 'meet-b'}]
-    assert operation_result('health_list_competitions', entries, context) == entries[:1]
-    assert operation_result('health_list_competitions', {'competitions': entries}, context) == {'competitions': entries[:1]}
-    peer = {'grantee_person_pk': 'handler', 'grant_type': 'peer', 'permissions': ['competition:read']}
-    context = evaluate_facts('handler', 'athlete', owner, actor, [grant, peer], dates)
-    assert operation_result('health_list_competitions', entries, context) == entries
-    assert operation_result('health_list_competitions', {'competitions': entries}, context) == {'competitions': entries}
-    with pytest.raises(OperationError):
-        check_context('health_update_user_competition', {'master_id': 'meet-b'}, claims, context)

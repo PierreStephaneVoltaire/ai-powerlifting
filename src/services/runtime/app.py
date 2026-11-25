@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from jsonschema import ValidationError
 
-from .contract import JOB_SUBMITTED_SCHEMA, load_operations
+from .contract import load_operations
 from .dispatch import OperationError, authorize, dispatch
 from . import execution
 from .authorization import check_context
@@ -16,8 +16,6 @@ from .access import permission_map
 from .access_store import current_context
 from .mesh import caller
 from .job_token import JobTokenRejected, MeshIdentity, resolve_mcp_identity
-from services.runtime.session_store import SessionIdentityConflictError
-from services.runtime.program_store import ProgramNotFoundError
 
 
 DOMAIN = os.environ["PL_DOMAIN"]
@@ -34,8 +32,6 @@ async def authorization_context(name: str, arguments: dict[str, Any], person: st
     claims = {'sub': person, 'athlete': athlete, 'caller': caller(source)}
     access = await asyncio.to_thread(current_context, person, athlete)
     check_context(name, arguments, claims, access)
-    if name == 'access_context' and arguments.get('operation'):
-        check_context(arguments['operation'], arguments.get('arguments') or {}, claims, access)
     return claims, access
 
 
@@ -43,7 +39,6 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
     if name not in OPERATIONS:
         raise HTTPException(404, "Unknown operation")
     operation = OPERATIONS[name]
-    access = {}
     try:
         if any(key in arguments for key in ('_person_pk', '_access', '_if_job_id')):
             raise OperationError(403, 'forbidden', 'Reserved authorization fields cannot be supplied')
@@ -60,23 +55,9 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
             return await execution.dispatch_nested(operation, arguments, athlete, job_id)
         if job_id:
             return await execution.start(operation, arguments, athlete, job_id)
-        if operation.execution == "ai":
-            return await execution.submit(operation, arguments, athlete, person)
         return await asyncio.to_thread(dispatch, operation, arguments)
     except OperationError as exc:
-        details = dict(exc.details)
-        record = details.get('current_record')
-        if isinstance(record, dict):
-            from .publication import program_view, session_view
-            if 'meta' in record and (operation.domain != 'templates' or name == 'template_apply_confirm'):
-                details['current_record'] = program_view(record, access)
-            elif operation.domain == 'sessions':
-                details['current_record'] = session_view(record, access)
-        raise HTTPException(exc.status, jsonable_encoder({"code": exc.code, "message": exc.message, **details}))
-    except SessionIdentityConflictError as exc:
-        raise HTTPException(409, jsonable_encoder({'code': exc.code, 'message': str(exc)}))
-    except ProgramNotFoundError as exc:
-        raise HTTPException(404, {"code": "not_found", "message": str(exc)})
+        raise HTTPException(exc.status, jsonable_encoder({"code": exc.code, "message": exc.message, **exc.details}))
     except ValidationError as exc:
         raise HTTPException(422, {"code": "validation", "message": exc.message})
     except ValueError as exc:
@@ -85,8 +66,7 @@ async def call(name: str, arguments: dict[str, Any], athlete: str, person: str, 
 
 @app.post("/operations/{name}")
 async def operation(name: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_person_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_pl_nested_operation: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
-    result = await call(name, arguments, x_athlete_pk, x_person_pk, x_if_turn_id or x_if_job_id, x_pl_nested_operation == "true", x_pl_source_principal)
-    return JSONResponse(result, status_code=202) if isinstance(result, dict) and "job_id" in result and not result.get("cached") else result
+    return await call(name, arguments, x_athlete_pk, x_person_pk, x_if_turn_id or x_if_job_id, x_pl_nested_operation == "true", x_pl_source_principal)
 
 
 @app.post("/mcp")
@@ -105,7 +85,7 @@ async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": [{"name": op.name, "description": op.description, "inputSchema": op.input_schema, **({"outputSchema": JOB_SUBMITTED_SCHEMA if op.execution == "ai" else op.result_schema} if op.execution == "ai" or op.result_schema.get("type") == "object" else {})} for op in OPERATIONS.values() if not permission_map().get(op.name, {}).get("internal_only")]}
+        result = {"tools": [{"name": op.name, "description": op.description, "inputSchema": op.input_schema, **({"outputSchema": op.result_schema} if op.result_schema.get("type") == "object" else {})} for op in OPERATIONS.values() if not permission_map().get(op.name, {}).get("internal_only")]}
     elif method == "tools/call":
         params = body.get("params") or {}
         try:
@@ -121,14 +101,14 @@ async def mcp(request: Request, x_athlete_pk: str = Header(default=""), x_person
 
 
 def openapi():
-    return {"openapi": "3.1.0", "info": {"title": app.title, "version": "1.0.0"}, "paths": {f"/operations/{op.name}": {"post": {"operationId": op.name, "summary": op.description, "requestBody": {"required": True, "content": {"application/json": {"schema": op.input_schema}}}, "responses": {**({"202": {"description": "Queued execution", "content": {"application/json": {"schema": JOB_SUBMITTED_SCHEMA}}}} if op.execution == "ai" else {}), "200": {"description": "Domain result", "content": {"application/json": {"schema": op.result_schema}}}}}} for op in OPERATIONS.values()}}
+    return {"openapi": "3.1.0", "info": {"title": app.title, "version": "1.0.0"}, "paths": {f"/operations/{op.name}": {"post": {"operationId": op.name, "summary": op.description, "requestBody": {"required": True, "content": {"application/json": {"schema": op.input_schema}}}, "responses": {"200": {"description": "Domain result", "content": {"application/json": {"schema": op.result_schema}}}}}} for op in OPERATIONS.values()}}
 
 
 app.openapi = openapi
 
 
 @app.post("/executions/{execution_id}")
-async def resume(execution_id: str, arguments: dict[str, Any], x_athlete_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
+async def resume(execution_id: str, x_athlete_pk: str = Header(default=""), x_if_job_id: str = Header(default=""), x_if_turn_id: str = Header(default=""), x_person_pk: str = Header(default=""), x_pl_source_principal: str = Header(default="")):
     try:
         active = execution.executions.get(execution_id)
         if active is None:
@@ -136,7 +116,7 @@ async def resume(execution_id: str, arguments: dict[str, Any], x_athlete_pk: str
         claims, _ = await authorization_context('domain_resume', {'operation': active.operation}, x_person_pk, x_athlete_pk, x_pl_source_principal)
         if active.person != claims['sub'] or active.athlete != claims['athlete']:
             raise OperationError(403, 'forbidden', 'Execution belongs to another Person')
-        return await execution.resume(execution_id, x_if_turn_id or x_if_job_id, x_athlete_pk, arguments.get("challenge_id"), arguments.get("content"))
+        return await execution.resume(execution_id, x_if_turn_id or x_if_job_id, x_athlete_pk)
     except OperationError as exc:
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message})
     except ValueError as exc:

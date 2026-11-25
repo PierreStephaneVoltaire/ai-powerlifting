@@ -60,15 +60,3 @@ def test_internal_operations_are_backend_only():
         with pytest.raises(OperationError) as denied:
             check_context('identity_resolve', {}, {'caller': caller(source)}, context)
         assert denied.value.status == 403
-
-
-def test_access_context_authorizes_a_named_operation(monkeypatch):
-    module = services_app(monkeypatch, 'profile')
-    monkeypatch.setattr(module, 'dispatch', lambda operation, arguments: arguments['_access'])
-    monkeypatch.setattr(module, 'current_context', lambda person, athlete: {'permissions': ['sessions:read']})
-    headers = {'X-Person-Pk': 'person', 'X-Athlete-Pk': 'athlete', 'X-PL-Source-Principal': COACH}
-    with TestClient(module.app) as client:
-        assert client.post('/operations/access_context', headers=headers, json={}).json() == {'permissions': ['sessions:read']}
-        assert client.post('/operations/access_context', headers=headers, json={'operation': 'session_list', 'arguments': {}}).status_code == 200
-        assert client.post('/operations/access_context', headers=headers, json={'operation': 'session_patch', 'arguments': {}}).status_code == 403
-        assert client.post('/operations/access_context', headers=headers, json={'operation': 'identity_resolve', 'arguments': {}}).status_code == 403
