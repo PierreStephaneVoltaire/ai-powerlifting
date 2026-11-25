@@ -63,8 +63,8 @@ export async function fetchViewedProgram(athlete: string): Promise<Program> {
   return response.data.data
 }
 
-export async function fetchViewedWeightLog(athlete: string, version: string): Promise<WeightEntry[]> {
-  const response = await api.get(`/weight/${version}`, { powerliftingViewAthlete: athlete })
+export async function fetchViewedWeightLog(athlete: string): Promise<WeightEntry[]> {
+  const response = await api.get(`/weight/current`, { powerliftingViewAthlete: athlete })
   return response.data.data.entries
 }
 

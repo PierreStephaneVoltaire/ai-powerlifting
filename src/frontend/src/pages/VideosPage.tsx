@@ -11,7 +11,6 @@ import { useVideoModalFromUrl } from '@/utils/useVideoModalFromUrl'
 import type { VideoLibraryItem } from '@powerlifting/types'
 
 export default function VideosPage() {
-  const { version } = useProgramStore()
   const [videos, setVideos] = useState<VideoLibraryItem[]>([])
   const [exercises, setExercises] = useState<string[]>([])
   const [exerciseFilter, setExerciseFilter] = useState<string | null>(null)
@@ -23,7 +22,7 @@ export default function VideosPage() {
   const loadVideos = useCallback(async () => {
     setIsLoading(true)
     try {
-      const result = await api.getVideos(version, exerciseFilter || undefined, sortOrder)
+      const result = await api.getVideos(exerciseFilter || undefined, sortOrder)
       setVideos(result.videos)
       setExercises(result.exercises)
     } catch (err) {
@@ -31,7 +30,7 @@ export default function VideosPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [version, exerciseFilter, sortOrder])
+  }, [exerciseFilter, sortOrder])
 
   useEffect(() => {
     loadVideos()

@@ -229,7 +229,7 @@ function mergeWeeklySections(
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
-  const { program, version } = useProgramStore()
+  const { program } = useProgramStore()
   const { unit, sex } = useSettingsStore()
   const { readOnly } = useAuth()
   const { competitions: userCompetitions, loadAll: loadUserCompetitions } = useCompetitionsStore()
@@ -429,8 +429,8 @@ export default function AnalysisPage() {
 
   useEffect(() => {
     if (activeSection !== 'weekly') return
-    fetchWeightLog(version).then(setWeightLog).catch(console.error)
-  }, [activeSection, version])
+    fetchWeightLog().then(setWeightLog).catch(console.error)
+  }, [activeSection])
 
   const handleRegenerateAnalysis = async () => {
     if (!window.confirm('Regenerate weekly analysis? Cached analysis will be cleared and recalculated.')) return

@@ -55,7 +55,7 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
       updated_at: new Date().toISOString(),
     }
 
-    const program = await programController.getProgram(pk, 'current')
+    const program = await programController.getProgram(pk)
     const blockId = block.blockKey === 'current' ? program.meta.current_block_id ?? 'current' : block.blockKey
     const records = program.meta.blocks ?? []
     if (!records.some((record) => String(record.id ?? record.block_id ?? '') === blockId)) {
@@ -64,7 +64,6 @@ analyticsRouter.put('/blocks/:blockKey/start-maxes', async (req, res) => {
     const startMaxesKg = Object.fromEntries(Object.entries({ squat, bench, deadlift }).filter((entry): entry is [string, number] => entry[1] != null))
     await programController.updateMetaField(
       pk,
-      'current',
       'blocks',
       records.map((record) => String(record.id ?? record.block_id ?? '') === blockId ? { ...record, start_maxes_kg: startMaxesKg } : record),
     )

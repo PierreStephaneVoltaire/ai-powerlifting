@@ -9,8 +9,8 @@ interface PendingMutation {
   status: MutationStatus; error?: string
 }
 
-export function sessionDraftKey(version: string, sessionId: string): string {
-  return `session:${version}:${sessionId}`
+export function sessionDraftKey(sessionId: string): string {
+  return `session:current:${sessionId}`
 }
 
 let database: Promise<IDBPDatabase> | undefined
@@ -143,7 +143,7 @@ export async function synchronizePendingMutations(send: MutationSender, partitio
             }
             if (!(await listMutations(record.partition)).some(sameSession)) {
               const { session_id: _session_id, ...session } = sessionData
-              await removeDraftIfValue(sessionDraftKey(sessionMatch[1], sessionId), session, record.partition)
+              await removeDraftIfValue(`session:${sessionMatch[1]}:${sessionId}`, session, record.partition)
             }
           }
         }

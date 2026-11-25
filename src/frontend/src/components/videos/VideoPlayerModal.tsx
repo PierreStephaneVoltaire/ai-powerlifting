@@ -16,7 +16,6 @@ interface VideoPlayerModalProps {
 
 export default function VideoPlayerModal({ item, onClose, onDeleted, readOnly = false }: VideoPlayerModalProps) {
   const { pushToast } = useUiStore()
-  const { version } = useProgramStore()
   const [showConfirm, setShowConfirm] = useState(false)
 
   if (!item) return null
@@ -26,7 +25,7 @@ export default function VideoPlayerModal({ item, onClose, onDeleted, readOnly = 
   async function handleDelete() {
     if (readOnly) return
     try {
-      await api.removeSessionVideo(version, session_date, video.video_id, session_id)
+      await api.removeSessionVideo(session_date, video.video_id, session_id)
       pushToast({ message: 'Video deleted', type: 'success' })
       onDeleted?.()
       onClose()

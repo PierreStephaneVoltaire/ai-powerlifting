@@ -5,18 +5,18 @@ import type { WeightEntry } from '@powerlifting/types'
 
 export const weightRouter = Router()
 
-// GET /api/weight/:version - Get weight log
-weightRouter.get('/:version', cacheGet((req) => [`weight-log:${req.params.version}`]), async (req, res, next) => {
+// GET /api/weight/current - Get weight log
+weightRouter.get('/current', cacheGet((req) => [`weight-log:current`]), async (req, res, next) => {
   try {
-    const log = await weightController.getWeightLog(req.mapped_pk!, req.params.version)
+    const log = await weightController.getWeightLog(req.mapped_pk!)
     res.json({ data: log, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// POST /api/weight/:version - Add weight entry
-weightRouter.post('/:version', invalidateAfter((req) => [`weight-log:${req.params.version}`]), async (req, res, next) => {
+// POST /api/weight/current - Add weight entry
+weightRouter.post('/current', invalidateAfter((req) => [`weight-log:current`]), async (req, res, next) => {
   try {
     const { date, kg } = req.body
 
@@ -28,17 +28,17 @@ weightRouter.post('/:version', invalidateAfter((req) => [`weight-log:${req.param
     }
 
     const entry: WeightEntry = { date, kg }
-    await weightController.addWeightEntry(req.mapped_pk!, req.params.version, entry)
+    await weightController.addWeightEntry(req.mapped_pk!, entry)
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// DELETE /api/weight/:version/:date - Remove weight entry
-weightRouter.delete('/:version/:date', invalidateAfter((req) => [`weight-log:${req.params.version}`]), async (req, res, next) => {
+// DELETE /api/weight/current/:date - Remove weight entry
+weightRouter.delete('/current/:date', invalidateAfter((req) => [`weight-log:current`]), async (req, res, next) => {
   try {
-    await weightController.removeWeightEntry(req.mapped_pk!, req.params.version, req.params.date)
+    await weightController.removeWeightEntry(req.mapped_pk!, req.params.date)
     res.json({ data: { success: true }, error: null })
   } catch (err) {
     next(err)

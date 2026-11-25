@@ -104,7 +104,6 @@ export function BlockWeeklySurface({
   bundle,
   unit,
   sex,
-  version,
   viewAthlete,
   readOnlyAthlete,
   publicView = false,
@@ -113,7 +112,6 @@ export function BlockWeeklySurface({
   bundle: BlockAnalysisBundle
   unit: Unit
   sex: Sex | null
-  version: string
   viewAthlete?: string
   readOnlyAthlete?: string
   publicView?: boolean
@@ -136,9 +134,9 @@ export function BlockWeeklySurface({
   )
 
   useEffect(() => {
-    const weightLogRequest = dataAthlete ? fetchViewedWeightLog(dataAthlete, version) : fetchWeightLog(version)
+    const weightLogRequest = dataAthlete ? fetchViewedWeightLog(dataAthlete) : fetchWeightLog()
     weightLogRequest.then(setWeightLog).catch(() => undefined)
-  }, [version, dataAthlete])
+  }, [dataAthlete])
 
   const loadCorrelation = (refresh = false, cacheOnly = false) => {
     if (analysisWindow.weeks < 4) {

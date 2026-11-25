@@ -219,13 +219,12 @@ function normalizeCoachResponse(raw: any, session?: Session, exerciseIndex?: num
   }
 }
 
-// GET /api/sessions/:version/:date/:index - Get a specific session
-sessionsRouter.get('/:version/:date/:index', async (req, res, next) => {
+// GET /api/sessions/current/:date/:index - Get a specific session
+sessionsRouter.get('/current/:date/:index', async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     const session = await sessionController.getSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index
     )
@@ -235,8 +234,8 @@ sessionsRouter.get('/:version/:date/:index', async (req, res, next) => {
   }
 })
 
-// POST /api/sessions/:version - Create a new session
-sessionsRouter.post('/:version', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// POST /api/sessions/current - Create a new session
+sessionsRouter.post('/current', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const session = req.body as Partial<Session>
     const target = sessionTarget(req.body)
@@ -266,21 +265,20 @@ sessionsRouter.post('/:version', invalidateAfter((req) => [`program:${req.params
       wellness: session.wellness ?? undefined,
     }
 
-    const result = await sessionController.createSession(req.mapped_pk!, req.params.version, newSession, target)
+    const result = await sessionController.createSession(req.mapped_pk!, newSession, target)
     res.json({ data: mutationData(result), error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// DELETE /api/sessions/:version/:date/:index - Delete a session
-sessionsRouter.delete('/:version/:date/:index', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// DELETE /api/sessions/current/:date/:index - Delete a session
+sessionsRouter.delete('/current/:date/:index', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     const target = sessionTarget(req.body)
     const result = await sessionController.deleteSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       target
@@ -291,8 +289,8 @@ sessionsRouter.delete('/:version/:date/:index', invalidateAfter((req) => [`progr
   }
 })
 
-// PUT /api/sessions/:version/:date/:index - Replace entire session
-sessionsRouter.put('/:version/:date/:index', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/sessions/current/:date/:index - Replace entire session
+sessionsRouter.put('/current/:date/:index', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const rawSession = req.body as Record<string, unknown>
     const session = rawSession as unknown as Session
@@ -308,7 +306,6 @@ sessionsRouter.put('/:version/:date/:index', invalidateAfter((req) => [`program:
 
     const result = await sessionController.updateSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       session,
@@ -320,8 +317,8 @@ sessionsRouter.put('/:version/:date/:index', invalidateAfter((req) => [`program:
   }
 })
 
-// PATCH /api/sessions/:version/:date/:index/reschedule - Move session to new date
-sessionsRouter.patch('/:version/:date/:index/reschedule', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// PATCH /api/sessions/current/:date/:index/reschedule - Move session to new date
+sessionsRouter.patch('/current/:date/:index/reschedule', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const { newDate, newDay } = req.body
     const index = parseInt(req.params.index, 10)
@@ -336,7 +333,6 @@ sessionsRouter.patch('/:version/:date/:index/reschedule', invalidateAfter((req) 
 
     const result = await sessionController.rescheduleSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       newDate,
@@ -349,8 +345,8 @@ sessionsRouter.patch('/:version/:date/:index/reschedule', invalidateAfter((req) 
   }
 })
 
-// PATCH /api/sessions/:version/:date/:index/status - Update session status
-sessionsRouter.patch('/:version/:date/:index/status', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// PATCH /api/sessions/current/:date/:index/status - Update session status
+sessionsRouter.patch('/current/:date/:index/status', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const { status } = req.body as { status: SessionStatus }
     const index = parseInt(req.params.index, 10)
@@ -366,7 +362,6 @@ sessionsRouter.patch('/:version/:date/:index/status', invalidateAfter((req) => [
 
     const result = await sessionController.updateSessionStatus(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       status,
@@ -378,8 +373,8 @@ sessionsRouter.patch('/:version/:date/:index/status', invalidateAfter((req) => [
   }
 })
 
-// PATCH /api/sessions/:version/:date/:index/complete - Mark session complete
-sessionsRouter.patch('/:version/:date/:index/complete', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// PATCH /api/sessions/current/:date/:index/complete - Mark session complete
+sessionsRouter.patch('/current/:date/:index/complete', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const { rpe, bodyWeightKg, notes, wellness } = req.body as {
       rpe?: number
@@ -392,7 +387,6 @@ sessionsRouter.patch('/:version/:date/:index/complete', invalidateAfter((req) =>
 
     const result = await sessionController.completeSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       { rpe, bodyWeightKg, notes, wellness: wellness ?? undefined },
@@ -404,13 +398,12 @@ sessionsRouter.patch('/:version/:date/:index/complete', invalidateAfter((req) =>
   }
 })
 
-// POST /api/sessions/:version/:date/:index/notes/draft - AI-assisted session notes only
-sessionsRouter.post('/:version/:date/:index/notes/draft', async (req, res, next) => {
+// POST /api/sessions/current/:date/:index/notes/draft - AI-assisted session notes only
+sessionsRouter.post('/current/:date/:index/notes/draft', async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     const storedSession = await sessionController.getSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index
     )
@@ -459,8 +452,8 @@ sessionsRouter.post('/:version/:date/:index/notes/draft', async (req, res, next)
   }
 })
 
-// POST /api/sessions/:version/:date/:index/autoregulation - coach-guided executed-session adjustment
-sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, next) => {
+// POST /api/sessions/current/:date/:index/autoregulation - coach-guided executed-session adjustment
+sessionsRouter.post('/current/:date/:index/autoregulation', async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     const exerciseIndex = Number(req.body?.exerciseIndex)
@@ -468,10 +461,9 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
       return res.status(400).json({ data: null, error: 'exerciseIndex is required' })
     }
 
-    const program = await programController.getProgram(req.mapped_pk!, req.params.version)
+    const program = await programController.getProgram(req.mapped_pk!)
     const storedSession = await sessionController.getSession(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index
     )
@@ -576,8 +568,8 @@ sessionsRouter.post('/:version/:date/:index/autoregulation', async (req, res, ne
   }
 })
 
-// POST /api/sessions/:version/:date/:index/exercise - Add exercise to session
-sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) => {
+// POST /api/sessions/current/:date/:index/exercise - Add exercise to session
+sessionsRouter.post('/current/:date/:index/exercise', async (req, res, next) => {
   try {
     const { session_id: _sessionId, ...rawExercise } = req.body as Record<string, unknown>
     const exercise = rawExercise as unknown as Exercise
@@ -595,7 +587,6 @@ sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) =>
 
     const result = await sessionController.addExercise(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       newExercise,
@@ -607,8 +598,8 @@ sessionsRouter.post('/:version/:date/:index/exercise', async (req, res, next) =>
   }
 })
 
-// PATCH /api/sessions/:version/:date/:index/exercise/:exerciseIndex - Update exercise field
-sessionsRouter.patch('/:version/:date/:index/exercise/:exerciseIndex', async (req, res, next) => {
+// PATCH /api/sessions/current/:date/:index/exercise/:exerciseIndex - Update exercise field
+sessionsRouter.patch('/current/:date/:index/exercise/:exerciseIndex', async (req, res, next) => {
   try {
     const { field, value } = req.body
     const index = parseInt(req.params.index, 10)
@@ -624,7 +615,6 @@ sessionsRouter.patch('/:version/:date/:index/exercise/:exerciseIndex', async (re
 
     const result = await sessionController.updateExerciseField(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       exerciseIndex,
@@ -638,8 +628,8 @@ sessionsRouter.patch('/:version/:date/:index/exercise/:exerciseIndex', async (re
   }
 })
 
-// DELETE /api/sessions/:version/:date/:index/exercise/:exerciseIndex - Remove exercise
-sessionsRouter.delete('/:version/:date/:index/exercise/:exerciseIndex', async (req, res, next) => {
+// DELETE /api/sessions/current/:date/:index/exercise/:exerciseIndex - Remove exercise
+sessionsRouter.delete('/current/:date/:index/exercise/:exerciseIndex', async (req, res, next) => {
   try {
     const index = parseInt(req.params.index, 10)
     const exerciseIndex = parseInt(req.params.exerciseIndex, 10)
@@ -647,7 +637,6 @@ sessionsRouter.delete('/:version/:date/:index/exercise/:exerciseIndex', async (r
 
     const result = await sessionController.removeExercise(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       exerciseIndex,

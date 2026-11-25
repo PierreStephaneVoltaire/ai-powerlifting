@@ -31,7 +31,6 @@ interface VideoGridProps {
 
 export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: VideoGridProps) {
   const pushToast = useUiStore(s => s.pushToast)
-  const version = useProgramStore(s => s.version)
   const removeSessionVideo = useProgramStore(s => s.removeSessionVideo)
   const updateSessionVideo = useProgramStore(s => s.updateSessionVideo)
   const trackUpload = useVideoUploadStore(s => s.track)
@@ -87,7 +86,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
     setDeletingId(video.video_id)
 
     try {
-      await api.removeSessionVideo(version, session.date, video.video_id, session.id)
+      await api.removeSessionVideo(session.date, video.video_id, session.id)
       removeSessionVideo(session.date, video.video_id)
       onVideoRemoved?.(video.video_id)
       pushToast({ message: 'Video deleted', type: 'success' })
@@ -106,7 +105,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
     if (!playingVideo) return
     setIsSaving(true)
     try {
-      const updated = await api.updateSessionVideo(version, session.date, playingVideo.video_id, {
+      const updated = await api.updateSessionVideo(session.date, playingVideo.video_id, {
         exerciseName: editExercise,
         setNumber: editSetNumber,
         notes: editNotes,
@@ -144,7 +143,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
     }
     setRetryingId(video.video_id)
     try {
-      const { video: updated } = await trackUpload({ file }, (onProgress) => uploadVideo(version, {
+      const { video: updated } = await trackUpload({ file }, (onProgress) => uploadVideo({
         file,
         sessionDate: session.date,
         sessionId: session.id,
@@ -153,7 +152,7 @@ export default function VideoGrid({ session, onVideoUpdated, onVideoRemoved }: V
         notes: video.notes,
         onProgress,
       }))
-      await api.removeSessionVideo(version, session.date, video.video_id, session.id)
+      await api.removeSessionVideo(session.date, video.video_id, session.id)
       updateSessionVideo(session.date, video.video_id, updated)
       onVideoUpdated?.(updated)
       setPlayingVideo(updated)

@@ -47,7 +47,7 @@ interface SetupOnboardingProps {
 export default function SetupOnboarding({ compact = false }: SetupOnboardingProps) {
   const navigate = useNavigate()
   const { user, readOnly } = useAuth('settings')
-  const { initializeSetup, loadProgram, loadVersions } = useProgramStore()
+  const { initializeSetup, loadProgram } = useProgramStore()
   const { pushToast } = useUiStore()
   const [programName, setProgramName] = useState('Getting Started')
   const [startDate, setStartDate] = useState(todayIso())
@@ -107,8 +107,7 @@ export default function SetupOnboarding({ compact = false }: SetupOnboardingProp
         return
       }
 
-      await loadProgram('current')
-      await loadVersions()
+      await loadProgram()
       pushToast({ message: 'Training block initialized', type: 'success' })
 
       if (mode === 'manual_sessions') {

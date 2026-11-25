@@ -1,6 +1,6 @@
 import { callOperation } from '../utils/operations'
 import { randomUUID } from 'crypto'
-import type { Program, ProgramListItem, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
+import type { Program, Phase, Session, PlannedExercise, LiftProfile } from '@powerlifting/types'
 import type { SessionTarget } from './sessionController'
 
 type ProgramLoadOptions = {
@@ -9,69 +9,51 @@ type ProgramLoadOptions = {
   windowEnd?: string
 }
 
-export async function getProgram(pk: string, version: string, options: ProgramLoadOptions = {}): Promise<Program> {
+export async function getProgram(pk: string, options: ProgramLoadOptions = {}): Promise<Program> {
   return (await callOperation('program_get', {
     pk,
-    program_sk: version === "current" ? undefined : `program#${version}`,
     block: options.block,
     window_start: options.windowStart,
     window_end: options.windowEnd,
   })) as Program
 }
 
-export async function listPrograms(pk: string): Promise<ProgramListItem[]> {
-  return (await callOperation('program_list_full', { pk, include_archived: true })) as ProgramListItem[]
-}
-
 export async function updateMetaField(
   pk: string,
-  version: string,
   field: string,
   value: unknown
 ): Promise<Record<string, unknown>> {
-  return await callOperation('program_update_meta_field', { pk, program_sk: version === "current" ? undefined : `program#${version}`, field, value }) as Record<string, unknown>
+  return await callOperation('program_update_meta_field', { pk, field, value }) as Record<string, unknown>
 }
 
-export async function updateMetaFields(pk: string, version: string, updates: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return await callOperation('program_update_meta_field', { pk, program_sk: version === 'current' ? undefined : `program#${version}`, updates }) as Record<string, unknown>
+export async function updateMetaFields(pk: string, updates: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return await callOperation('program_update_meta_field', { pk, updates }) as Record<string, unknown>
 }
 
 export async function updateBodyWeight(
   pk: string,
-  version: string,
   weightKg: number
 ): Promise<Record<string, unknown>> {
-  return await callOperation('program_update_meta_field', { pk, program_sk: version === "current" ? undefined : `program#${version}`, updates: { current_body_weight_kg: weightKg, current_body_weight_lb: weightKg * 2.20462 } }) as Record<string, unknown>
+  return await callOperation('program_update_meta_field', { pk, updates: { current_body_weight_kg: weightKg, current_body_weight_lb: weightKg * 2.20462 } }) as Record<string, unknown>
 }
 
 export async function updatePhases(
   pk: string,
-  version: string,
   phases: Phase[],
   block: string | undefined
 ): Promise<Record<string, unknown>> {
-  return await callOperation('program_update_phases', { pk, program_sk: version === "current" ? undefined : `program#${version}`, phases, block }) as Record<string, unknown>
+  return await callOperation('program_update_phases', { pk, phases, block }) as Record<string, unknown>
 }
 
 export async function updateLiftProfiles(
   pk: string,
-  version: string,
   liftProfiles: LiftProfile[]
 ): Promise<Record<string, unknown>> {
-  return await callOperation('program_update_lift_profiles', { pk, program_sk: version === "current" ? undefined : `program#${version}`, lift_profiles: liftProfiles }) as Record<string, unknown>
-}
-
-export async function archiveProgram(pk: string, version: string): Promise<Record<string, unknown>> {
-  return await callOperation('program_archive', { pk, program_sk: version === "current" ? undefined : `program#${version}` }) as Record<string, unknown>
-}
-
-export async function unarchiveProgram(pk: string, version: string): Promise<Record<string, unknown>> {
-  return await callOperation('program_unarchive', { pk, program_sk: version === "current" ? undefined : `program#${version}` }) as Record<string, unknown>
+  return await callOperation('program_update_lift_profiles', { pk, lift_profiles: liftProfiles }) as Record<string, unknown>
 }
 
 export async function batchCreateWeek(
   pk: string,
-  version: string,
   weekNumber: number,
   weekLabel: string,
   days: Array<{ date: string; day: string }>,
@@ -96,19 +78,18 @@ export async function batchCreateWeek(
       body_weight_kg: null,
       block: 'current',
     }
-    await callOperation('session_create', { pk, program_sk: version === "current" ? undefined : `program#${version}`, session, ...target })
+    await callOperation('session_create', { pk, session, ...target })
   }
 }
 
 export async function updatePlannedExercises(
   pk: string,
-  version: string,
   date: string,
   index: number,
   plannedExercises: PlannedExercise[],
   target: SessionTarget,
 ): Promise<void> {
-  const existing = (await callOperation('session_get', { pk, program_sk: version === "current" ? undefined : `program#${version}`, date, index, session_id: target.session_id })) as Session
+  const existing = (await callOperation('session_get', { pk, date, index, session_id: target.session_id })) as Session
   const exerciseKey = (exercise: any) => String(exercise.glossary_id || exercise.exercise_id || exercise.name || '').trim().toLowerCase()
   const priorByKey = new Map((existing.exercises || []).map((exercise: any) => [exerciseKey(exercise), exercise]))
   const syncExercises = !existing.completed
@@ -139,8 +120,7 @@ export async function updatePlannedExercises(
     })()
     : existing.exercises
 
-  await callOperation('session_patch', { pk, program_sk: version === "current" ? undefined : `program#${version}`,
-    date,
+  await callOperation('session_patch', { pk, date,
     index,
     patch: {
       planned_exercises: plannedExercises,

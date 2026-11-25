@@ -71,7 +71,7 @@ function AppContent() {
   useEffect(() => {
     if (loading) return
     reset()
-    if (canReadProgram) loadProgram('current').catch(console.error)
+    if (canReadProgram) loadProgram().catch(console.error)
   }, [loading, person_pk, mapped_pk, canReadProgram, loadProgram, reset])
 
   if (loading) return <Center mih="100vh"><Loader aria-label="Loading your access" /></Center>

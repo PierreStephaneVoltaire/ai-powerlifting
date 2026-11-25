@@ -200,7 +200,6 @@ function ReadOnlyAnalysis({ athlete, program, unit, sex, authenticated }: { athl
           bundle={bundle}
           unit={unit}
           sex={program.meta?.sex ?? sex}
-          version="current"
           viewAthlete={athlete}
           publicView={!authenticated}
         />

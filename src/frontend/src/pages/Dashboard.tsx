@@ -248,7 +248,7 @@ export default function Dashboard() {
   const assistant = useAssistant('general', {}, useAuth().readOnly)
   const navigate = useNavigate()
   const { readOnly } = useAuth()
-  const { program, version, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases } = useProgramStore()
+  const { program, isLoading, needsSetup, updateMaxes, updateBodyWeight, updatePhases } = useProgramStore()
   const { unit } = useSettingsStore()
   const { pushToast } = useUiStore()
 
@@ -277,17 +277,17 @@ export default function Dashboard() {
   const dashboardAsOfDate = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
 
   useEffect(() => {
-    if (version && program && !needsSetup) {
-      fetchWeightLog(version)
+    if (program && !needsSetup) {
+      fetchWeightLog()
         .then(setWeightLog)
         .catch((e) => console.error('Failed to load weight log:', e))
     }
-  }, [version, program, needsSetup])
+  }, [program, needsSetup])
 
   useEffect(() => {
     let cancelled = false
 
-    if (!version || !program || needsSetup) {
+    if (!program || needsSetup) {
       setDashboardAnalysisWindow(null)
       setDashboardSectionPayloads({})
       setDashboardSectionStatuses({})
@@ -356,7 +356,7 @@ export default function Dashboard() {
       cancelled = true
       if (pollTimer !== undefined) window.clearTimeout(pollTimer)
     }
-  }, [version, program, needsSetup, dashboardAsOfDate])
+  }, [program, needsSetup, dashboardAsOfDate])
 
   useEffect(() => {
     let cancelled = false
@@ -579,10 +579,10 @@ export default function Dashboard() {
 
     try {
       for (const [field, value] of [['height_cm', height], ['arm_wingspan_cm', wingspan], ['leg_length_cm', legLength]] as const) {
-        await updateMetaField(version, field, value)
+        await updateMetaField(field, value)
       }
-      await updateMetaField(version, 'body_fat_range', localBodyFat ?? '')
-      await useProgramStore.getState().loadProgram(version)
+      await updateMetaField('body_fat_range', localBodyFat ?? '')
+      await useProgramStore.getState().loadProgram()
       pushToast({ message: 'Measurements updated', type: 'success' })
       setEditingMeasurements(false)
     } catch (err) {

@@ -11,7 +11,7 @@ const weekdays: WeekStartDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 const lifts = ['squat', 'bench', 'deadlift'] as const
 
 export default function BlockTransitionPanel() {
-  const { program, version, isDirty, loadProgram, loadVersions } = useProgramStore()
+  const { program, isDirty, loadProgram } = useProgramStore()
   const { permissions } = useAuth()
   const navigate = useNavigate()
   const [action, setAction] = useState<BlockTransitionInput['action'] | null>(null)
@@ -29,7 +29,7 @@ export default function BlockTransitionPanel() {
   useEffect(() => {
     if (action && permissions.includes('templates:read')) void fetchTemplates().then(setTemplates).catch(() => setError('Templates could not be loaded. Retry when connected.'))
   }, [action, permissions])
-  if (!program || version !== 'current' || !permissions.includes('program:write')) return null
+  if (!program || !permissions.includes('program:write')) return null
   const blocks = program.meta.blocks || []
   const active = blocks.find(block => block.status === 'active')
   const hasActive = Boolean(active || !blocks.length)
@@ -63,8 +63,7 @@ export default function BlockTransitionPanel() {
       } else {
         await transitionBlock(payload)
       }
-      await loadProgram('current')
-      await loadVersions()
+      await loadProgram()
       setAction(null)
       if (starting) navigate(template === 'designer' ? '/designer/phases' : '/sessions')
     } catch (error) {
@@ -97,7 +96,7 @@ export default function BlockTransitionPanel() {
           <Text size="sm">Confirm best-known current maxes in kg. Week numbering restarts at 1.</Text>
           {lifts.map(lift => <NumberInput key={lift} label={`${lift[0].toUpperCase()}${lift.slice(1)} 1RM (kg${maxes[lift] ? ` / ${Number((maxes[lift] * 2.20462).toFixed(2))} lb` : ''})`} min={0.5} step={2.5} value={maxes[lift] || ''} onChange={value => setMaxes(previous => ({ ...previous, [lift]: Number(value) }))} required />)}
         </>}
-        {error && <Alert color="red">{error}<Button variant="subtle" onClick={() => loadProgram('current')}>Reload program</Button></Alert>}
+        {error && <Alert color="red">{error}<Button variant="subtle" onClick={() => loadProgram()}>Reload program</Button></Alert>}
         <Group justify="flex-end">
           <Button variant="default" mih={44} disabled={pending} onClick={() => setAction(null)}>Cancel</Button>
           <Button mih={44} loading={pending} disabled={action === 'rename' ? !currentName.trim() : action !== 'complete' && (!name.trim() || !startDate || lifts.some(lift => !(maxes[lift] > 0)))} onClick={submit}>

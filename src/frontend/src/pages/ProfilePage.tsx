@@ -132,7 +132,7 @@ export default function ProfilePage() {
   const { user, loading: authLoading, readOnly } = useAuth('settings')
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { program, version } = useProgramStore()
+  const { program } = useProgramStore()
   const { unit, sex } = useSettingsStore()
   const { pushToast } = useUiStore()
   const [settings, setSettings] = useState<UserSettings | null>(null)
@@ -238,7 +238,7 @@ export default function ProfilePage() {
   const loadVideos = async () => {
     setVideosLoading(true)
     try {
-      const result = await api.getVideos(version)
+      const result = await api.getVideos()
       setVideos(result.videos)
     } catch {
       pushToast({ message: 'Video library failed to load', type: 'error' })
@@ -250,9 +250,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user || viewingOther) return
     loadVideos()
-    // Reload when the active program version changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, version, viewingOther])
+  }, [user, viewingOther])
 
   const profileMetrics = useMemo(() => {
     const meta = program?.meta
@@ -376,12 +375,12 @@ export default function ProfilePage() {
 
       if (program) {
         const selectedWeightClasses = weightClasses.map(Number).filter((value) => Number.isFinite(value)).slice(0, 2)
-        await api.updateMetaFields(version, {
+        await api.updateMetaFields({
           federation: mainFederation.trim(),
           weight_class_kg: selectedWeightClasses[0] ?? null,
           weight_classes_kg: selectedWeightClasses,
         })
-        await useProgramStore.getState().loadProgram(version)
+        await useProgramStore.getState().loadProgram()
       }
 
       setSettings(nextSettings)

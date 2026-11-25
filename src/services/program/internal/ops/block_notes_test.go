@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"powerlifting/program/internal/apperr"
 	"powerlifting/program/internal/env"
 	"powerlifting/program/internal/store"
 )
@@ -44,21 +43,21 @@ func storedNotes(t *testing.T, db *store.Memory, sk string) []any {
 	return notes
 }
 
-func TestBlockNotesUpdateWritesRequestedVersionNotCurrent(t *testing.T) {
+func TestBlockNotesUpdateIgnoresOldVersionSelector(t *testing.T) {
 	deps, db := notesDeps(t,
 		pointerTo("program#v002"),
 		store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b1", "block_notes": []any{}}},
 		store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{"current_block_id": "b2", "block_notes": []any{}}},
 	)
-	notes := []any{map[string]any{"notes": "old version note", "block_id": "b1"}}
+	notes := []any{map[string]any{"notes": "current note", "block_id": "b2"}}
 	if _, err := blockNotesUpdate(deps, notesRequest(map[string]any{"version": "v001", "block_notes": notes})); err != nil {
 		t.Fatal(err)
 	}
-	if got := storedNotes(t, db, "program#v001"); len(got) != 1 {
-		t.Fatalf("requested version notes %v", got)
+	if got := storedNotes(t, db, "program#v001"); len(got) != 0 {
+		t.Fatalf("old program was modified %v", got)
 	}
-	if got := storedNotes(t, db, "program#v002"); len(got) != 0 {
-		t.Fatalf("current version was modified %v", got)
+	if got := storedNotes(t, db, "program#v002"); len(got) != 1 {
+		t.Fatalf("current program notes %v", got)
 	}
 }
 
@@ -76,15 +75,6 @@ func TestBlockNotesUpdateDefaultsAndCurrentVersionWriteCurrentProgram(t *testing
 		if len(storedNotes(t, db, "program#v002")) != 1 || len(storedNotes(t, db, "program#v001")) != 0 {
 			t.Fatalf("args %v did not write the current program", args)
 		}
-	}
-}
-
-func TestBlockNotesUpdateUnknownVersionIsValidationError(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v001"), store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{}})
-	_, err := blockNotesUpdate(deps, notesRequest(map[string]any{"version": "v077", "block_notes": []any{}}))
-	failure, ok := err.(*apperr.Error)
-	if !ok || failure.Message != "Program version v077 not found" {
-		t.Fatalf("err %v", err)
 	}
 }
 
@@ -111,14 +101,6 @@ func TestBlockNotesGetReturnsEmptyListWhenVersionHasNoNotes(t *testing.T) {
 				t.Fatalf("%s/%q: block_notes %s", name, version, encoded)
 			}
 		}
-	}
-}
-
-func TestBlockNotesGetMissingVersionStillNotFound(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v001"), store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{}})
-	_, err := blockNotesGet(deps, notesRequest(map[string]any{"version": "v077"}))
-	if failure, ok := err.(*apperr.Error); !ok || failure.Message != "Program version v077 not found" {
-		t.Fatalf("err %v", err)
 	}
 }
 

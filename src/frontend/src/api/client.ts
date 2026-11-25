@@ -10,7 +10,6 @@ import {
 } from './cache'
 import type {
   Program,
-  ProgramListItem,
   Session,
   PlannedExercise,
   Exercise,
@@ -65,14 +64,13 @@ interface SessionMutationResult {
 }
 
 async function cacheSessionMutation(
-  version: string,
   date: string,
   index: number,
   result: SessionMutationResult,
   fallback?: Session,
 ): Promise<Session | undefined> {
   const session = result.session || fallback
-  if (session) await patchSessionInCachedProgram(`/programs/${version}`, date, index, () => session, session.id)
+  if (session) await patchSessionInCachedProgram(`/programs/current`, date, index, () => session, session.id)
   return session
 }
 
@@ -126,144 +124,120 @@ export async function initializeSetup(input: InitializeSetupInput): Promise<Init
 
 // ─── Programs ────────────────────────────────────────────────────────────────
 
-export async function fetchPrograms(): Promise<ProgramListItem[]> {
-  const data = await cachedGet(api, '/programs', ['programs'])
-  return data.data
-}
-
 export async function transitionBlock(input: BlockTransitionInput): Promise<BlockTransitionResult> {
   const response = await api.post<ApiResponse<BlockTransitionResult>>('/programs/current/blocks/transition', input)
   await invalidateDomains(['programs', 'program:current', 'sessions:current', 'analytics'])
   return response.data.data
 }
 
-export async function fetchProgram(version: string): Promise<Program> {
-  const data = await cachedGet(api, `/programs/${version}`, [`program:${version}`, `sessions:${version}`])
+export async function fetchProgram(): Promise<Program> {
+  const data = await cachedGet(api, `/programs/current`, [`program:current`, `sessions:current`])
   return data.data
 }
 
 export async function updateMetaField(
-  version: string,
   field: string,
   value: unknown
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/${version}/meta`, { field, value })
-  await invalidateDomain(`program:${version}`)
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/current/meta`, { field, value })
+  await invalidateDomain(`program:current`)
   return res.data.data
 }
 
-export async function updateMetaFields(version: string, updates: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/${version}/meta`, { updates })
-  await invalidateDomain(`program:${version}`)
+export async function updateMetaFields(updates: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/current/meta`, { updates })
+  await invalidateDomain(`program:current`)
   return res.data.data
-}
-
-export async function forkProgram(
-  version: string,
-  label?: string
-): Promise<string> {
-  const res = await api.post<ApiResponse<{ version: string }>>(
-    `/programs/${version}/fork`,
-    { label }
-  )
-  return res.data.data.version
 }
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
 
 export async function createSession(
-  version: string,
   session: Partial<Session> & { date: string },
   envelope?: SessionTarget,
 ): Promise<Session> {
   const res = await api.post<ApiResponse<{ success: boolean; session: Session }>>(
-    `/sessions/${version}`,
+    `/sessions/current`,
     { ...session, ...envelope }
   )
   const created = res.data.data.session
-  await addSessionToCachedProgram(`/programs/${version}`, created)
+  await addSessionToCachedProgram(`/programs/current`, created)
   return created
 }
 
 export async function deleteSession(
-  version: string,
   date: string,
   index: number,
   envelope?: SessionTarget,
 ): Promise<SessionMutationResult> {
-  const res = await api.delete<ApiResponse<SessionMutationResult>>(`/sessions/${version}/${date}/${index}`, { data: envelope })
-  await removeSessionFromCachedProgram(`/programs/${version}`, date, index, envelope?.session_id)
+  const res = await api.delete<ApiResponse<SessionMutationResult>>(`/sessions/current/${date}/${index}`, { data: envelope })
+  await removeSessionFromCachedProgram(`/programs/current`, date, index, envelope?.session_id)
   return res.data.data
 }
 
 export async function updateSession(
-  version: string,
   date: string,
   index: number,
   session: Session,
   envelope?: SessionTarget,
 ): Promise<Session> {
-  const res = await api.put<ApiResponse<{ success: boolean; session: Session }>>(`/sessions/${version}/${date}/${index}`, { ...session, ...envelope })
+  const res = await api.put<ApiResponse<{ success: boolean; session: Session }>>(`/sessions/current/${date}/${index}`, { ...session, ...envelope })
   const result = res.data.data
   const updated = result.session || session
-  await cacheSessionMutation(version, date, index, result, updated)
+  await cacheSessionMutation(date, index, result, updated)
   return updated
 }
 
 export async function updatePlannedExercises(
-  version: string,
   date: string,
   index: number,
   plannedExercises: PlannedExercise[],
   envelope?: SessionTarget,
 ): Promise<void> {
-  await api.put(`/programs/${version}/designer/${date}/${index}/planned-exercises`, { planned_exercises: plannedExercises, ...envelope })
-  await patchSessionInCachedProgram(`/programs/${version}`, date, index,
+  await api.put(`/programs/current/designer/${date}/${index}/planned-exercises`, { planned_exercises: plannedExercises, ...envelope })
+  await patchSessionInCachedProgram(`/programs/current`, date, index,
     (s) => ({ ...s, planned_exercises: plannedExercises }))
 }
 
 export async function rescheduleSession(
-  version: string,
   date: string,
   index: number,
   newDate: string,
   newDay: string,
   envelope?: SessionTarget,
 ): Promise<Session> {
-  const res = await api.patch<ApiResponse<{ success: boolean; session: Session }>>(`/sessions/${version}/${date}/${index}/reschedule`, {
+  const res = await api.patch<ApiResponse<{ success: boolean; session: Session }>>(`/sessions/current/${date}/${index}/reschedule`, {
     newDate,
     newDay,
     ...envelope,
   })
   const result = res.data.data
   const updated = result.session || { date: newDate, day: newDay } as Session
-  await cacheSessionMutation(version, date, index, result, updated)
+  await cacheSessionMutation(date, index, result, updated)
   return updated
 }
 
 export async function completeSession(
-  version: string,
   date: string,
   index: number,
   data: { rpe?: number; bodyWeightKg?: number; notes?: string; wellness?: SessionWellness | null },
   envelope?: SessionTarget,
 ): Promise<Session> {
-  const res = await api.patch<ApiResponse<{ success: boolean; session: Session }>>(`/sessions/${version}/${date}/${index}/complete`, { ...data, ...envelope })
+  const res = await api.patch<ApiResponse<{ success: boolean; session: Session }>>(`/sessions/current/${date}/${index}/complete`, { ...data, ...envelope })
   const result = res.data.data
   const updated = result.session
   if (!updated) throw new Error('Session completion response did not include the updated session')
-  await cacheSessionMutation(version, date, index, result, updated)
+  await cacheSessionMutation(date, index, result, updated)
   return updated
 }
 
 export async function draftSessionNotes(
-  version: string,
   date: string,
   index: number,
   data: { session: Session; answers: Record<string, unknown> }
 ): Promise<{ notes: string }> {
   const res = await api.post<ApiResponse<{ notes: string }>>(
-    `/sessions/${version}/${date}/${index}/notes/draft`,
+    `/sessions/current/${date}/${index}/notes/draft`,
     data
   )
   return res.data.data
@@ -280,7 +254,6 @@ export interface AutoRegulationResponse {
 }
 
 export async function requestAutoRegulation(
-  version: string,
   date: string,
   index: number,
   data: {
@@ -293,7 +266,7 @@ export async function requestAutoRegulation(
   }
 ): Promise<AutoRegulationResponse> {
   const res = await api.post<ApiResponse<AutoRegulationResponse>>(
-    `/sessions/${version}/${date}/${index}/autoregulation`,
+    `/sessions/current/${date}/${index}/autoregulation`,
     data
   )
   return res.data.data
@@ -302,58 +275,51 @@ export async function requestAutoRegulation(
 // ─── Maxes ───────────────────────────────────────────────────────────────────
 
 export async function updateTargetMaxes(
-  version: string,
   maxes: { squat_kg: number; bench_kg: number; deadlift_kg: number }
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/maxes/${version}`, { ...maxes })
-  await invalidateDomains([`maxes:${version}`, `program:${version}`])
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/maxes/current`, { ...maxes })
+  await invalidateDomains([`maxes:current`, `program:current`])
   return res.data.data
 }
 
 export async function updateBodyWeight(
-  version: string,
   weightKg: number
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/${version}/body-weight`, { weightKg })
-  await invalidateDomains([`program:${version}`, `weight-log:${version}`])
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/current/body-weight`, { weightKg })
+  await invalidateDomains([`program:current`, `weight-log:current`])
   return res.data.data
 }
 
 export async function updatePhases(
-  version: string,
   phases: Phase[],
   block: string | undefined
 ): Promise<Record<string, unknown>> {
   const body: { phases: Phase[]; block?: string } = { phases }
   if (block !== undefined) body.block = block
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/${version}/phases`, body)
-  await invalidateDomain(`program:${version}`)
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/current/phases`, body)
+  await invalidateDomain(`program:current`)
   return res.data.data
 }
 
 // ─── Weight Log ──────────────────────────────────────────────────────────────
 
-export async function fetchWeightLog(
-  version: string
-): Promise<WeightEntry[]> {
-  const data = await cachedGet(api, `/weight/${version}`, [`weight-log:${version}`])
+export async function fetchWeightLog(): Promise<WeightEntry[]> {
+  const data = await cachedGet(api, `/weight/current`, [`weight-log:current`])
   return data.data.entries
 }
 
 export async function addWeightEntry(
-  version: string,
   entry: WeightEntry
 ): Promise<void> {
-  await api.post(`/weight/${version}`, entry)
-  await invalidateDomain(`weight-log:${version}`)
+  await api.post(`/weight/current`, entry)
+  await invalidateDomain(`weight-log:current`)
 }
 
 export async function removeWeightEntry(
-  version: string,
   date: string
 ): Promise<void> {
-  await api.delete(`/weight/${version}/${date}`)
-  await invalidateDomain(`weight-log:${version}`)
+  await api.delete(`/weight/current/${date}`)
+  await invalidateDomain(`weight-log:current`)
 }
 
 // ─── Exercises (Glossary) ────────────────────────────────────────────────────
@@ -389,33 +355,30 @@ export async function deleteExercise(exerciseId: string): Promise<void> {
 // ─── Supplements ──────────────────────────────────────────────────────────────
 
 export async function updateSupplementPhases(
-  version: string,
   phases: SupplementPhase[]
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/supplements/${version}`, { phases })
-  await invalidateDomain(`supplements:${version}`)
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/supplements/current`, { phases })
+  await invalidateDomain(`supplements:current`)
   return res.data.data
 }
 
 // ─── Diet Notes ───────────────────────────────────────────────────────────────
 
 export async function updateDietNotes(
-  version: string,
   dietNotes: DietNote[]
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/diet-notes/${version}`, { dietNotes })
-  await invalidateDomain(`diet-notes:${version}`)
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/diet-notes/current`, { dietNotes })
+  await invalidateDomain(`diet-notes:current`)
   return res.data.data
 }
 
 // ─── Block Notes ───────────────────────────────────────────────────────────────
 
 export async function updateBlockNotes(
-  version: string,
   blockNotes: BlockNote[]
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/block-notes/${version}`, { blockNotes })
-  await invalidateDomain(`block-notes:${version}`)
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/block-notes/current`, { blockNotes })
+  await invalidateDomain(`block-notes:current`)
   return res.data.data
 }
 
@@ -508,7 +471,6 @@ export async function updateFederation(
 // ─── Videos ───────────────────────────────────────────────────────────────────
 
 export async function getVideos(
-  version: string = 'current',
   exercise?: string,
   sort: VideoSort = 'newest'
 ): Promise<{ videos: VideoLibraryItem[]; exercises: string[] }> {
@@ -516,33 +478,31 @@ export async function getVideos(
   if (exercise) params.set('exercise', exercise)
   params.set('sort', sort)
   const res = await api.get<ApiResponse<{ videos: VideoLibraryItem[]; exercises: string[] }>>(
-    `/videos?version=${version}&${params}`
+    `/videos?${params}`
   )
   return res.data.data
 }
 
 
 export async function updateSessionVideo(
-  version: string,
   sessionDate: string,
   videoId: string,
   updates: { exerciseName?: string; setNumber?: number; notes?: string },
   sessionId?: string,
 ): Promise<SessionVideo> {
   const res = await api.patch<ApiResponse<SessionVideo>>(
-    `/videos/${version}/${sessionDate}/${videoId}`,
+    `/videos/current/${sessionDate}/${videoId}`,
     { ...updates, sessionId }
   )
   return res.data.data
 }
 
 export async function removeSessionVideo(
-  version: string,
   sessionDate: string,
   videoId: string,
   sessionId?: string,
 ): Promise<void> {
-  await api.delete(`/videos/${version}/${sessionDate}/${videoId}`, { data: { sessionId } })
+  await api.delete(`/videos/current/${sessionDate}/${videoId}`, { data: { sessionId } })
 }
 
 // ─── Lift Profiles ────────────────────────────────────────────────────────────
@@ -562,11 +522,10 @@ interface LiftProfileSuggestion {
 }
 
 export async function updateLiftProfiles(
-  version: string,
   liftProfiles: LiftProfile[]
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/${version}/lift-profiles`, { liftProfiles })
-  await invalidateDomain(`program:${version}`)
+  const res = await api.put<ApiResponse<Record<string, unknown>>>(`/programs/current/lift-profiles`, { liftProfiles })
+  await invalidateDomain(`program:current`)
   return res.data.data
 }
 
@@ -722,16 +681,6 @@ export async function fetchTemplateImport(jobId: string): Promise<TemplateImport
 }
 
 // ─── Archive & e1RM ─────────────────────────────────────────────────────────
-
-export async function archiveProgram(version: string): Promise<Record<string, unknown>> {
-  const res = await api.patch<ApiResponse<Record<string, unknown>>>(`/programs/${version}/archive`, {})
-  return res.data.data
-}
-
-export async function unarchiveProgram(version: string): Promise<Record<string, unknown>> {
-  const res = await api.patch<ApiResponse<Record<string, unknown>>>(`/programs/${version}/unarchive`, {})
-  return res.data.data
-}
 
 export async function archiveExercise(id: string): Promise<void> {
   await api.patch(`/exercises/${id}/archive`)

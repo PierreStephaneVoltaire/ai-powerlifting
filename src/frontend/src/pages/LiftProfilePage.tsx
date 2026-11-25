@@ -67,7 +67,7 @@ export default function LiftProfilePage() {
   const { readOnly } = useAuth()
   const { lift: liftParam } = useParams<{ lift: string }>()
   const navigate = useNavigate()
-  const { program, version, updateLiftProfiles } = useProgramStore()
+  const { program, updateLiftProfiles } = useProgramStore()
   const { pushToast } = useUiStore()
   const { unit } = useSettingsStore()
   const trackUpload = useVideoUploadStore((state) => state.track)
@@ -134,7 +134,7 @@ export default function LiftProfilePage() {
     if (existing?.video_id && !globalThis.confirm(`Replace the existing ${FORM_ANGLE_LABELS[angle].toLowerCase()} recording?`)) return
     setUploadingAngle(angle)
     try {
-      const result = await trackUpload({ file }, (onProgress) => uploadVideo(version, {
+      const result = await trackUpload({ file }, (onProgress) => uploadVideo({
         file,
         sessionDate: new Date().toISOString().slice(0, 10),
         lift,

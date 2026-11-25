@@ -19,28 +19,18 @@ programsRouter.post('/current/blocks/transition', invalidateAfter(['program:curr
   } catch (error) { next(error) }
 })
 
-// GET /api/programs - List all program versions
-programsRouter.get('/', async (req, res, next) => {
+// GET /api/programs/current - Get a specific program
+programsRouter.get('/current', async (req, res, next) => {
   try {
-    const programs = await programController.listPrograms(req.mapped_pk!)
-    res.json({ data: programs, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-// GET /api/programs/:version - Get a specific program
-programsRouter.get('/:version', async (req, res, next) => {
-  try {
-    const program = await programController.getProgram(req.mapped_pk!, req.params.version)
+    const program = await programController.getProgram(req.mapped_pk!)
     res.json({ data: program, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// PUT /api/programs/:version/meta - Update a meta field
-programsRouter.put('/:version/meta', invalidateAfter((req) => [`program:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/programs/current/meta - Update a meta field
+programsRouter.put('/current/meta', invalidateAfter((req) => [`program:current`]), async (req, res, next) => {
   try {
     const { field, value, updates } = req.body
 
@@ -52,16 +42,16 @@ programsRouter.put('/:version/meta', invalidateAfter((req) => [`program:${req.pa
     }
 
     const result = updates
-      ? await programController.updateMetaFields(req.mapped_pk!, req.params.version, updates)
-      : await programController.updateMetaField(req.mapped_pk!, req.params.version, field, value)
+      ? await programController.updateMetaFields(req.mapped_pk!, updates)
+      : await programController.updateMetaField(req.mapped_pk!, field, value)
     res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// PUT /api/programs/:version/body-weight - Update body weight
-programsRouter.put('/:version/body-weight', invalidateAfter((req) => [`program:${req.params.version}`, `weight-log:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/programs/current/body-weight - Update body weight
+programsRouter.put('/current/body-weight', invalidateAfter((req) => [`program:current`, `weight-log:current`]), async (req, res, next) => {
   try {
     const { weightKg } = req.body
 
@@ -72,15 +62,15 @@ programsRouter.put('/:version/body-weight', invalidateAfter((req) => [`program:$
       })
     }
 
-    const result = await programController.updateBodyWeight(req.mapped_pk!, req.params.version, weightKg)
+    const result = await programController.updateBodyWeight(req.mapped_pk!, weightKg)
     res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// PUT /api/programs/:version/phases - Update phases
-programsRouter.put('/:version/phases', invalidateAfter((req) => [`program:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/programs/current/phases - Update phases
+programsRouter.put('/current/phases', invalidateAfter((req) => [`program:current`]), async (req, res, next) => {
   try {
     const { phases, block } = req.body
 
@@ -98,15 +88,15 @@ programsRouter.put('/:version/phases', invalidateAfter((req) => [`program:${req.
       })
     }
 
-    const result = await programController.updatePhases(req.mapped_pk!, req.params.version, phases, block)
+    const result = await programController.updatePhases(req.mapped_pk!, phases, block)
     res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-// POST /api/programs/:version/designer/batch-week - Batch create planned sessions for a week
-programsRouter.post('/:version/designer/batch-week', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// POST /api/programs/current/designer/batch-week - Batch create planned sessions for a week
+programsRouter.post('/current/designer/batch-week', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const { week_number, week_label, days, phase_name, exercises } = req.body as {
       week_number: number
@@ -135,7 +125,6 @@ programsRouter.post('/:version/designer/batch-week', invalidateAfter((req) => [`
 
     await programController.batchCreateWeek(
       req.mapped_pk!,
-      req.params.version,
       week_number,
       week_label,
       days,
@@ -149,8 +138,8 @@ programsRouter.post('/:version/designer/batch-week', invalidateAfter((req) => [`
   }
 })
 
-// PUT /api/programs/:version/lift-profiles - Update lift profiles
-programsRouter.put('/:version/lift-profiles', invalidateAfter((req) => [`program:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/programs/current/lift-profiles - Update lift profiles
+programsRouter.put('/current/lift-profiles', invalidateAfter((req) => [`program:current`]), async (req, res, next) => {
   try {
     const { liftProfiles } = req.body as { liftProfiles: LiftProfile[] }
 
@@ -161,7 +150,7 @@ programsRouter.put('/:version/lift-profiles', invalidateAfter((req) => [`program
       })
     }
 
-    const result = await programController.updateLiftProfiles(req.mapped_pk!, req.params.version, liftProfiles)
+    const result = await programController.updateLiftProfiles(req.mapped_pk!, liftProfiles)
     callOperation('health_invalidate_program_cache', { pk: req.mapped_pk }).catch((err) => {
       console.warn('Failed to invalidate IF health program cache after lift profile update:', err)
     })
@@ -171,8 +160,8 @@ programsRouter.put('/:version/lift-profiles', invalidateAfter((req) => [`program
   }
 })
 
-// PUT /api/programs/:version/designer/:date/:index/planned-exercises - Update planned exercises on a session
-programsRouter.put('/:version/designer/:date/:index/planned-exercises', invalidateAfter((req) => [`program:${req.params.version}`, `sessions:${req.params.version}`]), async (req, res, next) => {
+// PUT /api/programs/current/designer/:date/:index/planned-exercises - Update planned exercises on a session
+programsRouter.put('/current/designer/:date/:index/planned-exercises', invalidateAfter((req) => [`program:current`, `sessions:current`]), async (req, res, next) => {
   try {
     const { planned_exercises } = req.body as { planned_exercises: PlannedExercise[] }
     const index = parseInt(req.params.index, 10)
@@ -187,33 +176,12 @@ programsRouter.put('/:version/designer/:date/:index/planned-exercises', invalida
 
     await programController.updatePlannedExercises(
       req.mapped_pk!,
-      req.params.version,
       req.params.date,
       index,
       planned_exercises,
       target
     )
     res.json({ data: { success: true }, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-// PATCH /api/programs/:version/archive - Archive a program
-programsRouter.patch('/:version/archive', invalidateAfter((req) => [`program:${req.params.version}`, 'programs']), async (req, res, next) => {
-  try {
-    const result = await programController.archiveProgram(req.mapped_pk!, req.params.version)
-    res.json({ data: result, error: null })
-  } catch (err) {
-    next(err)
-  }
-})
-
-// PATCH /api/programs/:version/unarchive - Unarchive a program
-programsRouter.patch('/:version/unarchive', invalidateAfter((req) => [`program:${req.params.version}`, 'programs']), async (req, res, next) => {
-  try {
-    const result = await programController.unarchiveProgram(req.mapped_pk!, req.params.version)
-    res.json({ data: result, error: null })
   } catch (err) {
     next(err)
   }

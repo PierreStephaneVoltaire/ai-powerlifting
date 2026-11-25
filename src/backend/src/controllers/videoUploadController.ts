@@ -31,7 +31,6 @@ interface VideoUploadSession {
 
 export async function startVideoUpload(
   pk: string,
-  version: string,
   sessionDate: string,
   filename: string,
   mimeType: string,
@@ -39,7 +38,7 @@ export async function startVideoUpload(
   target: VideoUploadTarget,
 ): Promise<VideoUploadSession> {
   const presign = await presignSessionVideo(
-    pk, version, sessionDate, filename, mimeType, size,
+    pk, sessionDate, filename, mimeType, size,
     target.sessionId, target.lift, target.angle, target.targetRevision,
   )
   const created = await s3Client.send(new CreateMultipartUploadCommand({
@@ -82,7 +81,6 @@ async function objectExists(s3Key: string): Promise<boolean> {
 
 export async function completeVideoUpload(
   pk: string,
-  version: string,
   sessionDate: string,
   videoId: string,
   s3Key: string,
@@ -103,7 +101,7 @@ export async function completeVideoUpload(
     if (!alreadyCompleted) throw err
   }
   return confirmSessionVideo(
-    pk, version, sessionDate, videoId, s3Key, details.exerciseName, details.setNumber, details.notes,
+    pk, sessionDate, videoId, s3Key, details.exerciseName, details.setNumber, details.notes,
     undefined, target.sessionId, target.lift, target.angle, target.targetRevision,
   )
 }

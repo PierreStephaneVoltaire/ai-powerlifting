@@ -265,81 +265,6 @@
     "ownership": "athlete"
   },
   {
-    "name": "program_list_full",
-    "domain": "program",
-    "description": "List all program versions with full program objects (not just summaries) for a user. Includes resolved phases and sessions. Use include_archived=true to include archived versions.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Optional specific program sort key to filter to."
-        },
-        "include_archived": {
-          "type": "boolean",
-          "description": "Include archived versions. Default false."
-        }
-      }
-    },
-    "result_schema": {
-      "type": "array"
-    },
-    "execution": "deterministic",
-    "ownership": "athlete"
-  },
-  {
-    "name": "program_archive",
-    "domain": "program",
-    "description": "Archive a program version by setting its archived flag. The version remains accessible via program_list with include_archived=true but is hidden from default views.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key to archive."
-        }
-      }
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete"
-  },
-  {
-    "name": "program_unarchive",
-    "domain": "program",
-    "description": "Unarchive a previously archived program version, restoring it to the default view.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "pk": {
-          "type": "string",
-          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key to unarchive."
-        }
-      }
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete"
-  },
-  {
     "name": "program_update_meta_field",
     "domain": "program",
     "description": "Update a single top-level meta field on the current program (e.g. name, start_date, current_body_weight_kg, current_body_weight_lb). Reads the program, applies the field update, and writes it back.",
@@ -618,38 +543,6 @@
           "minLength": 1
         }
       }
-    },
-    "result_schema": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "execution": "deterministic",
-    "ownership": "athlete"
-  },
-  {
-    "name": "health_new_version",
-    "domain": "program",
-    "description": "Create a new major version of the program. Copies the current program, applies patches to specific fields, and stores as a new version. Use this when making significant program changes that should be tracked as a separate version.",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "change_reason": {
-          "type": "string",
-          "description": "Human-readable reason for the version change."
-        },
-        "patches": {
-          "type": "array",
-          "description": "List of patches, each with \"path\" and \"value\" keys. Example: {\"path\": \"sessions[0].exercises[1].kg\", \"value\": 180}"
-        },
-        "pk": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "change_reason",
-        "patches"
-      ]
     },
     "result_schema": {
       "type": "object",

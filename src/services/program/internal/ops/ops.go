@@ -55,10 +55,6 @@ func (r *Request) Bool(key string) bool {
 	return pyval.Truthy(r.Args[key])
 }
 
-func (r *Request) Selected() string {
-	return r.String("program_sk")
-}
-
 func validation(message string) error {
 	return apperr.Validation(message)
 }
@@ -86,9 +82,6 @@ func mapError(err error) error {
 func Registry() map[string]Handler {
 	return map[string]Handler{
 		"program_get":                     programGet,
-		"program_list_full":               programListFull,
-		"program_archive":                 programArchive,
-		"program_unarchive":               programUnarchive,
 		"program_update_meta_field":       programUpdateMeta,
 		"program_update_phases":           programUpdatePhases,
 		"block_notes_get":                 blockNotesGet,
@@ -98,7 +91,6 @@ func Registry() map[string]Handler {
 		"health_get_diet_notes":           getDietNotes,
 		"health_get_supplements":          getSupplements,
 		"health_invalidate_program_cache": invalidateCache,
-		"health_new_version":              newVersion,
 		"health_setup_status":             setupStatus,
 		"health_setup_initialize":         setupInitialize,
 		"block_transition":                blockTransition,

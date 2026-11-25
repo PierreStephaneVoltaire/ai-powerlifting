@@ -83,11 +83,10 @@ async function uploadPartWithRetry(url: string, chunk: Blob, onProgress: (loaded
 }
 
 export async function uploadVideo(
-  version: string,
   options: VideoUploadOptions,
 ): Promise<VideoUploadResult> {
   const { file, sessionDate, sessionId, exerciseName, setNumber, notes, onProgress, lift, angle } = options
-  const base = `${API_BASE}/videos/${encodeURIComponent(version)}/${encodeURIComponent(sessionDate)}/uploads`
+  const base = `${API_BASE}/videos/current/${encodeURIComponent(sessionDate)}/uploads`
   const target = { sessionId, lift, angle }
   const session = await uploadRequest<VideoUploadSession>(base, 'POST', {
     ...target, filename: file.name, mimeType: file.type, size: file.size,

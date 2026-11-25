@@ -5,16 +5,16 @@ import type { BlockNote } from '@powerlifting/types'
 
 export const blockNotesRouter = Router({ mergeParams: true })
 
-blockNotesRouter.get('/:version', cacheGet((req) => [`block-notes:${req.params.version}`]), async (req, res, next) => {
+blockNotesRouter.get('/current', cacheGet((req) => [`block-notes:current`]), async (req, res, next) => {
   try {
-    const notes = await blockNotesController.getBlockNotes(req.mapped_pk!, req.params.version)
+    const notes = await blockNotesController.getBlockNotes(req.mapped_pk!)
     res.json({ data: notes, error: null })
   } catch (err) {
     next(err)
   }
 })
 
-blockNotesRouter.put('/:version', invalidateAfter((req) => [`block-notes:${req.params.version}`]), async (req, res, next) => {
+blockNotesRouter.put('/current', invalidateAfter((req) => [`block-notes:current`]), async (req, res, next) => {
   try {
     const { blockNotes } = req.body
 
@@ -27,7 +27,6 @@ blockNotesRouter.put('/:version', invalidateAfter((req) => [`block-notes:${req.p
 
     const result = await blockNotesController.updateBlockNotes(
       req.mapped_pk!,
-      req.params.version,
       blockNotes as BlockNote[]
     )
     res.json({ data: result, error: null })

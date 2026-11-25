@@ -31,7 +31,7 @@ test('exercise field updates read and patch the stable Session after same-day re
   try {
     const { updateExerciseField } = await import('./sessionController')
     const updated = await operationScope.run({ athlete: 'athlete-1', person: 'person-1' }, () => updateExerciseField(
-      'athlete-1', 'current', '2026-09-14', 0, 0, 'name', 'intended squat updated',
+      'athlete-1', '2026-09-14', 0, 0, 'name', 'intended squat updated',
       { session_id: 'session-intended' },
     ))
     assert.equal(calls.filter(call => call.url.endsWith('/operations/session_get')).length, 1)

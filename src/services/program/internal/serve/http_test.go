@@ -251,8 +251,8 @@ func TestSwaggerDocumentsEveryOperation(t *testing.T) {
 	}
 	paths := document["paths"].(map[string]any)
 	registry, _ := contract.Load()
-	if len(registry.All()) != 20 {
-		t.Fatalf("expected 20 operations, got %d", len(registry.All()))
+	if len(registry.All()) != 16 {
+		t.Fatalf("expected 16 operations, got %d", len(registry.All()))
 	}
 	wantHeaders := []string{"X-Person-Pk", "X-Athlete-Pk", "X-PL-Source-Principal", "X-If-Job-Id", "X-If-Turn-Id", "X-PL-Nested-Operation"}
 	for _, operation := range registry.All() {
