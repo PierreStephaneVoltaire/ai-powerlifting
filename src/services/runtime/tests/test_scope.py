@@ -22,12 +22,11 @@ def test_template_actor_is_person_separate_from_selected_athlete():
 
 def test_program_store_does_not_retarget_another_request(monkeypatch):
     from services.runtime import program_tool_helpers
-    first = program_tool_helpers.get_store({"pk": "athlete-a", "program_sk": "program#v001"})
+    first = program_tool_helpers.get_store({"pk": "athlete-a"})
     second = program_tool_helpers.get_store({"pk": "athlete-b"})
     assert first is not second
     assert first.pk == "athlete-a"
     assert second.pk == "athlete-b"
-    assert first._current_program_sk_sync() == "program#v001"
 
 
 def test_nested_store_constructors_inherit_only_current_athlete(monkeypatch):

@@ -1,6 +1,4 @@
-import re
-
-from .access import META_DOMAINS, PROGRAM_FIELDS, permits
+from .access import META_DOMAINS, permits
 from .dispatch import OperationError
 
 
@@ -12,20 +10,6 @@ def authorize_program_change(operation: str, arguments: dict, context: dict) -> 
             fields.update(arguments['updates'])
         else:
             fields.add(arguments.get('field'))
-    elif operation == 'health_new_version':
-        for patch in arguments.get('patches') or []:
-            if not isinstance(patch, dict) or not isinstance(patch.get('path'), str):
-                raise OperationError(400, 'invalid_patch', 'Each patch requires a path and value')
-            path = re.split(r'[.\[]', patch['path'])
-            if path[0] == 'meta':
-                if len(path) > 1:
-                    fields.add(path[1])
-                elif isinstance(patch.get('value'), dict):
-                    fields.update(patch['value'])
-            elif path[0] in PROGRAM_FIELDS:
-                required.add(PROGRAM_FIELDS[path[0]])
-            else:
-                raise OperationError(400, 'invalid_patch', 'This Program field cannot be patched')
     elif operation in ('template_apply', 'template_apply_confirm'):
         for permission in ('program:read', 'performance:read', 'glossary:read'):
             if not permits(context, permission):

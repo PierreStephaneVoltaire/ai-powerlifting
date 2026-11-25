@@ -29,7 +29,7 @@ func notesRequest(args map[string]any) *Request {
 }
 
 func pointerTo(sk string) store.Item {
-	return store.Item{"pk": "a1", "sk": "program#current", "version": int64(2), "ref_sk": sk}
+	return store.Item{"pk": "a1", "sk": "program#current", "ref_sk": sk}
 }
 
 func storedNotes(t *testing.T, db *store.Memory, sk string) []any {
@@ -43,55 +43,34 @@ func storedNotes(t *testing.T, db *store.Memory, sk string) []any {
 	return notes
 }
 
-func TestBlockNotesUpdateIgnoresOldVersionSelector(t *testing.T) {
-	deps, db := notesDeps(t,
-		pointerTo("program#v002"),
-		store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b1", "block_notes": []any{}}},
-		store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{"current_block_id": "b2", "block_notes": []any{}}},
-	)
-	notes := []any{map[string]any{"notes": "current note", "block_id": "b2"}}
-	if _, err := blockNotesUpdate(deps, notesRequest(map[string]any{"version": "v001", "block_notes": notes})); err != nil {
-		t.Fatal(err)
-	}
-	if got := storedNotes(t, db, "program#v001"); len(got) != 0 {
-		t.Fatalf("old program was modified %v", got)
-	}
-	if got := storedNotes(t, db, "program#v002"); len(got) != 1 {
-		t.Fatalf("current program notes %v", got)
-	}
-}
-
-func TestBlockNotesUpdateDefaultsAndCurrentVersionWriteCurrentProgram(t *testing.T) {
-	for _, args := range []map[string]any{{}, {"version": "current"}} {
+func TestBlockNotesUpdateWritesCurrentProgram(t *testing.T) {
+	for _, args := range []map[string]any{{}} {
 		deps, db := notesDeps(t,
-			pointerTo("program#v002"),
-			store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b1"}},
-			store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{"current_block_id": "b2"}},
+			pointerTo("program#bbb"),
+			store.Item{"pk": "a1", "sk": "program#aaa", "meta": map[string]any{"current_block_id": "b1"}},
+			store.Item{"pk": "a1", "sk": "program#bbb", "meta": map[string]any{"current_block_id": "b2"}},
 		)
 		args["block_notes"] = []any{map[string]any{"notes": "n", "block_id": "b2"}}
 		if _, err := blockNotesUpdate(deps, notesRequest(args)); err != nil {
 			t.Fatal(err)
 		}
-		if len(storedNotes(t, db, "program#v002")) != 1 || len(storedNotes(t, db, "program#v001")) != 0 {
+		if len(storedNotes(t, db, "program#bbb")) != 1 || len(storedNotes(t, db, "program#aaa")) != 0 {
 			t.Fatalf("args %v did not write the current program", args)
 		}
 	}
 }
 
-func TestBlockNotesGetReturnsEmptyListWhenVersionHasNoNotes(t *testing.T) {
+func TestBlockNotesGetReturnsEmptyListWhenProgramHasNoNotes(t *testing.T) {
 	cases := map[string]store.Item{
-		"no_meta":          {"pk": "a1", "sk": "program#v001"},
-		"empty_meta":       {"pk": "a1", "sk": "program#v001", "meta": map[string]any{}},
-		"meta_without":     {"pk": "a1", "sk": "program#v001", "meta": map[string]any{"program_name": "x"}},
-		"null_block_notes": {"pk": "a1", "sk": "program#v001", "meta": map[string]any{"block_notes": nil}},
+		"no_meta":          {"pk": "a1", "sk": "program#aaa"},
+		"empty_meta":       {"pk": "a1", "sk": "program#aaa", "meta": map[string]any{}},
+		"meta_without":     {"pk": "a1", "sk": "program#aaa", "meta": map[string]any{"program_name": "x"}},
+		"null_block_notes": {"pk": "a1", "sk": "program#aaa", "meta": map[string]any{"block_notes": nil}},
 	}
 	for name, item := range cases {
-		for _, version := range []string{"v001", "current", ""} {
-			deps, _ := notesDeps(t, pointerTo("program#v001"), item)
+		for _, version := range []string{""} {
+			deps, _ := notesDeps(t, pointerTo("program#aaa"), item)
 			args := map[string]any{}
-			if version != "" {
-				args["version"] = version
-			}
 			result, err := blockNotesGet(deps, notesRequest(args))
 			if err != nil {
 				t.Fatalf("%s/%q: %v", name, version, err)
@@ -105,7 +84,7 @@ func TestBlockNotesGetReturnsEmptyListWhenVersionHasNoNotes(t *testing.T) {
 }
 
 func privateNotesProgram() store.Item {
-	return store.Item{"pk": "a1", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b1", "block_notes": []any{
+	return store.Item{"pk": "a1", "sk": "program#aaa", "meta": map[string]any{"current_block_id": "b1", "block_notes": []any{
 		map[string]any{"date": "2026-11-01", "notes": "shared", "block_id": "b1"},
 		map[string]any{"date": "2026-11-02", "notes": "mine", "block_id": "b1", "private": true},
 	}}}
@@ -121,7 +100,7 @@ func noteTexts(notes any) []string {
 }
 
 func TestOtherPeopleDoNotSeePrivateBlockNotes(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	deps, _ := notesDeps(t, pointerTo("program#aaa"), privateNotesProgram())
 	result, err := blockNotesGet(deps, notesRequest(map[string]any{}))
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +116,7 @@ func TestOtherPeopleDoNotSeePrivateBlockNotes(t *testing.T) {
 }
 
 func TestAthleteSeesOwnPrivateBlockNotes(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	deps, _ := notesDeps(t, pointerTo("program#aaa"), privateNotesProgram())
 	result, err := blockNotesGet(deps, notesRequest(map[string]any{}))
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +132,7 @@ func TestAthleteSeesOwnPrivateBlockNotes(t *testing.T) {
 }
 
 func TestDelegateUpdateKeepsPrivateNotesAndCannotMarkPrivate(t *testing.T) {
-	deps, db := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	deps, db := notesDeps(t, pointerTo("program#aaa"), privateNotesProgram())
 	request := notesRequest(map[string]any{"block_notes": []any{
 		map[string]any{"date": "2026-11-01", "notes": "shared edited", "block_id": "b1"},
 		map[string]any{"date": "2026-11-03", "notes": "coach", "block_id": "b1", "private": true},
@@ -162,7 +141,7 @@ func TestDelegateUpdateKeepsPrivateNotesAndCannotMarkPrivate(t *testing.T) {
 	if _, err := blockNotesUpdate(deps, request); err != nil {
 		t.Fatal(err)
 	}
-	stored := storedNotes(t, db, "program#v001")
+	stored := storedNotes(t, db, "program#aaa")
 	byText := map[string]map[string]any{}
 	for _, raw := range stored {
 		note := raw.(map[string]any)
@@ -174,7 +153,7 @@ func TestDelegateUpdateKeepsPrivateNotesAndCannotMarkPrivate(t *testing.T) {
 }
 
 func TestAthleteUpdateCanRemoveAndMarkPrivateNotes(t *testing.T) {
-	deps, db := notesDeps(t, pointerTo("program#v001"), privateNotesProgram())
+	deps, db := notesDeps(t, pointerTo("program#aaa"), privateNotesProgram())
 	request := notesRequest(map[string]any{"block_notes": []any{
 		map[string]any{"date": "2026-11-01", "notes": "shared", "block_id": "b1", "private": true},
 	}})
@@ -182,7 +161,7 @@ func TestAthleteUpdateCanRemoveAndMarkPrivateNotes(t *testing.T) {
 	if _, err := blockNotesUpdate(deps, request); err != nil {
 		t.Fatal(err)
 	}
-	stored := storedNotes(t, db, "program#v001")
+	stored := storedNotes(t, db, "program#aaa")
 	if len(stored) != 1 || stored[0].(map[string]any)["private"] != true {
 		t.Fatalf("stored %v", stored)
 	}

@@ -15,9 +15,8 @@ type Sessions interface {
 }
 
 type Program struct {
-	Found       bool
-	Unpublished bool
-	Phases      []any
+	Found  bool
+	Phases []any
 }
 
 type Programs interface {

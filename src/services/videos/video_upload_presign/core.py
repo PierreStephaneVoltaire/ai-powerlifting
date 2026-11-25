@@ -11,7 +11,6 @@ async def video_upload_presign(args: dict) -> dict:
     health_table = get_health_table()
     store = get_session_store(args)
     pk = resolve_pk(args)
-    version = args.get("version") or "current"
     session_date = args.get("session_date") or ""
     session_id = str(args.get("session_id") or "").strip() or None
     lift = str(args.get("lift") or "").strip() or None
@@ -21,7 +20,7 @@ async def video_upload_presign(args: dict) -> dict:
     filename = args.get("filename") or "video.mp4"
 
     def presign():
-        program_sk, phases = context(health_table, pk, version)
+        program_sk, phases = context(health_table, pk)
         resolved_session_id = f"lift-profile:{lift}:{angle}" if lift else ""
         if not lift:
             session = session_for_date(store, program_sk, phases, session_date, session_id)

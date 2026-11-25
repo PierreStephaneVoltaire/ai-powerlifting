@@ -36,7 +36,7 @@ func templateApplySessions(d *Deps, r *Request) (any, error) {
 	if _, err := time.Parse("2006-01-02", r.String("start_date")); err != nil {
 		return nil, validation("Invalid start date")
 	}
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, "", true)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, true)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -47,7 +47,6 @@ func templateApplySessions(d *Deps, r *Request) (any, error) {
 	if receipt, ok := receipts[operationID].(map[string]any); operationID != "" && ok {
 		result := pyval.CopyMap(receipt)
 		result["program_sk"] = loaded.SK
-		result["program_version"] = meta["version_label"]
 		return result, nil
 	}
 	blocks := pyval.Maps(meta["blocks"])
@@ -122,10 +121,10 @@ func templateApplySessions(d *Deps, r *Request) (any, error) {
 		}
 		receipts[operationID] = pyval.CopyMap(result)
 	}
-	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, program, false, loaded)
+	written, err := d.Programs.Save(r.Ctx, r.Athlete, program, loaded)
 	if err != nil {
 		return nil, mapError(err)
 	}
-	result["program_version"], result["program_sk"] = meta["version_label"], written.SK
+	result["program_sk"] = written.SK
 	return result, nil
 }

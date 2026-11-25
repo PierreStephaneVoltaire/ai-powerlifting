@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -71,18 +70,6 @@ func isoTime(now time.Time) string {
 		text += fmt.Sprintf(".%06d", micro)
 	}
 	return text + "+00:00"
-}
-
-func versionNumber(programSK string) any {
-	rest, ok := strings.CutPrefix(programSK, "program#v")
-	if !ok {
-		return nil
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(rest))
-	if err != nil {
-		return nil
-	}
-	return value.Int(n)
 }
 
 type draft struct {
@@ -181,8 +168,6 @@ func (s *Service) build(pk string, d draft) value.Item {
 	session["source_pk"] = pk
 	session["source_table"] = s.SourceTable
 	session["program_sk"] = d.programSK
-	session["program_version"] = strings.TrimPrefix(d.programSK, "program#")
-	session["program_version_number"] = versionNumber(d.programSK)
 	session["source_index"] = value.Int(value.IntOf(d.existing["source_index"], d.sourceIdx))
 	session["same_day_ordinal"] = value.Int(ordinal)
 	session["phase_ref"] = phaseRef(phase)

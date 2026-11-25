@@ -30,7 +30,7 @@ func (s *Service) confirmTemplate(ctx context.Context, args map[string]any, call
 	if err != nil {
 		return nil, err
 	}
-	program, err := s.Sources.Program(ctx, caller.Athlete, "")
+	program, err := s.Sources.Program(ctx, caller.Athlete)
 	if err != nil {
 		return nil, apperr.Upstream("Program source unavailable")
 	}
@@ -178,10 +178,7 @@ func (s *Service) confirmTemplate(ctx context.Context, args map[string]any, call
 		return nil, fmt.Errorf("block transition: %w", err)
 	}
 	written, _ := result["program"].(map[string]any)
-	writtenMeta, _ := written["meta"].(map[string]any)
-	version := writtenMeta["version_label"]
-	sk := defaultValue(written["sk"], version)
-	return map[string]any{"status": "applied", "program_version": version, "program_sk": sk, "target": "new_block", "block_id": result["next_block_id"], "preserved_sessions": len(asList(program["sessions"]))}, nil
+	return map[string]any{"status": "applied", "program_sk": written["sk"], "target": "new_block", "block_id": result["next_block_id"], "preserved_sessions": len(asList(program["sessions"]))}, nil
 }
 
 func asList(value any) []any { list, _ := value.([]any); return list }

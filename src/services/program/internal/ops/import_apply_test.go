@@ -8,10 +8,10 @@ import (
 )
 
 func TestApplySessionImportAndRetry(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v002"),
-		store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{"version_label": "2.0"}},
+	deps, _ := notesDeps(t, pointerTo("program#bbb"),
+		store.Item{"pk": "a1", "sk": "program#bbb", "meta": map[string]any{}},
 		store.Item{"pk": "a1", "sk": "import#pending#i1", "status": "applying", "apply_claim_id": "c1"})
-	if err := deps.Programs.Sessions.WriteFresh(context.Background(), "a1", "program#v002", []any{map[string]any{"id": "old", "date": "2026-11-20", "exercises": []any{map[string]any{"name": "squat"}}}}, nil); err != nil {
+	if err := deps.Programs.Sessions.WriteFresh(context.Background(), "a1", "program#bbb", []any{map[string]any{"id": "old", "date": "2026-11-20", "exercises": []any{map[string]any{"name": "squat"}}}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	args := map[string]any{"import_id": "i1", "claim_id": "c1", "start_date": "2026-11-20", "sessions": []any{map[string]any{"date": "2026-10-01", "exercises": []any{map[string]any{"name": "bench"}}}, map[string]any{"date": "2026-10-02", "exercises": []any{}}}}
@@ -20,14 +20,14 @@ func TestApplySessionImportAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := first.(map[string]any)
-	if result["applied_count"] != 2 || result["new_version"] != "3.0" {
+	if result["applied_count"] != 2 {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	second, err := programApplySessionImport(deps, notesRequest(args))
-	if err != nil || second.(map[string]any)["new_version"] != "3.0" {
+	if err != nil || second.(map[string]any)["status"] != "applied" {
 		t.Fatalf("retry: %#v, %v", second, err)
 	}
-	loaded, err := deps.Programs.Load(context.Background(), "a1", "", true)
+	loaded, err := deps.Programs.Load(context.Background(), "a1", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestApplySessionImportAndRetry(t *testing.T) {
 }
 
 func TestApplySessionImportRejectsUnclaimedImport(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v002"), store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{}}, store.Item{"pk": "a1", "sk": "import#pending#i1", "status": "applying", "apply_claim_id": "other"})
+	deps, _ := notesDeps(t, pointerTo("program#bbb"), store.Item{"pk": "a1", "sk": "program#bbb", "meta": map[string]any{}}, store.Item{"pk": "a1", "sk": "import#pending#i1", "status": "applying", "apply_claim_id": "other"})
 	if _, err := programApplySessionImport(deps, notesRequest(map[string]any{"import_id": "i1", "claim_id": "c1"})); err == nil {
 		t.Fatal("expected invalid claim to fail")
 	}

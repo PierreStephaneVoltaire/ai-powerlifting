@@ -153,10 +153,6 @@ func (d Dynamo) GlossaryEntries(ctx context.Context, pk string) ([]Item, error) 
 	return d.query(ctx, d.Tables.Glossary, "", pk, GlossarySKPrefix)
 }
 
-func (d Dynamo) Versions(ctx context.Context, pk string) ([]Item, error) {
-	return d.query(ctx, d.Tables.Health, "", pk, ProgramSKPrefix)
-}
-
 func (d Dynamo) Sessions(ctx context.Context, pk, programSK string) ([]Item, error) {
 	return d.query(ctx, d.Tables.Sessions, "", pk, SessionSKPrefix+programSK+"#")
 }

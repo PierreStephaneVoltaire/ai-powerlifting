@@ -62,7 +62,7 @@ func TestReadsNeverTouchTheAnalysisVersion(t *testing.T) {
 	}
 }
 
-func TestProgramLookupFallbacks(t *testing.T) {
+func TestProgramLookup(t *testing.T) {
 	cases := []struct {
 		name   string
 		health []store.Item
@@ -70,21 +70,12 @@ func TestProgramLookupFallbacks(t *testing.T) {
 		jump   any
 	}{
 		{"no program", nil, 404, nil},
-		{"unpublished pointer target", []store.Item{
-			{"pk": athlete, "sk": "program#current", "ref_sk": "program#v001"},
-			{"pk": athlete, "sk": "program#v001", "published": false},
-		}, 404, nil},
 		{"dangling pointer", []store.Item{{"pk": athlete, "sk": "program#current", "ref_sk": "program#v009"}}, 500, nil},
-		{"pointer with version only", []store.Item{
-			{"pk": athlete, "sk": "program#current", "version": 7},
+		{"pointer without ref", []store.Item{{"pk": athlete, "sk": "program#current", "version": 7}}, 404, nil},
+		{"pointer ref", []store.Item{
+			{"pk": athlete, "sk": "program#current", "ref_sk": "program#v007"},
 			{"pk": athlete, "sk": "program#v007", "operator_prefs": map[string]any{"attempt_jumps": map[string]any{"squat": map[string]any{"j1": 15, "j2": 15}}}},
 		}, 0, 15.0},
-		{"no pointer picks the newest published version", []store.Item{
-			{"pk": athlete, "sk": "program#v002", "operator_prefs": map[string]any{"attempt_jumps": map[string]any{"squat": map[string]any{"j1": 5, "j2": 5}}}},
-			{"pk": athlete, "sk": "program#v010-draft", "published": false},
-			{"pk": athlete, "sk": "program#v003-b", "operator_prefs": map[string]any{"attempt_jumps": map[string]any{"squat": map[string]any{"j1": 25, "j2": 25}}}},
-			{"pk": athlete, "sk": "program#vxyz"},
-		}, 0, 25.0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -116,7 +107,7 @@ func TestSnapshotErrors(t *testing.T) {
 	if _, err := call(svc, "health_snapshot_competition_projection", map[string]any{"date": "2027-4-24xx"}); !errors.As(err, &failure) || failure.Status != 422 {
 		t.Fatalf("%v", err)
 	}
-	if _, err := call(svc, "health_snapshot_competition_projection", map[string]any{"date": "2027-04-24"}); !errors.As(err, &failure) || failure.Message != "Program version current not found" {
+	if _, err := call(svc, "health_snapshot_competition_projection", map[string]any{"date": "2027-04-24"}); !errors.As(err, &failure) || failure.Status != 404 {
 		t.Fatalf("%v", err)
 	}
 }

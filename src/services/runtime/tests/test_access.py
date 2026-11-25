@@ -64,15 +64,8 @@ def test_aggregate_program_changes_require_each_affected_domain():
     from services.runtime.dispatch import OperationError
     claims = {'caller': 'cluster.local/ns/powerlifting/sa/powerlifting-app-backend'}
     limited = {'permissions': ['program:write', 'program:read']}
-    for path in ('sessions[0].exercises', 'current_maxes.squat', 'meta.manual_maxes', 'competitions'):
-        with pytest.raises(OperationError, match='permission required'):
-            check_context('health_new_version', {'patches': [{'path': path, 'value': []}]}, claims, limited)
     with pytest.raises(OperationError, match='performance:write'):
         check_context('program_update_meta_field', {'updates': {'manual_maxes': {}}}, claims, limited)
-    assert check_context('health_new_version', {'patches': [{'path': 'phases', 'value': []}]}, claims, limited) is limited
-    tied = {'permissions': ['program:write', 'competition:write'], 'competition_scope': {'write': ['meet']}}
-    with pytest.raises(OperationError, match='individual operations'):
-        check_context('health_new_version', {'patches': [{'path': 'competitions', 'value': []}]}, claims, tied)
     template = {'permissions': ['templates:read', 'program:read', 'performance:read', 'glossary:read']}
     assert check_context('template_apply', {}, claims, template) is template
     with pytest.raises(OperationError, match='permission required'):

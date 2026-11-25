@@ -18,7 +18,6 @@ type Storage interface {
 	Get(context.Context, string, string) (map[string]any, error)
 	Put(context.Context, map[string]any) error
 	Competitions(context.Context, string) ([]map[string]any, error)
-	Programs(context.Context, string) ([]map[string]any, error)
 }
 type Versions interface {
 	Bump(context.Context, string) error

@@ -114,19 +114,12 @@
             "skipped_count": {
               "type": "integer",
               "minimum": 0
-            },
-            "new_version": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           },
           "required": [
             "status",
             "applied_count",
-            "skipped_count",
-            "new_version"
+            "skipped_count"
           ],
           "additionalProperties": false
         }

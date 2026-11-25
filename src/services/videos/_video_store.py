@@ -79,13 +79,12 @@ def resolve_pk(args: dict) -> str:
     return args.get("pk") or os.environ.get("HEALTH_PROGRAM_PK", "operator")
 
 
-def resolve_program_sk(health_table: Any, pk: str, version: str) -> str:
-    if version == "current":
-        pointer = health_table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
-        if pointer:
-            return pointer.get("ref_sk", "program#v001")
-        return "program#v001"
-    return f"program#{version}"
+def resolve_program_sk(health_table: Any, pk: str) -> str:
+    pointer = health_table.get_item(Key={"pk": pk, "sk": "program#current"}).get("Item")
+    ref_sk = pointer.get("ref_sk") if pointer else None
+    if not ref_sk:
+        raise ValueError("Program not found")
+    return str(ref_sk)
 
 
 def load_phases(health_table: Any, pk: str, program_sk: str):
@@ -94,11 +93,11 @@ def load_phases(health_table: Any, pk: str, program_sk: str):
     return None if item is None else item.get("phases") or []
 
 
-def context(health_table: Any, pk: str, version: str):
-    program_sk = resolve_program_sk(health_table, pk, version)
+def context(health_table: Any, pk: str):
+    program_sk = resolve_program_sk(health_table, pk)
     phases = load_phases(health_table, pk, program_sk)
     if phases is None:
-        raise ValueError(f"Program version {version} not found")
+        raise ValueError("Program not found")
     return program_sk, phases
 
 
@@ -227,7 +226,7 @@ def reserve_lift_profile_slot(table: Any, pk: str, program_sk: str, lift: str, a
     for _ in range(5):
         program = table.get_item(Key={"pk": pk, "sk": program_sk}, ConsistentRead=True).get("Item")
         if not program:
-            raise ValueError("Program version not found")
+            raise ValueError("Program not found")
         profiles = [dict(profile) for profile in program.get("lift_profiles") or []]
         profile = next((item for item in profiles if item.get("lift") == lift), None)
         if profile is None:

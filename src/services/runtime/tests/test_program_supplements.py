@@ -22,6 +22,11 @@ class Table:
             raise RuntimeError("write failed")
         self.items[(Item["pk"], Item["sk"])] = copy.deepcopy(Item)
 
+    def update_item(self, Key, **kwargs):
+        self.events.append((self.name, "pointer"))
+        values = kwargs["ExpressionAttributeValues"]
+        self.items[(Key["pk"], Key["sk"])].update(current_block_id=values[":block"], updated_at=values[":now"])
+
 
 def store(health, supplements):
     instance = ProgramStore("health", pk="athlete")
@@ -87,9 +92,9 @@ def test_source_commit_persists_legacy_data_before_health_and_stops_on_failure()
     assert "supplements" in health.items[("athlete", "program#v001")]
 
 
-def test_new_version_writes_supplements_before_health_item(monkeypatch):
+def test_save_in_place_writes_supplements_before_health_item(monkeypatch):
     events = []
-    health = Table([{"pk": "athlete", "sk": ProgramStore.POINTER_SK, "version": 1, "ref_sk": "program#v001"}], events)
+    health = Table([{"pk": "athlete", "sk": ProgramStore.POINTER_SK, "ref_sk": "program#v001"}], events)
     supplements = Table(events=events, name="supplements")
     instance = store(health, supplements)
 
@@ -98,32 +103,33 @@ def test_new_version_writes_supplements_before_health_item(monkeypatch):
             events.append(("sessions", ""))
 
     monkeypatch.setattr(instance, "_get_session_store", lambda: Sessions())
-    written = instance._write_new_version_sync({
-        "meta": {"version_label": "1.0"},
+    written = instance._save_in_place_sync({
+        "meta": {},
         "phases": [],
         "sessions": [],
         "supplements": [{"name": "creatine"}],
         "supplement_phases": [],
-    }, minor=False)
+    })
 
-    health_sk = next(key[1] for key in health.items if key[1].startswith("program#v002"))
+    health_sk = "program#v001"
     assert events[0] == ("supplements", health_sk)
     assert events[1] == ("health", health_sk)
+    assert events[2] == ("health", "pointer")
     assert "supplements" not in health.items[("athlete", health_sk)]
     assert supplements.items[("athlete", health_sk)]["supplements"] == [{"name": "creatine"}]
     assert written["supplements"] == [{"name": "creatine"}]
 
 
-def test_new_version_supplement_failure_does_not_write_health_item(monkeypatch):
+def test_save_in_place_supplement_failure_does_not_write_health_item(monkeypatch):
     events = []
-    health = Table([{"pk": "athlete", "sk": ProgramStore.POINTER_SK, "version": 1, "ref_sk": "program#v001"}], events)
+    health = Table([{"pk": "athlete", "sk": ProgramStore.POINTER_SK, "ref_sk": "program#v001"}], events)
     supplements = Table(events=events, fail_put=True, name="supplements")
     instance = store(health, supplements)
 
     with pytest.raises(RuntimeError, match="write failed"):
-        instance._write_new_version_sync({"meta": {}, "sessions": [], "supplements": [{"name": "creatine"}]}, minor=False)
+        instance._save_in_place_sync({"meta": {}, "sessions": [], "supplements": [{"name": "creatine"}]})
 
     assert len(events) == 1
     assert events[0][0] == "supplements"
-    assert events[0][1].startswith("program#v002-")
-    assert not any(key[1].startswith("program#v002") for key in health.items)
+    assert events[0][1] == "program#v001"
+    assert ("athlete", "program#v001") not in health.items

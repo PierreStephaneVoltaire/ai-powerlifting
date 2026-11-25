@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -62,21 +61,6 @@ func ResolvePhase(session map[string]any, phases []any) map[string]any {
 		}
 	}
 	return map[string]any{"name": "Unscheduled", "intent": "", "start_week": int64(week), "end_week": int64(week), "block": block}
-}
-
-func programVersion(programSK string) string {
-	return strings.TrimPrefix(programSK, "program#")
-}
-
-func programVersionNumber(programSK string) any {
-	if !strings.HasPrefix(programSK, "program#v") {
-		return nil
-	}
-	number, err := strconv.Atoi(strings.TrimPrefix(programSK, "program#v"))
-	if err != nil {
-		return nil
-	}
-	return int64(number)
 }
 
 var internalSessionFields = []string{"pk", "sk", "entity_type", "source_pk", "source_table", "program_sk", "program_version", "program_version_number", "source_index", "same_day_ordinal", "phase_ref", "session_id"}

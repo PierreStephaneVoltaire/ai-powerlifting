@@ -116,7 +116,7 @@ func (m *Memory) CurrentSK(_ context.Context, pk string) (string, error) {
 	if ref, ok := m.Health[pk+"\x00"+pointerSK]["ref_sk"].(string); ok && ref != "" {
 		return ref, nil
 	}
-	return fallbackSK, nil
+	return "", nil
 }
 
 func (m *Memory) Program(_ context.Context, pk, sk string) (session.Program, error) {
@@ -127,9 +127,6 @@ func (m *Memory) Program(_ context.Context, pk, sk string) (session.Program, err
 		return session.Program{}, nil
 	}
 	program := session.Program{Found: true}
-	if published, ok := item["published"].(bool); ok && !published {
-		program.Unpublished = true
-	}
 	if phases, ok := item["phases"].([]any); ok {
 		program.Phases = value.Copy(phases).([]any)
 	}

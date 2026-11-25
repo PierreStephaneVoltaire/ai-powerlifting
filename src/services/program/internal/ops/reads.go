@@ -17,11 +17,11 @@ func entriesToList(entries []map[string]any) []any {
 }
 
 func programGet(d *Deps, r *Request) (any, error) {
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, "", false)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, false)
 	if err != nil {
 		return nil, mapError(err)
 	}
-	programSK, err := d.Programs.CurrentSK(r.Ctx, r.Athlete, "")
+	programSK, err := d.Programs.CurrentSK(r.Ctx, r.Athlete)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -53,7 +53,7 @@ func programGet(d *Deps, r *Request) (any, error) {
 }
 
 func blockNotesGet(d *Deps, r *Request) (any, error) {
-	sk, item, err := d.Programs.BlockNotes(r.Ctx, r.Athlete, "current")
+	sk, item, err := d.Programs.BlockNotes(r.Ctx, r.Athlete)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func scopedList(program map[string]any, blockID, field string) []any {
 }
 
 func getDietNotes(d *Deps, r *Request) (any, error) {
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, "", false)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, false)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -121,7 +121,7 @@ func noteDate(note map[string]any) string {
 }
 
 func getSupplements(d *Deps, r *Request) (any, error) {
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, "", false)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, false)
 	if err != nil {
 		return nil, mapError(err)
 	}

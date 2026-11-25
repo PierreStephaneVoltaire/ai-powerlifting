@@ -2,7 +2,7 @@
   {
     "name": "program_apply_session_import",
     "domain": "program",
-    "description": "Apply a claimed session import to a guarded program version.",
+    "description": "Apply a claimed session import to the current program.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -17,7 +17,7 @@
       "required": ["import_id", "claim_id", "sessions"],
       "additionalProperties": false
     },
-    "result_schema": {"type": "object", "required": ["status", "applied_count", "skipped_count", "new_version"], "additionalProperties": true},
+    "result_schema": {"type": "object", "required": ["status", "applied_count", "skipped_count"], "additionalProperties": true},
     "execution": "deterministic",
     "ownership": "athlete"
   },
@@ -231,17 +231,13 @@
   {
     "name": "program_get",
     "domain": "program",
-    "description": "Get a specific program version by its sort key. Returns the full program object with phases, sessions, meta, lift profiles, and competitions. Use this to load a program for display or before modifying it.",
+    "description": "Get the current program. Returns the full program object with phases, sessions, meta, lift profiles, and competitions. Use this to load a program for display or before modifying it.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key (e.g. \"program#v3\" or \"program#current\")."
         },
         "block": {
           "type": "string",
@@ -274,10 +270,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "field": {
           "type": "string",
@@ -316,17 +308,13 @@
   {
     "name": "program_update_phases",
     "domain": "program",
-    "description": "Update the phases array on a program version, or replace a single block within the phases. Reads the program, applies the phase/block update, and writes it back.",
+    "description": "Update the phases array on the current program, or replace a single block within the phases. Reads the program, applies the phase/block update, and writes it back.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "program_sk": {
-          "type": "string",
-          "description": "Program sort key. Defaults to current."
         },
         "phases": {
           "type": "array",
@@ -351,17 +339,13 @@
   {
     "name": "block_notes_get",
     "domain": "program",
-    "description": "Get block notes for a program version. Block notes are free-form per-block commentary stored alongside the program.",
+    "description": "Get block notes for the current program. Block notes are free-form per-block commentary stored alongside the program.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         }
       }
     },
@@ -375,17 +359,13 @@
   {
     "name": "block_notes_update",
     "domain": "program",
-    "description": "Replace the block notes array for a program version. This is a full replace \u2014 send the complete array of block note dicts.",
+    "description": "Replace the block notes array for the current program. This is a full replace \u2014 send the complete array of block note dicts.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         },
         "block_notes": {
           "type": "array",
@@ -406,17 +386,13 @@
   {
     "name": "diet_notes_update",
     "domain": "program",
-    "description": "Replace the diet notes array for a program version. Full replace \u2014 send the complete array of note dicts.",
+    "description": "Replace the diet notes array for the current program. Full replace \u2014 send the complete array of note dicts.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         },
         "notes": {
           "type": "array",
@@ -446,10 +422,6 @@
         "pk": {
           "type": "string",
           "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
-        },
-        "version": {
-          "type": "string",
-          "description": "Program version. Defaults to \"current\"."
         },
         "phases": {
           "type": "array",

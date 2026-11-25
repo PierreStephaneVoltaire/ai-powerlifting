@@ -11,8 +11,8 @@ import (
 
 func TestSupplementPhaseCreationAfterBlockTransition(t *testing.T) {
 	deps, db := notesDeps(t,
-		pointerTo("program#v002"),
-		store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{
+		pointerTo("program#bbb"),
+		store.Item{"pk": "a1", "sk": "program#bbb", "meta": map[string]any{
 			"current_block_id": "active",
 			"blocks": []any{
 				map[string]any{"id": "past", "status": "completed"},
@@ -40,7 +40,7 @@ func TestSupplementPhaseCreationAfterBlockTransition(t *testing.T) {
 	if !reflect.DeepEqual(gotItems, items) {
 		t.Fatalf("optional assessments did not round trip: %v", gotItems)
 	}
-	stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
+	stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#bbb"}, store.GetOptions{})
 	if err != nil || len(stored["supplement_phases"].([]any)) != 2 {
 		t.Fatalf("past phase must survive alongside the new phase: %v, %v", stored, err)
 	}
@@ -54,16 +54,16 @@ func TestSupplementPhasesRejectPastBlocksWithoutWriting(t *testing.T) {
 		{"phases": []any{map[string]any{"block_id": "active", "block": "past"}}},
 		{"phases": []any{"invalid"}},
 	} {
-		original := store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{"current_block_id": "active"}, "supplement_phases": []any{map[string]any{"phase": 1, "block_id": "active"}, map[string]any{"phase": 2, "block_id": "past"}}}
-		deps, db := notesDeps(t, pointerTo("program#v002"), original)
-		before, err := db.Get(context.Background(), "h", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
+		original := store.Item{"pk": "a1", "sk": "program#bbb", "meta": map[string]any{"current_block_id": "active"}, "supplement_phases": []any{map[string]any{"phase": 1, "block_id": "active"}, map[string]any{"phase": 2, "block_id": "past"}}}
+		deps, db := notesDeps(t, pointerTo("program#bbb"), original)
+		before, err := db.Get(context.Background(), "h", store.Key{PK: "a1", SK: "program#bbb"}, store.GetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := supplementPhasesUpdate(deps, notesRequest(target)); err == nil {
 			t.Fatalf("expected validation failure for %v", target)
 		}
-		stored, err := db.Get(context.Background(), "h", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
+		stored, err := db.Get(context.Background(), "h", store.Key{PK: "a1", SK: "program#bbb"}, store.GetOptions{})
 		if err != nil || !reflect.DeepEqual(stored, before) {
 			t.Fatalf("rejected write changed data: %v, %v", stored, err)
 		}
@@ -77,11 +77,11 @@ func TestSupplementPhasesReplaceOnlyCurrentBlock(t *testing.T) {
 		{map[string]any{"phase": 3, "block_id": "active"}},
 	} {
 		past := map[string]any{"phase": json.Number("1"), "block_id": "past"}
-		deps, db := notesDeps(t, pointerTo("program#v002"), store.Item{"pk": "a1", "sk": "program#v002", "meta": map[string]any{"current_block_id": "active"}, "supplement_phases": []any{past, map[string]any{"phase": 2, "block_id": "active"}}})
+		deps, db := notesDeps(t, pointerTo("program#bbb"), store.Item{"pk": "a1", "sk": "program#bbb", "meta": map[string]any{"current_block_id": "active"}, "supplement_phases": []any{past, map[string]any{"phase": 2, "block_id": "active"}}})
 		if _, err := supplementPhasesUpdate(deps, notesRequest(map[string]any{"phases": phases})); err != nil {
 			t.Fatal(err)
 		}
-		stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#v002"}, store.GetOptions{})
+		stored, err := db.Get(context.Background(), "sup", store.Key{PK: "a1", SK: "program#bbb"}, store.GetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,8 +96,8 @@ func TestSupplementPhasesReplaceOnlyCurrentBlock(t *testing.T) {
 }
 
 func TestCurrentSupplementsExcludeLegacyPreviousBlockItems(t *testing.T) {
-	deps, _ := notesDeps(t, pointerTo("program#v002"), store.Item{
-		"pk": "a1", "sk": "program#v002",
+	deps, _ := notesDeps(t, pointerTo("program#bbb"), store.Item{
+		"pk": "a1", "sk": "program#bbb",
 		"meta": map[string]any{"current_block_id": "active", "blocks": []any{
 			map[string]any{"id": "past", "status": "completed"},
 			map[string]any{"id": "active", "status": "active"},

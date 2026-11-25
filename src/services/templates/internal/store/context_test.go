@@ -49,7 +49,7 @@ func TestContextUsesAthleteOverlayAndFiltersHiddenExercises(t *testing.T) {
 	if err != nil || len(exercises) != 1 || exercises[0]["name"] != "My Squat" || len(client.requested) != 2 || client.requested[1] != "ATHLETE#athlete" {
 		t.Fatalf("exercises: %#v, %v", exercises, err)
 	}
-	full, err := repo.Program(context.Background(), "athlete", "")
+	full, err := repo.Program(context.Background(), "athlete")
 	if err != nil {
 		t.Fatal(err)
 	}

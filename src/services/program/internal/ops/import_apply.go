@@ -114,7 +114,7 @@ func programApplySessionImport(d *Deps, r *Request) (any, error) {
 	if pyval.Str2(claim["status"]) != "applying" || pyval.Str2(claim["apply_claim_id"]) != claimID {
 		return nil, validation("Import claim is not active")
 	}
-	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, "", true)
+	loaded, err := d.Programs.Load(r.Ctx, r.Athlete, true)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -134,21 +134,15 @@ func programApplySessionImport(d *Deps, r *Request) (any, error) {
 		return nil, err
 	}
 	program["sessions"] = merged
-	label := "0.0"
-	if value, ok := meta["version_label"]; ok {
-		label = pyval.Str(value)
-	}
-	result := map[string]any{"status": "applied", "applied_count": applied, "skipped_count": skipped, "new_version": store.NextVersionLabel(label, false, loaded.Version, loaded.Version+1)}
+	result := map[string]any{"status": "applied", "applied_count": applied, "skipped_count": skipped}
 	if receipts == nil {
 		receipts = map[string]any{}
 		meta["session_imports"] = receipts
 	}
 	receipts[importID] = result
 	loaded.ImportID, loaded.ImportClaim = importID, claimID
-	written, err := d.Programs.WriteNewVersion(r.Ctx, r.Athlete, program, false, loaded)
-	if err != nil {
+	if _, err := d.Programs.Save(r.Ctx, r.Athlete, program, loaded); err != nil {
 		return nil, mapError(err)
 	}
-	result["new_version"] = metaOf(written.Program)["version_label"]
 	return result, nil
 }

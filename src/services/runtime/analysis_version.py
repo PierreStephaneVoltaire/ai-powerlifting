@@ -13,7 +13,6 @@ ANALYSIS_INPUT_WRITES = frozenset({
     "goals_replace",
     "health_complete_user_competition",
     "health_invalidate_program_cache",
-    "health_new_version",
     "health_setup_initialize",
     "health_update_current_maxes",
     "health_update_user_competition",

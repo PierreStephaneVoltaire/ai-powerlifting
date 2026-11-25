@@ -12,7 +12,7 @@ type blockSource struct{}
 
 func (blockSource) ProgramContext(context.Context, string) (map[string]any, error) { return nil, nil }
 func (blockSource) Glossary(context.Context, string) ([]map[string]any, error)     { return nil, nil }
-func (blockSource) Program(context.Context, string, string) (map[string]any, error) {
+func (blockSource) Program(context.Context, string) (map[string]any, error) {
 	return map[string]any{"sk": "program#1", "current_maxes": map[string]any{"Squat": 100}, "sessions": []any{map[string]any{
 		"date": "2026-11-23", "day": "Monday", "week_number": 1, "planned_exercises": []any{map[string]any{"name": "Squat", "glossary_id": "squat", "sets": 3, "reps": 5, "kg": 80}},
 	}}}, nil

@@ -15,7 +15,6 @@ async def video_upload_confirm(args: dict) -> dict:
     s3 = get_s3()
     bucket = os.environ.get("VIDEOS_BUCKET", "powerlifting-session-videos")
     pk = resolve_pk(args)
-    version = args.get("version") or "current"
     session_date = args.get("session_date") or ""
     str(args.get("session_id") or "").strip() or None
     video_id = args.get("video_id") or ""
@@ -25,7 +24,7 @@ async def video_upload_confirm(args: dict) -> dict:
     target_angle = str(args.get("angle") or "").strip() or None
 
     def confirm():
-        program_sk, phases = context(health_table, pk, version)
+        program_sk, phases = context(health_table, pk)
         table_media = get_media(pk, video_id)
         if not table_media:
             raise ValueError("Video upload allocation not found")

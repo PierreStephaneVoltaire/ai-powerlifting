@@ -17,5 +17,4 @@ def get_store(args: Optional[dict] = None):
     pk = (args or {}).get("pk")
     if pk:
         _store.pk = pk
-    _store._selected_program_sk = (args or {}).get("program_sk")
     return _store

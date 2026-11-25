@@ -107,17 +107,6 @@ def _phase_ref(phase: dict[str, Any]) -> str:
     name = str(phase.get("name") or "Unscheduled").replace("#", "-")
     return f"phase#{block}#W{phase.get('start_week', 0)}-W{phase.get('end_week', 0)}#{name}"
 
-def _program_version(program_sk: str) -> str:
-    return program_sk.removeprefix("program#") if program_sk.startswith("program#") else program_sk
-
-def _program_version_number(program_sk: str) -> int | None:
-    if not program_sk.startswith("program#v"):
-        return None
-    try:
-        return int(program_sk.removeprefix("program#v"))
-    except ValueError:
-        return None
-
 def _sanitize_decimals(obj):
     if isinstance(obj, Decimal):
         return float(obj) if obj % 1 > 0 else int(obj)
@@ -165,7 +154,7 @@ def _sort_key(item: dict[str, Any]) -> tuple[str, int, int, str]:
     )
 
 class SessionStore:
-    """Standalone session storage keyed by operator pk and program version."""
+    """Standalone session storage keyed by operator pk and program SK."""
 
     def __init__(
         self,
@@ -208,9 +197,12 @@ class SessionStore:
                 Key={"pk": self._pk, "sk": "program#current"}
             )
             item = resp.get("Item") or {}
-            return str(item.get("ref_sk") or "program#v001")
+            ref_sk = item.get("ref_sk")
         except Exception:
-            return "program#v001"
+            ref_sk = None
+        if not ref_sk:
+            raise LookupError(f"No program pointer found for pk={self._pk}")
+        return str(ref_sk)
 
     async def resolve_program_sk(self) -> str:
         return await asyncio.get_running_loop().run_in_executor(
@@ -385,8 +377,6 @@ class SessionStore:
             "source_pk": self._pk,
             "source_table": self._source_table_name,
             "program_sk": program_sk,
-            "program_version": _program_version(program_sk),
-            "program_version_number": _program_version_number(program_sk),
             "source_index": _int_value((existing_item or {}).get("source_index"), default=source_index),
             "same_day_ordinal": ordinal,
             "phase_ref": _phase_ref(phase),
@@ -517,9 +507,10 @@ class SessionStore:
         self._ensure_unique_session_ids(prepared, program_sk)
         prepared_keys = {str(item["sk"]) for item in prepared}
         with self.table.batch_writer() as batch:
+            for item in prepared:
+                batch.put_item(Item=_to_dynamo(item))
+        with self.table.batch_writer() as batch:
             for item in existing:
                 if str(item["sk"]) not in prepared_keys:
                     batch.delete_item(Key={"pk": self._pk, "sk": item["sk"]})
-            for item in prepared:
-                        batch.put_item(Item=_to_dynamo(item))
         return None

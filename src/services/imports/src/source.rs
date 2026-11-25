@@ -55,33 +55,17 @@ impl Source {
     }
     pub async fn program_context(&self, athlete: &str) -> Result<Value> {
         let pointer = self.get(&self.health, athlete, "program#current").await?;
-        let mut sk = pointer
+        let sk = pointer
             .as_ref()
             .and_then(|v| v.get("ref_sk"))
             .and_then(Value::as_str)
-            .unwrap_or("")
+            .filter(|sk| !sk.is_empty())
+            .ok_or("program not found")?
             .to_owned();
-        if sk.is_empty() {
-            let versions = self.query(&self.health, athlete, "program#").await?;
-            sk = versions
-                .iter()
-                .filter(|item| item["published"] != false)
-                .filter_map(|item| item.get("sk")?.as_str())
-                .filter(|sk| *sk != "program#current")
-                .max()
-                .unwrap_or("")
-                .to_owned();
-        }
-        if sk.is_empty() {
-            return Err("program not found".into());
-        }
         let program = self
             .get(&self.health, athlete, &sk)
             .await?
             .ok_or("program not found")?;
-        if program["published"] == false {
-            return Err("program not found".into());
-        }
         let sessions = self
             .query(&self.sessions, athlete, &format!("session#{sk}#"))
             .await?;

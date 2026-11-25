@@ -201,7 +201,7 @@ def test_library_resolves_exercise_set_and_sort_filter():
     store.health_table = FakeHealthTable()
     _patch_core(core, store)
 
-    result = asyncio.run(core.video_library_get({"pk": "athlete-1", "version": "current", "sort": "weight"}))
+    result = asyncio.run(core.video_library_get({"pk": "athlete-1", "sort": "weight"}))
 
     assert result["exercises"] == ["Squat"]
     assert result["videos"][0]["exercise_kg"] == 140
@@ -218,7 +218,7 @@ def test_library_converts_dynamodb_decimals_before_contract_validation():
     store.sessions[0]["videos"][0]["set_number"] = Decimal("2")
     _patch_core(core, store)
 
-    result = asyncio.run(core.video_library_get({"pk": "athlete-1", "version": "current", "sort": "weight"}))
+    result = asyncio.run(core.video_library_get({"pk": "athlete-1", "sort": "weight"}))
 
     load_operations("videos")["video_library_get"].validate_result(result)
     assert result["videos"][0]["week_number"] == 3

@@ -194,10 +194,9 @@ func (s *Service) updateAthleteBasics(ctx context.Context, req *Request) (any, e
 	if !containsString(stringList(known), entryID) {
 		writes = append(writes, store.Write{
 			Kind: store.WriteUpdate, Table: health, Key: historyKey,
-			Update:    "SET entries = list_append(if_not_exists(entries, :empty), :entry), #version = :version, updated_at = :now ADD basics_entry_ids :ids",
+			Update:    "SET entries = list_append(if_not_exists(entries, :empty), :entry), updated_at = :now ADD basics_entry_ids :ids",
 			Condition: "attribute_not_exists(basics_entry_ids) OR NOT contains(basics_entry_ids, :id)",
-			Names:     map[string]string{"#version": "version"},
-			Values:    map[string]any{":empty": []any{}, ":entry": []any{entry}, ":version": "current", ":now": now, ":ids": value.StringSet{entryID}, ":id": entryID},
+			Values:    map[string]any{":empty": []any{}, ":entry": []any{entry}, ":now": now, ":ids": value.StringSet{entryID}, ":id": entryID},
 		})
 	}
 	if err := s.deps.DB.Transact(ctx, writes); err != nil {

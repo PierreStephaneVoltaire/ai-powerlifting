@@ -18,8 +18,8 @@ var allowedMetaFields = map[string]bool{
 
 type mutator func(program map[string]any) (map[string]any, error)
 
-func (d *Deps) mutateSource(r *Request, selected string, mutate mutator) (any, error) {
-	snapshot, err := d.Programs.Snapshot(r.Ctx, r.Athlete, selected)
+func (d *Deps) mutateSource(r *Request, mutate mutator) (any, error) {
+	snapshot, err := d.Programs.Snapshot(r.Ctx, r.Athlete)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -77,7 +77,7 @@ func programUpdateMeta(d *Deps, r *Request) (any, error) {
 			return nil, validation("weight_classes_kg must contain at most two positive numbers")
 		}
 	}
-	return d.mutateSource(r, "", func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		for key, value := range updates {
 			meta[key] = pyval.DeepCopy(value)
@@ -111,7 +111,7 @@ func programUpdatePhases(d *Deps, r *Request) (any, error) {
 		phases = []any{}
 	}
 	block := r.String("block")
-	return d.mutateSource(r, "", func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		existing, _ := program["phases"].([]any)
 		var updated []any
 		if block != "" {
@@ -179,7 +179,7 @@ func blockNotesUpdate(d *Deps, r *Request) (any, error) {
 		return nil, validation("block_notes must be a list")
 	}
 	self := Access(r.Access).isSelf()
-	return d.mutateSource(r, "", func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		meta := metaOf(program)
 		active := scope.CurrentBlockID(program)
 		kept := []any{}
@@ -209,7 +209,7 @@ func dietNotesUpdate(d *Deps, r *Request) (any, error) {
 	if !ok {
 		return nil, validation("notes must be a list")
 	}
-	return d.mutateSource(r, "", func(program map[string]any) (map[string]any, error) {
+	return d.mutateSource(r, func(program map[string]any) (map[string]any, error) {
 		program["diet_notes"] = replaceActiveRecords(program, "diet_notes", notes)
 		return map[string]any{"success": true, "diet_notes": scope.Program(program, "")["diet_notes"]}, nil
 	})

@@ -47,28 +47,12 @@ func newID() string {
 	}
 	return hex.EncodeToString(b)
 }
-func (s *Service) program(ctx context.Context, pk, version string) (map[string]any, string, error) {
-	sk := "program#" + version
-	if version == "current" {
-		p, err := s.Store.Get(ctx, pk, "program#current")
-		if err != nil {
-			return nil, "", err
-		}
-		sk = text(p["ref_sk"])
-		if sk == "" {
-			all, err := s.Store.Programs(ctx, pk)
-			if err != nil {
-				return nil, "", err
-			}
-			for _, item := range all {
-				candidate := text(item["sk"])
-				meta, _ := item["meta"].(map[string]any)
-				if candidate != "program#current" && item["published"] != false && meta["archived"] != true && candidate > sk {
-					sk = candidate
-				}
-			}
-		}
+func (s *Service) program(ctx context.Context, pk string) (map[string]any, string, error) {
+	p, err := s.Store.Get(ctx, pk, "program#current")
+	if err != nil {
+		return nil, "", err
 	}
+	sk := text(p["ref_sk"])
 	if sk == "" {
 		return nil, "", apperr.NotFound("Program not found")
 	}
@@ -83,18 +67,10 @@ func (s *Service) program(ctx context.Context, pk, version string) (map[string]a
 }
 func (s *Service) performance(ctx context.Context, name string, a, access map[string]any) (any, error) {
 	pk := text(a["pk"])
-	version := text(a["version"])
-	if version == "" {
-		version = "current"
-	}
 	now := s.Now().UTC().Format(time.RFC3339Nano)
 	switch name {
 	case "health_get_current_maxes", "health_update_current_maxes", "max_target_get", "max_target_update":
-		selected := version
-		if strings.HasPrefix(name, "health_") {
-			selected = "current"
-		}
-		p, sk, err := s.program(ctx, pk, selected)
+		p, sk, err := s.program(ctx, pk)
 		if err != nil {
 			return nil, err
 		}
@@ -128,13 +104,13 @@ func (s *Service) performance(ctx context.Context, name string, a, access map[st
 				return nil, err
 			}
 		}
-		result := map[string]any{"version": version, "sk": sk, "squat_kg": targetNumber(meta["target_squat_kg"]), "bench_kg": targetNumber(meta["target_bench_kg"]), "deadlift_kg": targetNumber(meta["target_dl_kg"]), "total_kg": targetNumber(meta["target_total_kg"])}
+		result := map[string]any{"sk": sk, "squat_kg": targetNumber(meta["target_squat_kg"]), "bench_kg": targetNumber(meta["target_bench_kg"]), "deadlift_kg": targetNumber(meta["target_dl_kg"]), "total_kg": targetNumber(meta["target_total_kg"])}
 		if name == "max_target_update" {
 			result["updated_at"] = now
 		}
 		return result, nil
 	case "max_history_add":
-		sk := "max_history#" + version
+		sk := "max_history#current"
 		record, err := s.Store.Get(ctx, pk, sk)
 		if err != nil {
 			return nil, err
@@ -168,7 +144,7 @@ func (s *Service) performance(ctx context.Context, name string, a, access map[st
 		}
 		entries = append(entries, entry)
 		sortEntries(entries)
-		record["pk"], record["sk"], record["version"], record["entries"], record["updated_at"] = pk, sk, version, entries, now
+		record["pk"], record["sk"], record["entries"], record["updated_at"] = pk, sk, entries, now
 		if err = s.Store.Put(ctx, record); err != nil {
 			return nil, err
 		}
@@ -181,7 +157,7 @@ func (s *Service) performance(ctx context.Context, name string, a, access map[st
 		record["entries"] = filtered
 		return record, nil
 	case "max_history_get":
-		return s.history(ctx, pk, version, a, access, now)
+		return s.history(ctx, pk, a, access, now)
 	}
 	return nil, apperr.UnknownOperation()
 }
@@ -221,18 +197,18 @@ func visible(entry map[string]any, access map[string]any) bool {
 	}
 	return false
 }
-func (s *Service) history(ctx context.Context, pk, version string, a, access map[string]any, now string) (any, error) {
+func (s *Service) history(ctx context.Context, pk string, a, access map[string]any, now string) (any, error) {
 	start, end := text(a["start_date"]), text(a["end_date"])
 	if start != "" && end != "" && start > end {
 		return nil, apperr.Validation("start_date must be on or before end_date")
 	}
-	sk := "max_history#" + version
+	sk := "max_history#current"
 	record, err := s.Store.Get(ctx, pk, sk)
 	if err != nil {
 		return nil, err
 	}
 	if record == nil {
-		record = map[string]any{"pk": pk, "sk": sk, "version": version, "entries": []any{}, "updated_at": now}
+		record = map[string]any{"pk": pk, "sk": sk, "entries": []any{}, "updated_at": now}
 	}
 	keyed := map[string]map[string]any{}
 	manual := []any{}

@@ -2,14 +2,11 @@
   {
     "name": "weight_log_get",
     "domain": "weight-log",
-    "description": "Get the weight log for a program version, sorted newest first.",
+    "description": "Get the weight log for the current program, sorted newest first.",
     "input_schema": {
       "type": "object",
       "properties": {
         "pk": {
-          "type": "string"
-        },
-        "version": {
           "type": "string"
         },
         "block_id": {
@@ -35,9 +32,6 @@
               "type": "string"
             },
             "sk": {
-              "type": "string"
-            },
-            "version": {
               "type": "string"
             },
             "entries": {
@@ -79,9 +73,6 @@
       "type": "object",
       "properties": {
         "pk": {
-          "type": "string"
-        },
-        "version": {
           "type": "string"
         },
         "entry": {
@@ -157,9 +148,6 @@
             "sk": {
               "type": "string"
             },
-            "version": {
-              "type": "string"
-            },
             "entries": {
               "type": "array",
               "items": {
@@ -198,9 +186,6 @@
       "type": "object",
       "properties": {
         "pk": {
-          "type": "string"
-        },
-        "version": {
           "type": "string"
         },
         "date": {

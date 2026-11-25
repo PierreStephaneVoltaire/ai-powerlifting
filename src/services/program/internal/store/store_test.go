@@ -66,7 +66,7 @@ func TestWriteFreshRejectsDuplicateIdentitiesAndUndatedSessions(t *testing.T) {
 	sessions := Sessions{DB: db, Tables: Tables{Sessions: "s", Health: "h"}, Env: fixedEnv()}
 	duplicate := []any{map[string]any{"date": "2026-01-01", "id": "x"}, map[string]any{"date": "2026-01-02", "id": "x"}}
 	var conflict *IdentityConflictError
-	if err := sessions.WriteFresh(context.Background(), "a", "program#v002-abc", duplicate, nil); err == nil {
+	if err := sessions.WriteFresh(context.Background(), "a", "program#bbb-abc", duplicate, nil); err == nil {
 		t.Fatal("duplicate accepted")
 	} else if c, ok := err.(*IdentityConflictError); !ok {
 		t.Fatalf("err %v", err)
@@ -76,41 +76,25 @@ func TestWriteFreshRejectsDuplicateIdentitiesAndUndatedSessions(t *testing.T) {
 	if conflict.ID != "x" || len(db.Dump("s")) != 0 {
 		t.Fatalf("conflict %v writes %d", conflict, len(db.Dump("s")))
 	}
-	if err := sessions.WriteFresh(context.Background(), "a", "program#v002-abc", []any{map[string]any{}}, nil); err != ErrSessionDate {
+	if err := sessions.WriteFresh(context.Background(), "a", "program#bbb-abc", []any{map[string]any{}}, nil); err != ErrSessionDate {
 		t.Fatalf("err %v", err)
-	}
-}
-
-func TestNextLabel(t *testing.T) {
-	cases := []struct {
-		label        string
-		minor        bool
-		current, new int
-		want         string
-	}{
-		{"3.0", false, 3, 4, "4.0"}, {"3.2", true, 3, 4, "3.3"}, {"v003", false, 3, 4, "4.0"}, {"v001", false, 0, 1, "1.0"}, {"x.y", false, 5, 6, "6.0"},
-	}
-	for _, c := range cases {
-		if got := NextVersionLabel(c.label, c.minor, c.current, c.new); got != c.want {
-			t.Errorf("%s: got %s want %s", c.label, got, c.want)
-		}
 	}
 }
 
 func TestCommitMovesLegacySupplementsOutOfHealth(t *testing.T) {
 	db := NewMemory()
 	tables := Tables{Health: "h", Supplements: "sup"}
-	legacy := Item{"pk": "a", "sk": "program#v001", "meta": map[string]any{"current_block_id": "b"}, "supplements": []any{map[string]any{"name": "creatine"}}, "supplement_phases": []any{map[string]any{"block_id": "b"}}, "other": "keep"}
+	legacy := Item{"pk": "a", "sk": "program#aaa", "meta": map[string]any{"current_block_id": "b"}, "supplements": []any{map[string]any{"name": "creatine"}}, "supplement_phases": []any{map[string]any{"block_id": "b"}}, "other": "keep"}
 	if err := db.Seed("h", legacy); err != nil {
 		t.Fatal(err)
 	}
 	programs := New(db, tables, fixedEnv())
-	snapshot := &Snapshot{Program: pyval.CopyMap(legacy), SK: "program#v001"}
+	snapshot := &Snapshot{Program: pyval.CopyMap(legacy), SK: "program#aaa"}
 	if _, err := programs.Commit(context.Background(), "a", snapshot, pyval.CopyMap(legacy)); err != nil {
 		t.Fatal(err)
 	}
-	health, _ := db.Get(context.Background(), "h", Key{"a", "program#v001"}, GetOptions{})
-	supplements, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
+	health, _ := db.Get(context.Background(), "h", Key{"a", "program#aaa"}, GetOptions{})
+	supplements, _ := db.Get(context.Background(), "sup", Key{"a", "program#aaa"}, GetOptions{})
 	if _, ok := health["supplements"]; ok {
 		t.Fatalf("health retained supplements: %v", health)
 	}
@@ -122,17 +106,17 @@ func TestCommitMovesLegacySupplementsOutOfHealth(t *testing.T) {
 func TestCommitDoesNotRewriteUnchangedSupplements(t *testing.T) {
 	db := NewMemory()
 	tables := Tables{Health: "h", Supplements: "sup"}
-	stored := Item{"pk": "a", "sk": "program#v001", "supplements": []any{map[string]any{"name": "new"}}, "supplement_phases": []any{}}
+	stored := Item{"pk": "a", "sk": "program#aaa", "supplements": []any{map[string]any{"name": "new"}}, "supplement_phases": []any{}}
 	if err := db.Seed("sup", stored); err != nil {
 		t.Fatal(err)
 	}
 	programs := New(db, tables, fixedEnv())
 	program := Item{"meta": map[string]any{}, "supplements": []any{map[string]any{"name": "stale"}}, "supplement_phases": []any{}, "notes": "updated"}
-	snapshot := &Snapshot{Program: pyval.CopyMap(program), SK: "program#v001"}
+	snapshot := &Snapshot{Program: pyval.CopyMap(program), SK: "program#aaa"}
 	if _, err := programs.Commit(context.Background(), "a", snapshot, program); err != nil {
 		t.Fatal(err)
 	}
-	supplements, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
+	supplements, _ := db.Get(context.Background(), "sup", Key{"a", "program#aaa"}, GetOptions{})
 	if supplements["supplements"].([]any)[0].(map[string]any)["name"] != "new" {
 		t.Fatalf("supplements overwritten: %v", supplements)
 	}
@@ -142,10 +126,10 @@ func TestSupplementRowDoesNotResurrectMissingLegacyFields(t *testing.T) {
 	db := NewMemory()
 	programs := New(db, Tables{Supplements: "sup"}, fixedEnv())
 	program := Item{"supplements": []any{"legacy supplements"}, "supplement_phases": []any{"legacy phases"}}
-	if err := db.Seed("sup", Item{"pk": "a", "sk": "program#v001", "supplements": []any{"new supplements"}}); err != nil {
+	if err := db.Seed("sup", Item{"pk": "a", "sk": "program#aaa", "supplements": []any{"new supplements"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := programs.loadSupplements(context.Background(), "a", "program#v001", program); err != nil {
+	if err := programs.loadSupplements(context.Background(), "a", "program#aaa", program); err != nil {
 		t.Fatal(err)
 	}
 	if program["supplement_phases"] != nil || program["supplements"].([]any)[0] != "new supplements" {
@@ -155,17 +139,17 @@ func TestSupplementRowDoesNotResurrectMissingLegacyFields(t *testing.T) {
 
 func TestCommitKeepsLegacyDataWhenSupplementWriteFails(t *testing.T) {
 	db := NewMemory()
-	legacy := Item{"pk": "a", "sk": "program#v001", "meta": map[string]any{}, "supplements": []any{"legacy"}, "note": "old"}
+	legacy := Item{"pk": "a", "sk": "program#aaa", "meta": map[string]any{}, "supplements": []any{"legacy"}, "note": "old"}
 	if err := db.Seed("h", legacy); err != nil {
 		t.Fatal(err)
 	}
 	program := pyval.CopyMap(legacy)
 	program["note"] = "new"
 	programs := New(failingSupplementPut{DB: db}, Tables{Health: "h", Supplements: "sup"}, fixedEnv())
-	if _, err := programs.Commit(context.Background(), "a", &Snapshot{Program: pyval.CopyMap(legacy), SK: "program#v001"}, program); err == nil {
+	if _, err := programs.Commit(context.Background(), "a", &Snapshot{Program: pyval.CopyMap(legacy), SK: "program#aaa"}, program); err == nil {
 		t.Fatal("commit succeeded")
 	}
-	stored, _ := db.Get(context.Background(), "h", Key{"a", "program#v001"}, GetOptions{})
+	stored, _ := db.Get(context.Background(), "h", Key{"a", "program#aaa"}, GetOptions{})
 	if stored["supplements"] == nil || stored["note"] != "old" {
 		t.Fatalf("legacy program changed after failed supplement write: %v", stored)
 	}
@@ -173,49 +157,48 @@ func TestCommitKeepsLegacyDataWhenSupplementWriteFails(t *testing.T) {
 
 func TestCommitPreservesUnchangedSupplementField(t *testing.T) {
 	db := NewMemory()
-	current := Item{"pk": "a", "sk": "program#v001", "supplements": []any{"current"}, "supplement_phases": []any{"old phase"}}
+	current := Item{"pk": "a", "sk": "program#aaa", "supplements": []any{"current"}, "supplement_phases": []any{"old phase"}}
 	if err := db.Seed("sup", current); err != nil {
 		t.Fatal(err)
 	}
 	program := Item{"meta": map[string]any{}, "supplements": []any{"old supplement"}, "supplement_phases": []any{"old phase"}}
-	snapshot := &Snapshot{Program: pyval.CopyMap(program), SK: "program#v001"}
+	snapshot := &Snapshot{Program: pyval.CopyMap(program), SK: "program#aaa"}
 	program["supplement_phases"] = []any{"new phase"}
 	programs := New(db, Tables{Health: "h", Supplements: "sup"}, fixedEnv())
 	if _, err := programs.Commit(context.Background(), "a", snapshot, program); err != nil {
 		t.Fatal(err)
 	}
-	stored, _ := db.Get(context.Background(), "sup", Key{"a", "program#v001"}, GetOptions{})
+	stored, _ := db.Get(context.Background(), "sup", Key{"a", "program#aaa"}, GetOptions{})
 	if stored["supplements"].([]any)[0] != "current" || stored["supplement_phases"].([]any)[0] != "new phase" {
 		t.Fatalf("supplement merge: %v", stored)
 	}
 }
 
-func TestPublishVersionChecksPointerAndImportClaim(t *testing.T) {
+func TestSaveProgramChecksPointerAndImportClaim(t *testing.T) {
 	ctx := context.Background()
 	db := NewMemory()
 	tables := Tables{Health: "h"}
 	for _, item := range []Item{
-		{"pk": "a", "sk": PointerSK, "ref_sk": "program#v001"},
-		{"pk": "a", "sk": "program#v002", "published": false},
+		{"pk": "a", "sk": PointerSK, "ref_sk": "program#one"},
 		{"pk": "a", "sk": "import#pending#i", "status": "applying", "apply_claim_id": "claim"},
 	} {
 		if err := db.Seed(tables.Health, item); err != nil {
 			t.Fatal(err)
 		}
 	}
-	pointer := Item{"pk": "a", "sk": PointerSK, "ref_sk": "program#v002"}
-	if err := db.PublishVersion(ctx, tables, "a", "program#stale", pointer, "program#v002", "i", "claim"); err == nil {
+	program := Item{"pk": "a", "sk": "program#one", "meta": map[string]any{}}
+	if err := db.SaveProgram(ctx, tables, "a", program, "program#stale", "b", "now", "i", "claim"); err == nil {
 		t.Fatal("accepted a stale program pointer")
 	}
-	if err := db.PublishVersion(ctx, tables, "a", "program#v001", pointer, "program#v002", "i", "stale"); err == nil {
+	if err := db.SaveProgram(ctx, tables, "a", program, "program#one", "b", "now", "i", "stale"); err == nil {
 		t.Fatal("accepted a stale import claim")
 	}
-	if err := db.PublishVersion(ctx, tables, "a", "program#v001", pointer, "program#v002", "i", "claim"); err != nil {
+	if err := db.SaveProgram(ctx, tables, "a", program, "program#one", "b", "now", "i", "claim"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := db.Get(ctx, tables.Health, Key{"a", PointerSK}, GetOptions{})
-	version, _ := db.Get(ctx, tables.Health, Key{"a", "program#v002"}, GetOptions{})
-	if got["ref_sk"] != "program#v002" || version["published"] != true {
-		t.Fatalf("pointer %v version %v", got, version)
+	saved, _ := db.Get(ctx, tables.Health, Key{"a", "program#one"}, GetOptions{})
+	if got["ref_sk"] != "program#one" || got["current_block_id"] != "b" || got["updated_at"] != "now" || saved == nil {
+		t.Fatalf("pointer %v program %v", got, saved)
 	}
 }

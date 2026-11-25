@@ -105,7 +105,7 @@
   {
     "name": "template_apply_confirm",
     "domain": "templates",
-    "description": "Apply a template and write a new versioned athlete program with template lineage.",
+    "description": "Apply a template and write the athlete program with template lineage.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -155,18 +155,11 @@
       "type": "object",
       "required": [
         "status",
-        "program_version",
         "program_sk"
       ],
       "properties": {
         "status": {
           "const": "applied"
-        },
-        "program_version": {
-          "type": [
-            "string",
-            "null"
-          ]
         },
         "program_sk": {
           "type": [
@@ -329,9 +322,6 @@
         "name": {
           "type": "string",
           "minLength": 1
-        },
-        "program_sk": {
-          "type": "string"
         }
       },
       "required": [

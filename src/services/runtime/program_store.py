@@ -1,8 +1,8 @@
 """DynamoDB-backed store for training programs.
 
-Uses a pointer-based schema to track the current program version.
-Pointer item: pk=HEALTH_PROGRAM_PK, sk="program#current" -> {version, ref_sk, updated_at}
-Program item: pk=HEALTH_PROGRAM_PK, sk="program#v{version:03d}" -> full program JSON
+Uses a pointer item to locate the current program.
+Pointer item: pk=HEALTH_PROGRAM_PK, sk="program#current" -> {ref_sk, updated_at, current_block_id}
+Program item: pk=HEALTH_PROGRAM_PK, sk=<ref_sk> -> full program JSON
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from services.runtime.aws import dynamodb_resource
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Attr
 
 from services.runtime.block_scope import BLOCK_SCOPED_RECORD_FIELDS, current_block_id, record_block, scope_program, stamp
 
@@ -30,19 +30,18 @@ class ProgramNotFoundError(Exception):
 
 
 class ProgramStore:
-    """DynamoDB-backed store for training programs with versioning support.
+    """DynamoDB-backed store for training programs.
 
     Schema:
         - Pointer item: pk=HEALTH_PROGRAM_PK, sk="program#current"
-          -> {version: int, ref_sk: str, updated_at: ISO8601}
-        - Program item: pk=HEALTH_PROGRAM_PK, sk="program#v{version:03d}"
+          -> {ref_sk: str, updated_at: ISO8601, current_block_id: str}
+        - Program item: pk=HEALTH_PROGRAM_PK, sk=<ref_sk>
           -> full program JSON as DynamoDB map
 
     All operations are cached in memory for performance.
     """
 
     POINTER_SK = "program#current"
-    PROGRAM_SK_PREFIX = "program#v"
 
     def __init__(self, table_name: str, pk: str = "operator", region: str = "ca-central-1"):
         """Initialize the program store.
@@ -61,7 +60,6 @@ class ProgramStore:
         self._table = None
         self._supplements_table = None
         self._cache: Optional[dict] = None
-        self._cache_version: Optional[int] = None
 
         logger.debug(f"[ProgramStore] Initialized with table={table_name}, pk={pk}, region={region}")
 
@@ -114,15 +112,12 @@ class ProgramStore:
         """Clear the in-memory cache."""
         logger.debug("[ProgramStore] Cache invalidated")
         self._cache = None
-        self._cache_version = None
 
     def _source_snapshot_sync(self) -> tuple[dict, dict, str, bool]:
         pointer = self.table.get_item(
             Key={"pk": self._pk, "sk": self.POINTER_SK}, ConsistentRead=True
         ).get("Item") or {}
-        selected = getattr(self, "_selected_program_sk", None)
-        if selected in {None, "", "current", self.POINTER_SK}:
-            selected = pointer.get("ref_sk")
+        selected = pointer.get("ref_sk")
         if not selected:
             selected = self._current_program_sk_sync()
         program = self.table.get_item(
@@ -205,26 +200,12 @@ class ProgramStore:
         )
 
     def _current_program_sk_sync(self) -> str:
-        selected = getattr(self, "_selected_program_sk", None)
-        if selected and selected not in {self.POINTER_SK, "current"}:
-            return selected
         pointer_resp = self.table.get_item(Key={"pk": self._pk, "sk": self.POINTER_SK})
-        if "Item" in pointer_resp:
-            ref_sk = pointer_resp["Item"].get("ref_sk")
-            if ref_sk:
-                program = self.table.get_item(Key={"pk": self._pk, "sk": str(ref_sk)}).get("Item")
-                if program and program.get("published", True) is not False:
-                    return str(ref_sk)
+        ref_sk = (pointer_resp.get("Item") or {}).get("ref_sk")
+        if not ref_sk:
+            raise ProgramNotFoundError(f"No program pointer found for pk={self._pk}.")
+        return str(ref_sk)
 
-        programs = self._list_programs_sync(include_archived=False)
-        if not programs:
-            raise ProgramNotFoundError(
-                f"No program or pointer found for pk={self._pk}. "
-                "Create a program using new_version() first."
-            )
-        programs.sort(key=lambda p: p["sk"], reverse=True)
-        return str(programs[0]["sk"])
-    
     async def get_program(self) -> dict:
         """Get the current training program.
         
@@ -261,75 +242,13 @@ class ProgramStore:
     def _load_program_sync(self) -> dict:
         """Synchronous program loading logic."""
         logger.info(f"[ProgramStore] Reading pointer from table='{self._table_name}' region='{self._region}': pk={self._pk}, sk={self.POINTER_SK}")
-        selected = getattr(self, "_selected_program_sk", None)
-        pointer_resp = {"Item": {"ref_sk": selected, "version": 0}} if selected and selected not in {self.POINTER_SK, "current"} else self.table.get_item(
+        pointer = self.table.get_item(
             Key={"pk": self._pk, "sk": self.POINTER_SK}
-        )
+        ).get("Item")
+        if not pointer or not pointer.get("ref_sk"):
+            raise ProgramNotFoundError(f"No program pointer found for pk={self._pk}.")
+        ref_sk = str(pointer["ref_sk"])
 
-        if "Item" not in pointer_resp:
-            logger.info(f"[ProgramStore] Pointer not found, scanning for existing program versions...")
-            try:
-                scan_result = self.table.scan(
-                    FilterExpression=Attr("pk").eq(self._pk) & Attr("sk").begins_with(self.PROGRAM_SK_PREFIX)
-                )
-                items = [item for item in scan_result.get("Items", []) if item.get("published", True) is not False]
-
-                if not items:
-                    raise ProgramNotFoundError(
-                        f"No program or pointer found for pk={self._pk}. "
-                        "Create a program using new_version() first."
-                    )
-
-                latest_version = 0
-                latest_sk = None
-                for item in items:
-                    sk = item.get("sk", "")
-                    if sk.startswith(self.PROGRAM_SK_PREFIX):
-                        try:
-                            version_str = sk[len(self.PROGRAM_SK_PREFIX):].split("-", 1)[0]
-                            version = int(version_str)
-                            if version > latest_version:
-                                latest_version = version
-                                latest_sk = sk
-                        except ValueError:
-                            continue
-
-                if not latest_sk:
-                    raise ProgramNotFoundError(
-                        f"No valid program versions found for pk={self._pk}. "
-                        "Create a program using new_version() first."
-                    )
-
-                now = datetime.now(timezone.utc).isoformat()
-                pointer_item = {
-                    "pk": self._pk,
-                    "sk": self.POINTER_SK,
-                    "version": latest_version,
-                    "ref_sk": latest_sk,
-                    "updated_at": now,
-                }
-                self.table.put_item(Item=pointer_item)
-                logger.info(f"[ProgramStore] Auto-created pointer to version {latest_version} ({latest_sk})")
-
-                pointer_resp = self.table.get_item(
-                    Key={"pk": self._pk, "sk": self.POINTER_SK}
-                )
-
-            except ProgramNotFoundError:
-                raise
-            except Exception as scan_err:
-                logger.error(f"[ProgramStore] Failed to scan for programs: {scan_err}")
-                raise ProgramNotFoundError(
-                    f"No program pointer found for pk={self._pk}. "
-                    "Create a program using new_version() first."
-                )
-        
-        pointer = pointer_resp["Item"]
-        version = int(pointer.get("version", 0))
-        ref_sk = pointer.get("ref_sk", f"{self.PROGRAM_SK_PREFIX}{version:03d}")
-        
-        logger.debug(f"[ProgramStore] Pointer points to version={version}, ref_sk={ref_sk}")
-        
         logger.debug(f"[ProgramStore] Reading program: pk={self._pk}, sk={ref_sk}")
         program_resp = self.table.get_item(
             Key={"pk": self._pk, "sk": ref_sk}
@@ -343,8 +262,6 @@ class ProgramStore:
             )
         
         program = dict(program_resp["Item"])
-        if program.get("published", True) is False:
-            raise ProgramNotFoundError(f"Program version is unpublished: {ref_sk}")
         meta = program.get("meta")
         if not isinstance(meta, dict):
             meta = {}
@@ -357,65 +274,10 @@ class ProgramStore:
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
         
-        self._cache_version = version
-        logger.debug(f"[ProgramStore] Loaded program version {version}")
+        logger.debug(f"[ProgramStore] Loaded program {ref_sk}")
         
         return program
     
-    async def new_version(self, patches: list[dict], change_reason: str) -> dict:
-        """Create a new major version of the program with patches.
-        
-        Args:
-            patches: List of patches, each with "path" and "value" keys
-                    Example: {"path": "sessions[0].exercises[1].kg", "value": 180}
-            change_reason: Human-readable reason for the version change
-            
-        Returns:
-            New program dict
-            
-        Raises:
-            ValueError: If patch path is invalid
-            RuntimeError: If DynamoDB operation fails
-        """
-        self.invalidate_cache()
-        program = await self.get_program()
-        new_program = copy.deepcopy(program)
-        self._validate_version_patches(program, patches)
-        
-        for patch in patches:
-            path = patch.get("path", "")
-            value = patch.get("value")
-            
-            if not path:
-                raise ValueError("Patch must have 'path' key")
-            
-            self._apply_patch(new_program, path, value)
-
-        self._preserve_logged_sessions(program, new_program)
-        
-        if "meta" not in new_program:
-            new_program["meta"] = {}
-        if "change_log" not in new_program["meta"]:
-            new_program["meta"]["change_log"] = []
-        new_program["meta"]["change_log"].append({
-            "reason": change_reason,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
-        updated_program = await self._write_new_version(
-            new_program, minor=False)
-        
-        return updated_program
-
-    @staticmethod
-    def _session_is_logged(session: dict) -> bool:
-        if session.get("status") in {"logged", "completed", "skipped"} or bool(session.get("completed")):
-            return True
-        return any(
-            isinstance(exercise, dict)
-            and any(status in {"completed", "failed", "skipped"} for status in (exercise.get("set_statuses") or []))
-            for exercise in (session.get("exercises") or [])
-        )
-
     @staticmethod
     def _validate_session_identities(sessions: list[dict]) -> None:
         from services.runtime.session_store import SessionIdentityConflictError
@@ -430,45 +292,6 @@ class ProgramStore:
             if session_id in seen:
                 raise SessionIdentityConflictError(session_id, f"Session identity {session_id} occurs more than once")
             seen.add(session_id)
-
-    def _validate_version_patches(self, program: dict, patches: list[dict]) -> None:
-        sessions = program.get("sessions") if isinstance(program.get("sessions"), list) else []
-        protected_meta = {"pk", "sk", "version_label", "updated_at", "published", "blocks", "current_block_id"}
-        for patch in patches:
-            path = patch.get("path", "") if isinstance(patch, dict) else ""
-            parts = re.split(r"[.\[]", path)
-            root = parts[0]
-            if root in protected_meta or (root == "meta" and (len(parts) == 1 or parts[1] not in self.ALLOWED_META_FIELDS or parts[1] in protected_meta)):
-                raise ValueError(f"Protected version metadata cannot be patched: {path}")
-            match = re.match(r"^sessions\[(\d+)\](?:\.(.*))?$", path)
-            if not match:
-                continue
-            index = int(match.group(1))
-            if index >= len(sessions):
-                raise ValueError(f"Invalid path '{path}': index {index} out of range")
-            field = match.group(2) or ""
-            session = sessions[index]
-            if field in {"", "id", "session_id", "date"}:
-                raise ValueError(f"Session identity cannot be changed: {path}")
-            if self._session_is_logged(session) and (field == "exercises" or field.startswith("exercises[") or field == "videos" or field.startswith("videos[")):
-                raise ValueError(f"Logged session data cannot be changed through new_version: {path}")
-
-    def _preserve_logged_sessions(self, original: dict, updated: dict) -> None:
-        before = original.get("sessions") if isinstance(original.get("sessions"), list) else []
-        after = updated.get("sessions") if isinstance(updated.get("sessions"), list) else []
-        for index, old in enumerate(before):
-            if not isinstance(old, dict) or not self._session_is_logged(old):
-                continue
-            if not old.get("id"):
-                raise ValueError("Logged sessions require a stable session id")
-            match = next((item for item in after if isinstance(item, dict) and item.get("id") == old.get("id")), None)
-            if match is None:
-                raise ValueError("Logged sessions require a stable session id")
-            match["id"] = old.get("id")
-            match["session_id"] = old.get("session_id", old.get("id"))
-            for key in ("exercises", "videos", "media_revision"):
-                if key in old:
-                    match[key] = copy.deepcopy(old[key])
 
     async def block_transition(
         self,
@@ -609,7 +432,7 @@ class ProgramStore:
         program["sessions"] = sessions
         self._validate_session_identities(sessions)
         result = {"action": action, "block_id": block_id, "next_block_id": next_id, "warning": "Unfinished sessions were preserved"}
-        written = await self._write_new_version(program, minor=False)
+        written = await self._save_in_place(program)
         self.invalidate_cache()
         result["program"] = written
         return result
@@ -755,79 +578,10 @@ class ProgramStore:
                     note["block"] = archive_id
                     note["block_id"] = archive_id
     
-    def _apply_patch(self, obj: dict, path: str, value: Any) -> None:
-        """Apply a JSON-path-like patch to an object.
-        
-        Supports paths like:
-            - "sessions[0].exercises[1].kg"
-            - "phases[2].end_week"
-        
-        Args:
-            obj: Object to patch
-            path: Path to the field to update
-            value: New value
-            
-        Raises:
-            ValueError: If path is invalid
-        """
-        import re
-        
-        segments = []
-        for part in path.split("."):
-            match = re.match(r"^(\w+)\[(\d+)\]$", part)
-            if match:
-                segments.append((match.group(1), int(match.group(2))))
-            else:
-                segments.append((part, None))
-        
-        current = obj
-        for i, (key, idx) in enumerate(segments[:-1]):
-            if idx is not None:
-                if key not in current:
-                    raise ValueError(f"Invalid path '{path}': '{key}' not found")
-                if not isinstance(current[key], list):
-                    raise ValueError(f"Invalid path '{path}': '{key}' is not a list")
-                if idx >= len(current[key]):
-                    raise ValueError(f"Invalid path '{path}': index {idx} out of range")
-                current = current[key][idx]
-            else:
-                if not isinstance(current, dict):
-                    raise ValueError(f"Invalid path '{path}': expected dict at '{key}'")
-                if key not in current:
-                    raise ValueError(f"Invalid path '{path}': '{key}' not found")
-                current = current[key]
-        
-        final_key, final_idx = segments[-1]
-        if final_idx is not None:
-            if final_key not in current:
-                raise ValueError(f"Invalid path '{path}': '{final_key}' not found")
-            if not isinstance(current[final_key], list):
-                raise ValueError(f"Invalid path '{path}': '{final_key}' is not a list")
-            if final_idx >= len(current[final_key]):
-                raise ValueError(f"Invalid path '{path}': index {final_idx} out of range")
-            current[final_key][final_idx] = value
-        else:
-            if not isinstance(current, dict):
-                raise ValueError(f"Invalid path '{path}': expected dict at '{final_key}'")
-            current[final_key] = value
-    
-    async def _write_new_version(self, program: dict, minor: bool) -> dict:
-        """Write a new version of the program to DynamoDB.
-        
-        Args:
-            program: Program dict to write
-            minor: If True, increment minor version (1.0 -> 1.1)
-                   If False, increment major version (1.0 -> 2.0)
-            
-        Returns:
-            The written program dict
-            
-        Raises:
-            RuntimeError: If DynamoDB operation fails
-        """
+    async def _save_in_place(self, program: dict) -> dict:
         try:
             result = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self._write_new_version_sync(program, minor)
+                None, lambda: self._save_in_place_sync(program)
             )
             return result
         except (ValueError, LookupError):
@@ -836,8 +590,8 @@ class ProgramStore:
             from services.runtime.session_store import SessionIdentityConflictError
             if isinstance(e, SessionIdentityConflictError):
                 raise
-            logger.error(f"[ProgramStore] Failed to write new version: {e}")
-            raise RuntimeError(f"Failed to write new version to DynamoDB: {e}")
+            logger.error(f"[ProgramStore] Failed to save program: {e}")
+            raise RuntimeError(f"Failed to save program to DynamoDB: {e}")
     
     @staticmethod
     def _floats_to_decimals(obj: Any) -> Any:
@@ -855,48 +609,26 @@ class ProgramStore:
             return [ProgramStore._floats_to_decimals(v) for v in obj]
         return obj
 
-    def _write_new_version_sync(self, program: dict, minor: bool) -> dict:
-        """Synchronous version writing logic."""
+    def _save_in_place_sync(self, program: dict) -> dict:
         now = datetime.now(timezone.utc).isoformat()
-        
-        logger.debug(f"[ProgramStore] Reading current pointer for version increment")
-        pointer_resp = self.table.get_item(
-            Key={"pk": self._pk, "sk": self.POINTER_SK}
-        )
-        
-        pointer = pointer_resp.get("Item")
-        if pointer:
-            current_version = int(pointer.get("version", 0))
-        else:
-            current_version = 0
-
-        new_version_int = current_version + 1
+        pointer = self.table.get_item(
+            Key={"pk": self._pk, "sk": self.POINTER_SK}, ConsistentRead=True
+        ).get("Item") or {}
+        ref_sk = pointer.get("ref_sk")
+        if not ref_sk:
+            raise ProgramNotFoundError(f"No program pointer found for pk={self._pk}.")
+        ref_sk = str(ref_sk)
 
         if "meta" not in program:
             program["meta"] = {}
-        
-        current_label = program["meta"].get("version_label", "0.0")
-        try:
-            major, minor_num = map(int, current_label.split("."))
-            if minor:
-                new_label = f"{major}.{minor_num + 1}"
-            else:
-                new_label = f"{major + 1}.0"
-        except (ValueError, AttributeError):
-            new_label = "1.0" if current_version == 0 else f"{new_version_int}.0"
-        
-        program["meta"]["version_label"] = new_label
         program["meta"]["updated_at"] = now
-        
-        suffix = uuid.uuid4().hex
-        new_sk = f"{self.PROGRAM_SK_PREFIX}{new_version_int:03d}-{suffix}"
 
         sessions = copy.deepcopy(program.get("sessions", []))
         self._validate_session_identities(sessions)
         program_without_sessions = copy.deepcopy(program)
         program_without_sessions.pop("sessions", None)
 
-        supplements = {"pk": self._pk, "sk": new_sk}
+        supplements = {"pk": self._pk, "sk": ref_sk}
         for field in self._supplement_fields():
             if field in program:
                 supplements[field] = copy.deepcopy(program[field])
@@ -904,92 +636,30 @@ class ProgramStore:
         for field in self._supplement_fields():
             program_without_sessions.pop(field, None)
 
-        program_item = {**program_without_sessions, "pk": self._pk, "sk": new_sk, "published": True}
-        
-        program_item = self._floats_to_decimals(program_item)
-        
-        logger.debug(f"[ProgramStore] Writing new program version: sk={new_sk}, label={new_label}")
+        program_item = self._floats_to_decimals({**program_without_sessions, "pk": self._pk, "sk": ref_sk})
         self.table.put_item(Item=program_item)
 
+        self.table.update_item(
+            Key={"pk": self._pk, "sk": self.POINTER_SK},
+            UpdateExpression="SET current_block_id = :block, updated_at = :now",
+            ConditionExpression=Attr("ref_sk").eq(ref_sk),
+            ExpressionAttributeValues={":block": current_block_id(program), ":now": now},
+        )
+
         self._get_session_store().replace_program_sessions_sync(
-            new_sk,
+            ref_sk,
             sessions if isinstance(sessions, list) else [],
             program.get("phases", []) if isinstance(program.get("phases"), list) else [],
         )
-        
-        pointer_item = {
-            "pk": self._pk,
-            "sk": self.POINTER_SK,
-            "version": new_version_int,
-            "ref_sk": new_sk,
-            "updated_at": now,
-            "current_block_id": current_block_id(program),
-        }
-        
-        logger.debug(f"[ProgramStore] Updating pointer to version={new_version_int}")
-        self.table.put_item(Item=self._floats_to_decimals(pointer_item))
-        logger.info(f"[ProgramStore] Created new {'minor' if minor else 'major'} version: {new_label} (v{new_version_int})")
 
         self.invalidate_cache()
         return program
 
-    async def archive(self, sk: str) -> dict:
-        self._selected_program_sk = sk
-        snapshot = await self._source_snapshot()
-        program = copy.deepcopy(snapshot[0])
-        meta = program.setdefault("meta", {})
-        meta["archived"] = True
-        meta["archived_at"] = datetime.now(timezone.utc).isoformat()
-        return await self._commit_source(snapshot, program, "program_archive", {"sk": sk, "archived": True}, {"success": True, "archived": True, "sk": snapshot[2]})
-
-    async def unarchive(self, sk: str) -> dict:
-        self._selected_program_sk = sk
-        snapshot = await self._source_snapshot()
-        program = copy.deepcopy(snapshot[0])
-        meta = program.setdefault("meta", {})
-        meta["archived"] = False
-        meta["archived_at"] = None
-        return await self._commit_source(snapshot, program, "program_unarchive", {"sk": sk, "archived": False}, {"success": True, "archived": False, "sk": snapshot[2]})
-
-    async def list_programs(self, include_archived: bool = False) -> list[dict]:
-        """List all program versions.
-
-        Args:
-            include_archived: Whether to include archived programs in the list
-
-        Returns:
-            List of program summaries (sk, meta, etc.)
-        """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self._list_programs_sync(include_archived)
-        )
-
-    def _list_programs_sync(self, include_archived: bool = False) -> list[dict]:
-        """Synchronous program listing logic."""
-        scan_result = self.table.query(
-            KeyConditionExpression=Key("pk").eq(self._pk) & Key("sk").begins_with(self.PROGRAM_SK_PREFIX)
-        )
-        items = scan_result.get("Items", [])
-        
-        if not include_archived:
-            items = [
-                item for item in items 
-                if item.get("published", True) is not False and not item.get("meta", {}).get("archived", False)
-            ]
-        else:
-            items = [item for item in items if item.get("published", True) is not False]
-        
-        results = []
-        for item in items:
-            p = dict(item)
-            results.append(p)
-
-        return results
-    # ─── In-place updates (no new version — matches the pre-refactor controller) ─
+    # ─── In-place updates ─
 
     ALLOWED_META_FIELDS = (
         "program_name", "program_start", "federation", "practicing_for",
-        "version_label", "sex", "weight_class_kg", "weight_classes_kg", "weight_class_confirm_by",
+        "sex", "weight_class_kg", "weight_classes_kg", "weight_class_confirm_by",
         "current_body_weight_kg", "current_body_weight_lb",
         "manual_maxes", "lift_attempt_settings",
         "target_squat_kg", "target_bench_kg", "target_dl_kg", "target_total_kg",

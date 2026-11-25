@@ -105,34 +105,9 @@ func sharedNotes(notes []any) []any {
 
 func (v *Views) loadProgram(ctx context.Context, athlete string) (map[string]any, error) {
 	health := v.DB.Tables.Health
-	var sk string
-	pointer, err := v.DB.Get(ctx, health, store.PKSK(athlete, pointerSK))
+	sk, err := v.ProgramSK(ctx, athlete)
 	if err != nil {
 		return nil, err
-	}
-	if pointer != nil {
-		sk = value.Str(value.Or(pointer["ref_sk"], ""))
-	} else {
-		rows, err := v.DB.Query(ctx, store.Query{
-			Table:   health,
-			KeyCond: "pk = :pk AND begins_with(sk, :prefix)",
-			Values:  map[string]any{":pk": athlete, ":prefix": "program#v"},
-		})
-		if err != nil {
-			return nil, err
-		}
-		latest := -1
-		for _, row := range rows {
-			if published, ok := row["published"].(bool); ok && !published {
-				continue
-			}
-			name := strings.TrimPrefix(value.Str(row["sk"]), "program#v")
-			name, _, _ = strings.Cut(name, "-")
-			version := value.IntOf(name, -1)
-			if version > latest {
-				latest, sk = version, value.Str(row["sk"])
-			}
-		}
 	}
 	if sk == "" {
 		return nil, nil
@@ -143,9 +118,6 @@ func (v *Views) loadProgram(ctx context.Context, athlete string) (map[string]any
 	}
 	if item == nil {
 		return nil, apperr.Internal("Program item not found at " + sk)
-	}
-	if published, ok := item["published"].(bool); ok && !published {
-		return nil, nil
 	}
 	program := value.Sanitize(item).(map[string]any)
 	delete(program, "pk")

@@ -439,7 +439,7 @@ func (d *Deps) setupProgram(athlete, mode, programName, startDate, weekStartDay 
 		meta["template_lineage"] = map[string]any{"applied_template_sk": templateSK, "applied_at": now, "week_start_day": weekStartDay, "start_date": startDate}
 	}
 	return map[string]any{
-		"pk": athlete, "sk": "program#v001", "meta": meta, "phases": phaseList, "sessions": sessions,
+		"pk": athlete, "meta": meta, "phases": phaseList, "sessions": sessions,
 		"goals": []any{map[string]any{
 			"id": d.Env.UUID(), "title": "Lift 1 lb", "goal_type": "coach_defined", "priority": "optional",
 			"target_total_kg": 0.45, "strategy_mode": "train_through", "risk_tolerance": "low",

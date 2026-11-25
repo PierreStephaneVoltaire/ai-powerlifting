@@ -147,12 +147,6 @@ func (m *Memory) GlossaryEntries(_ context.Context, pk string) ([]Item, error) {
 	return pick(m.GlossaryItems, pk, GlossarySKPrefix, all), nil
 }
 
-func (m *Memory) Versions(_ context.Context, pk string) ([]Item, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return pick(m.HealthItems, pk, ProgramSKPrefix, all), nil
-}
-
 func (m *Memory) Sessions(_ context.Context, pk, programSK string) ([]Item, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

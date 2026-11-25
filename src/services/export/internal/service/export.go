@@ -123,7 +123,7 @@ func (s *Service) history(ctx context.Context, args, access map[string]any, call
 			historyEnd = dates[len(dates)-1]
 		}
 	}
-	context := s.historyData(ctx, caller, program, access, window, sessions, block, loaded.Version, historyStart, historyEnd)
+	context := s.historyData(ctx, caller, program, access, window, sessions, block, historyStart, historyEnd)
 	var weekly map[string]any
 	if s.Analytics != nil && hasPermission(access, "analytics:read") {
 		weeks := 1
@@ -188,11 +188,7 @@ func (s *Service) history(ctx context.Context, args, access map[string]any, call
 	var content []byte
 	if format == "markdown" {
 		extension = "md"
-		version := ""
-		if loaded.Version > 0 {
-			version = fmt.Sprintf("v%03d", loaded.Version)
-		}
-		text, err := markdown.Render(markdown.Input{Program: program, Weekly: weekly, PK: athlete, Version: version, Sex: strings.ToLower(values.Str2(meta["sex"])), Today: s.Now().UTC(), WeightLog: context.WeightLog, MaxHistory: context.MaxHistory, Federations: context.Federations, Correlation: context.Correlation, Evaluation: context.Evaluation})
+		text, err := markdown.Render(markdown.Input{Program: program, Weekly: weekly, PK: athlete, Sex: strings.ToLower(values.Str2(meta["sex"])), Today: s.Now().UTC(), WeightLog: context.WeightLog, MaxHistory: context.MaxHistory, Federations: context.Federations, Correlation: context.Correlation, Evaluation: context.Evaluation})
 		if err != nil {
 			return nil, err
 		}

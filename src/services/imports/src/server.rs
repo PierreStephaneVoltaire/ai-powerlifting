@@ -286,10 +286,7 @@ impl Service {
                 Ok(result)
                     if result["status"] == "applied"
                         && result["applied_count"].is_u64()
-                        && result["skipped_count"].is_u64()
-                        && result
-                            .get("new_version")
-                            .is_some_and(|version| version.is_string() || version.is_null()) =>
+                        && result["skipped_count"].is_u64() =>
                 {
                     result
                 }
