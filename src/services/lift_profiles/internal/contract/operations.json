@@ -1,0 +1,455 @@
+[
+  {
+    "name": "fatigue_profile_estimate",
+    "domain": "lift-profiles",
+    "description": "Estimate the four-dimensional fatigue profile for an exercise using AI.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "exercise": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": true
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "exercise"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "axial": {
+          "type": "number"
+        },
+        "neural": {
+          "type": "number"
+        },
+        "peripheral": {
+          "type": "number"
+        },
+        "systemic": {
+          "type": "number"
+        },
+        "reasoning": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "axial",
+        "neural",
+        "peripheral",
+        "systemic",
+        "reasoning"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "muscle_group_estimate",
+    "domain": "lift-profiles",
+    "description": "Estimate primary, secondary, and tertiary muscle groups for an exercise using AI.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "exercise": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": true
+        },
+        "lift_profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "exercise"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "primary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secondary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tertiary_muscles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reasoning": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "primary_muscles",
+        "secondary_muscles",
+        "tertiary_muscles",
+        "reasoning"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "lift_profile_estimate_stimulus",
+    "domain": "lift-profiles",
+    "description": "Estimate an INOL stimulus coefficient from a structured lift profile; every technique option must be chosen.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/liftProfile"
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "$defs": {
+        "liftProfile": {
+          "type": "object",
+          "properties": {
+            "lift": {
+              "type": "string",
+              "enum": [
+                "squat",
+                "bench",
+                "deadlift"
+              ]
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "volume_tolerance": {
+              "type": "string",
+              "enum": [
+                "low",
+                "moderate",
+                "high"
+              ]
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "stimulus_coefficient": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 2
+            }
+          },
+          "required": [
+            "lift"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "lift": {
+          "type": "string"
+        },
+        "stimulus_coefficient": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "stimulus_coefficient_confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "stimulus_coefficient_reasoning": {
+          "type": "string"
+        },
+        "stimulus_coefficient_updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "lift",
+        "stimulus_coefficient",
+        "stimulus_coefficient_confidence",
+        "stimulus_coefficient_reasoning",
+        "stimulus_coefficient_updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "lift_profile_suggest",
+    "domain": "lift-profiles",
+    "description": "Pick structured technique options for one lift from the lifter's own description. Returns the options only; nothing is saved.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "lift": {
+          "type": "string",
+          "enum": [
+            "squat",
+            "bench",
+            "deadlift"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "lift": {
+              "type": "string",
+              "enum": [
+                "squat",
+                "bench",
+                "deadlift"
+              ]
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "volume_tolerance": {
+              "type": "string",
+              "enum": [
+                "low",
+                "moderate",
+                "high"
+              ]
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "stimulus_coefficient": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 2
+            }
+          },
+          "required": [
+            "lift"
+          ],
+          "additionalProperties": true
+        },
+        "pk": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "lift",
+        "description"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "lift": {
+          "type": "string"
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "volume_tolerance": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "low",
+            "moderate",
+            "high",
+            null
+          ]
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "lift",
+        "options",
+        "volume_tolerance",
+        "changed"
+      ],
+      "additionalProperties": false
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "program_update_lift_profiles",
+    "domain": "lift-profiles",
+    "description": "Replace the lift_profiles array on a program version. Lift profiles define per-exercise stimulus targets and configuration used by the AI analysis tools.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "program_sk": {
+          "type": "string",
+          "description": "Program sort key. Defaults to current."
+        },
+        "lift_profiles": {
+          "type": "array",
+          "description": "Full lift_profiles array to write.",
+          "items": {
+            "$ref": "#/$defs/liftProfile"
+          }
+        }
+      },
+      "required": [
+        "lift_profiles"
+      ],
+      "$defs": {
+        "liftProfile": {
+          "type": "object",
+          "properties": {
+            "lift": {
+              "type": "string",
+              "enum": [
+                "squat",
+                "bench",
+                "deadlift"
+              ]
+            },
+            "form_videos": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "front": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                },
+                "side": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                },
+                "diagonal": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": false
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "volume_tolerance": {
+              "type": "string",
+              "enum": [
+                "low",
+                "moderate",
+                "high"
+              ]
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "stimulus_coefficient": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 2
+            }
+          },
+          "required": [
+            "lift"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "result_schema": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

@@ -1,4 +1,9 @@
 {
+  "program_apply_session_import": {"internal_only": true, "permission": "imports:write"},
+  "template_apply_sessions": {
+    "internal_only": true,
+    "permission": "program:write"
+  },
   "access_context": {
     "permission": "profile:read",
     "public": true
@@ -426,6 +431,9 @@
   },
   "template_create_from_payload": {
     "permission": "templates:write"
+  },
+  "template_create_from_import": {
+    "permission": "imports:write"
   },
   "template_delete": {
     "permission": "templates:write",

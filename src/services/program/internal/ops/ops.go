@@ -102,6 +102,8 @@ func Registry() map[string]Handler {
 		"health_setup_status":             setupStatus,
 		"health_setup_initialize":         setupInitialize,
 		"block_transition":                blockTransition,
+		"template_apply_sessions":         templateApplySessions,
+		"program_apply_session_import":    programApplySessionImport,
 		"export_program_markdown":         exportMarkdown,
 	}
 }

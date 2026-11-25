@@ -1,0 +1,276 @@
+package workbook
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/xuri/excelize/v2"
+)
+
+func TestWorkbookStoresNumbersAsNumbersAndOmitsDefaultSheet(t *testing.T) {
+	data, err := Render(map[string]any{"meta": map[string]any{"training_notes": "Focus"}, "sessions": []any{map[string]any{"exercises": []any{map[string]any{"name": "Squat", "sets": json.Number("3"), "kg": json.Number("97.5")}}}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for _, cell := range []string{"F2", "H2"} {
+		cellType, err := book.GetCellType("Exercises", cell)
+		if err != nil || (cellType != excelize.CellTypeNumber && cellType != excelize.CellTypeUnset) {
+			t.Errorf("%s has type %v, error %v", cell, cellType, err)
+		}
+	}
+	if index, _ := book.GetSheetIndex("Sheet1"); index != -1 {
+		t.Fatal("default sheet remains in workbook")
+	}
+	if note, _ := book.GetCellValue("Notes", "D2"); note != "Focus" {
+		t.Fatalf("training note = %q", note)
+	}
+}
+
+func TestWorkbookMarksTruncatedTextAndFormatsRawBooleans(t *testing.T) {
+	program := map[string]any{"meta": map[string]any{"training_notes": strings.Repeat("x", 32001), "archived": true}}
+	data, err := Render(program, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Raw Export")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seenBool, seenTruncation := false, false
+	for _, row := range rows {
+		if len(row) < 3 {
+			continue
+		}
+		if row[1] == "meta.archived" {
+			seenBool = row[2] == "Yes"
+		}
+		if row[1] == "meta.training_notes" {
+			seenTruncation = strings.HasSuffix(row[2], "... [truncated]")
+		}
+	}
+	if !seenBool || !seenTruncation {
+		t.Fatalf("boolean=%v truncation=%v", seenBool, seenTruncation)
+	}
+}
+
+func TestWorkbookKeepsPlannedAndActualLoadsSeparate(t *testing.T) {
+	program := map[string]any{"sessions": []any{map[string]any{"date": "2026-11-16", "planned_exercises": []any{map[string]any{"name": "Squat", "kg": 100.0, "rpe_target": 8.0}}, "exercises": []any{map[string]any{"name": "Squat", "kg": 95.0, "rpe": 9.0}}}}, "meta": map[string]any{}}
+	data, err := Render(program, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	style, err := book.GetCellStyle("Sessions", "A1")
+	if err != nil || style == 0 {
+		t.Fatalf("missing header style: %d, %v", style, err)
+	}
+	panes, err := book.GetPanes("Sessions")
+	if err != nil || !panes.Freeze || panes.YSplit != 1 {
+		t.Fatalf("missing frozen header: %#v, %v", panes, err)
+	}
+	for _, check := range []struct{ sheet, cell, want string }{{"Planned Exercises", "H2", "100"}, {"Planned Exercises", "J2", "8"}, {"Exercises", "H2", "95"}, {"Exercises", "L2", "9"}} {
+		got, err := book.GetCellValue(check.sheet, check.cell)
+		if err != nil || got != check.want {
+			t.Errorf("%s %s = %q, %v", check.sheet, check.cell, got, err)
+		}
+	}
+}
+
+func TestWorkbookExpandsDifferentPerformedSets(t *testing.T) {
+	program := map[string]any{"sessions": []any{map[string]any{"exercises": []any{map[string]any{"name": "Squat", "sets_data": []any{map[string]any{"kg": 95.0, "reps": 5.0, "rpe": 9.0}, map[string]any{"kg": 97.5, "reps": 5.0, "rpe": 9.5}}}}}}}
+	data, err := Render(program, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for _, check := range []struct{ cell, want string }{{"F2", "1"}, {"H2", "95"}, {"H3", "97.5"}, {"L3", "9.5"}, {"N3", "487.5"}} {
+		got, err := book.GetCellValue("Exercises", check.cell)
+		if err != nil || got != check.want {
+			t.Errorf("%s = %q, %v", check.cell, got, err)
+		}
+	}
+}
+
+func TestWorkbookIncludesRawData(t *testing.T) {
+	data, err := Render(map[string]any{"meta": map[string]any{"program_name": "Demo"}}, map[string]any{"fatigue_index": 0.3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Raw Export")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 || rows[1][1] != "meta.program_name" || rows[1][2] != "Demo" || rows[2][0] != "analysis" || rows[2][1] != "weekly.fatigue_index" {
+		t.Fatalf("raw rows %#v", rows)
+	}
+}
+
+func TestWorkbookIncludesBreaksAndPreferences(t *testing.T) {
+	data, err := Render(map[string]any{"meta": map[string]any{"archived": true}, "operator_prefs": map[string]any{"units": "kg"}, "breaks": []any{map[string]any{"reason": "travel"}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for cell, want := range map[string]string{"B2": "TRUE", "B4": `{"units":"kg"}`, "B5": `[{"reason":"travel"}]`} {
+		got, err := book.GetCellValue("Breaks & Prefs", cell)
+		if err != nil || got != want {
+			t.Errorf("%s = %q, %v", cell, got, err)
+		}
+	}
+}
+
+func TestWorkbookIncludesTrendSections(t *testing.T) {
+	data, err := Render(map[string]any{"meta": map[string]any{}, "sessions": []any{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Trends")
+	if err != nil || len(rows) < 6 || rows[0][0] != "Bodyweight Trend" || rows[1][0] != "Status" {
+		t.Fatalf("trend rows %#v, %v", rows, err)
+	}
+}
+
+func TestFailedSetsKeepReasons(t *testing.T) {
+	program := map[string]any{"sessions": []any{map[string]any{"exercises": []any{map[string]any{"name": "Press", "set_statuses": []any{"completed", "failed"}, "failed_set_reasons": []any{[]any{}, []any{"strength_failure"}}, "sets_data": []any{map[string]any{"kg": 10.0}, map[string]any{"kg": 9.0}}}}}}}
+	data, err := Render(program, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for _, check := range []struct{ cell, want string }{{"I3", "TRUE"}, {"J3", "1"}, {"K3", "set 1: Strength failure"}} {
+		got, err := book.GetCellValue("Exercises", check.cell)
+		if err != nil || got != check.want {
+			t.Errorf("%s = %q, %v", check.cell, got, err)
+		}
+	}
+}
+
+func TestWorkbookWeeklyAnalysisIncludesReadinessAndCompliance(t *testing.T) {
+	weekly := map[string]any{
+		"week":            4,
+		"compliance":      map[string]any{"planned": 5, "completed": 4, "pct": 80},
+		"readiness_score": map[string]any{"score": 72, "zone": "green", "components": map[string]any{"wellness": 0.8}},
+		"current_maxes":   map[string]any{"squat": 190},
+	}
+	data, err := Render(map[string]any{}, weekly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows("Weekly Analysis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]string{}
+	for _, row := range rows {
+		if len(row) > 1 {
+			found[row[0]] = row[1]
+		}
+	}
+	for key, expected := range map[string]string{"Current Week": "4", "Compliance — Planned": "5", "Compliance — %": "80", "Readiness Score": "72", "Readiness - Wellness": "0.8", "Current Max — Squat (kg)": "190"} {
+		if found[key] != expected {
+			t.Errorf("%s = %q, want %q", key, found[key], expected)
+		}
+	}
+}
+
+func TestWorkbookIncludesStructuredAnalysisReports(t *testing.T) {
+	context := Context{
+		Correlation: map[string]any{"summary": "Finding summary", "findings": []any{map[string]any{"exercise": "Squat", "lift": "Deadlift", "evidence": "Consistent", "reasoning": "Across weeks"}}},
+		Evaluation:  map[string]any{"stance": "Continue", "what_is_working": []any{"Recovery"}, "goal_status": []any{map[string]any{"goal": "Meet total", "status": "On track"}}, "weight_class_strategy": map[string]any{"recommendation": "Maintain", "viable_options": []any{map[string]any{"weight_class_kg": 83, "suitability": "Good"}}}},
+	}
+	data, err := Render(map[string]any{}, nil, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	for _, check := range []struct{ sheet, cell, want string }{
+		{"ROI Correlation", "B1", "Finding summary"}, {"ROI Correlation", "A9", "Squat"}, {"ROI Correlation", "E9", "Consistent Across weeks"},
+		{"Program Evaluation", "B1", "Continue"}, {"Program Evaluation", "A10", "Recovery"},
+	} {
+		got, err := book.GetCellValue(check.sheet, check.cell)
+		if err != nil || got != check.want {
+			t.Errorf("%s %s = %q (%v), want %q", check.sheet, check.cell, got, err, check.want)
+		}
+	}
+	rows, err := book.GetRows("Program Evaluation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, row := range rows {
+		joined += strings.Join(row, "|") + "\n"
+	}
+	for _, want := range []string{"Meet total||On track", "Recommendation|Maintain", "83|Good"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("evaluation missing %q", want)
+		}
+	}
+}
+
+func TestMetadataTrainingNotesAreReadable(t *testing.T) {
+	for _, tc := range []struct {
+		notes any
+		want  string
+	}{{nil, ""}, {[]any{"first", "second"}, "first; second"}, {"single", "single"}} {
+		rows := metadataRows(map[string]any{"training_notes": tc.notes}, map[string]any{}, Context{})
+		found := false
+		for _, row := range rows {
+			if row[0] == "Training Notes" {
+				found = true
+				if row[1] != tc.want {
+					t.Errorf("notes %#v: got %#v, want %q", tc.notes, row[1], tc.want)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("missing training notes")
+		}
+	}
+}

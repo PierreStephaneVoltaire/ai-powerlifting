@@ -12,6 +12,8 @@ import { useAssistant } from '@/components/assistant/useAssistant'
 import type { SupplementPhase, Supplement } from '@powerlifting/types'
 import { currentBlockId, recordBlock } from '@/utils/blockScope'
 
+const ITEMS_PER_PAGE = 15
+
 const doseAssessments = [
   { value: 'below_range', label: 'Below range' },
   { value: 'within_range', label: 'Within range' },
@@ -105,7 +107,7 @@ export default function SupplementsPage() {
 
   function addItem(phaseIndex: number) {
     const phase = phases[phaseIndex]
-    if (phase) setItemPages((current) => ({ ...current, [phase.phase]: Math.floor(phase.items.length / 3) }))
+    if (phase) setItemPages((current) => ({ ...current, [phase.phase]: Math.floor(phase.items.length / ITEMS_PER_PAGE) }))
     setPhases((prev) => {
       const newPhases = [...prev]
       const items = [...newPhases[phaseIndex].items, { name: '', dose: '' }]
@@ -117,7 +119,7 @@ export default function SupplementsPage() {
 
   function removeItem(phaseIndex: number, itemIndex: number) {
     const phase = phases[phaseIndex]
-    if (phase) setItemPages((current) => ({ ...current, [phase.phase]: Math.min(current[phase.phase] ?? 0, Math.max(0, Math.ceil((phase.items.length - 1) / 3) - 1)) }))
+    if (phase) setItemPages((current) => ({ ...current, [phase.phase]: Math.min(current[phase.phase] ?? 0, Math.max(0, Math.ceil((phase.items.length - 1) / ITEMS_PER_PAGE) - 1)) }))
     setPhases((prev) => {
       const newPhases = [...prev]
       const items = newPhases[phaseIndex].items.filter((_, i) => i !== itemIndex)
@@ -343,7 +345,7 @@ export default function SupplementsPage() {
                       />
                     </div>
 
-                    <div className="if-supp-table-header" ref={phase.items.length > 3 ? itemListRef : undefined}>
+                    <div className="if-supp-table-header" ref={phase.items.length > ITEMS_PER_PAGE ? itemListRef : undefined}>
                       <span className="if-supp-table-label">Compound</span>
                       <span className="if-supp-table-label">Daily total</span>
                       <span className="if-supp-table-label">Dose assessment</span>
@@ -361,16 +363,16 @@ export default function SupplementsPage() {
                       </Button>
                     </div>
 
-                    {phase.items.length > 3 && <Group justify="space-between" px="md" py="xs">
-                      <Text size="sm" c="dimmed">{(itemPages[phase.phase] ?? 0) * 3 + 1}–{Math.min((itemPages[phase.phase] ?? 0) * 3 + 3, phase.items.length)} of {phase.items.length}</Text>
+                    {phase.items.length > ITEMS_PER_PAGE && <Group justify="space-between" px="md" py="xs">
+                      <Text size="sm" c="dimmed">{(itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE + 1}–{Math.min((itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE + ITEMS_PER_PAGE, phase.items.length)} of {phase.items.length}</Text>
                       <Group gap="xs">
                         <Button h={44} variant="default" disabled={!itemPages[phase.phase]} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: Math.max(0, (current[phase.phase] ?? 0) - 1) })) }}>Previous</Button>
-                        <Button h={44} variant="default" disabled={(itemPages[phase.phase] ?? 0) >= Math.ceil(phase.items.length / 3) - 1} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: (current[phase.phase] ?? 0) + 1 })) }}>Next</Button>
+                        <Button h={44} variant="default" disabled={(itemPages[phase.phase] ?? 0) >= Math.ceil(phase.items.length / ITEMS_PER_PAGE) - 1} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: (current[phase.phase] ?? 0) + 1 })) }}>Next</Button>
                       </Group>
                     </Group>}
 
-                    {phase.items.length > 0 ? phase.items.slice((itemPages[phase.phase] ?? 0) * 3, (itemPages[phase.phase] ?? 0) * 3 + 3).map((item, visibleIndex) => {
-                      const itemIndex = (itemPages[phase.phase] ?? 0) * 3 + visibleIndex
+                    {phase.items.length > 0 ? phase.items.slice((itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE, (itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE + ITEMS_PER_PAGE).map((item, visibleIndex) => {
+                      const itemIndex = (itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE + visibleIndex
                       return (
                       <div className="if-supp-table-row" key={itemIndex}>
                         <TextInput
@@ -460,11 +462,11 @@ export default function SupplementsPage() {
                       </Text>
                     )}
 
-                    {phase.items.length > 3 && <Group justify="space-between" px="md" py="xs">
-                      <Text size="sm" c="dimmed">{(itemPages[phase.phase] ?? 0) * 3 + 1}–{Math.min((itemPages[phase.phase] ?? 0) * 3 + 3, phase.items.length)} of {phase.items.length}</Text>
+                    {phase.items.length > ITEMS_PER_PAGE && <Group justify="space-between" px="md" py="xs">
+                      <Text size="sm" c="dimmed">{(itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE + 1}–{Math.min((itemPages[phase.phase] ?? 0) * ITEMS_PER_PAGE + ITEMS_PER_PAGE, phase.items.length)} of {phase.items.length}</Text>
                       <Group gap="xs">
                         <Button h={44} variant="default" disabled={!itemPages[phase.phase]} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: Math.max(0, (current[phase.phase] ?? 0) - 1) })) }}>Previous</Button>
-                        <Button h={44} variant="default" disabled={(itemPages[phase.phase] ?? 0) >= Math.ceil(phase.items.length / 3) - 1} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: (current[phase.phase] ?? 0) + 1 })) }}>Next</Button>
+                        <Button h={44} variant="default" disabled={(itemPages[phase.phase] ?? 0) >= Math.ceil(phase.items.length / ITEMS_PER_PAGE) - 1} onClick={() => { itemPageChangeRef.current = true; setItemPages((current) => ({ ...current, [phase.phase]: (current[phase.phase] ?? 0) + 1 })) }}>Next</Button>
                       </Group>
                     </Group>}
 

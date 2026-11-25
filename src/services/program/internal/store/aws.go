@@ -14,9 +14,33 @@ type API interface {
 	PutItem(ctx context.Context, input *dynamodb.PutItemInput, options ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	Query(ctx context.Context, input *dynamodb.QueryInput, options ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	BatchWriteItem(ctx context.Context, input *dynamodb.BatchWriteItemInput, options ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error)
+	TransactWriteItems(ctx context.Context, input *dynamodb.TransactWriteItemsInput, options ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 
 type AWS struct{ API API }
+
+func (a AWS) PublishVersion(ctx context.Context, tables Tables, athlete, expectedSK string, pointer Item, programSK, importID, importClaim string) error {
+	health := string(tables.Health)
+	pointerAttrs, err := ToAttrMap(pointer)
+	if err != nil {
+		return err
+	}
+	condition := "ref_sk = :expected"
+	expression := "SET #published = :published"
+	writes := []types.TransactWriteItem{
+		{Put: &types.Put{TableName: &health, Item: pointerAttrs, ConditionExpression: &condition, ExpressionAttributeValues: map[string]types.AttributeValue{":expected": &types.AttributeValueMemberS{Value: expectedSK}}}},
+		{Update: &types.Update{TableName: &health, Key: keyAttrs(Key{PK: athlete, SK: programSK}), UpdateExpression: &expression, ExpressionAttributeNames: map[string]string{"#published": "published"}, ExpressionAttributeValues: map[string]types.AttributeValue{":published": &types.AttributeValueMemberBOOL{Value: true}}}},
+	}
+	if importID != "" {
+		condition := "#status = :applying AND apply_claim_id = :claim"
+		writes = append(writes, types.TransactWriteItem{ConditionCheck: &types.ConditionCheck{TableName: &health, Key: keyAttrs(Key{PK: athlete, SK: "import#pending#" + importID}), ConditionExpression: &condition, ExpressionAttributeNames: map[string]string{"#status": "status"}, ExpressionAttributeValues: map[string]types.AttributeValue{":applying": &types.AttributeValueMemberS{Value: "applying"}, ":claim": &types.AttributeValueMemberS{Value: importClaim}}}})
+	}
+	_, err = a.API.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: writes})
+	if err != nil {
+		return fmt.Errorf("publish program: %w", err)
+	}
+	return nil
+}
 
 const batchSize = 25
 

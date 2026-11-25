@@ -1,0 +1,1120 @@
+[
+  {
+    "name": "template_apply",
+    "domain": "templates",
+    "description": "Preview applying a template to the athlete program.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "target": {
+          "enum": [
+            "new_block",
+            "append",
+            "replace_incomplete"
+          ]
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "block_name": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "week_start_day": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "preview_sessions",
+            "target",
+            "start_date",
+            "week_start_day"
+          ],
+          "properties": {
+            "status": {
+              "const": "ready"
+            },
+            "preview_sessions": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "target": {
+              "type": "string"
+            },
+            "start_date": {
+              "type": "string"
+            },
+            "week_start_day": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "missing_exercises",
+            "missing_maxes"
+          ],
+          "properties": {
+            "status": {
+              "const": "gate_blocked"
+            },
+            "missing_exercises": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "missing_maxes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_apply_confirm",
+    "domain": "templates",
+    "description": "Apply a template and write a new versioned athlete program with template lineage.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "backfilled_maxes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "start_date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "week_start_day": {
+          "type": "string"
+        },
+        "target": {
+          "enum": [
+            "new_block",
+            "append",
+            "replace_incomplete"
+          ]
+        },
+        "operation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "block_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "program_version",
+        "program_sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "applied"
+        },
+        "program_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "program_sk": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_archive",
+    "domain": "templates",
+    "description": "Archive an owned template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "archived"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_copy",
+    "domain": "templates",
+    "description": "Copy a visible template into a new owned unpublished template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "new_name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "sk",
+        "new_name"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "new_sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "copied"
+        },
+        "new_sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_create_blank",
+    "domain": "templates",
+    "description": "Create an empty reusable template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "program_context": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "estimated_weeks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "days_per_week": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "created"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_create_from_block",
+    "domain": "templates",
+    "description": "Create a reusable template from an athlete program block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "program_sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "created"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_create_from_payload",
+    "domain": "templates",
+    "description": "Create a reusable template from a complete payload.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "template": {
+          "type": "object"
+        },
+        "author": {
+          "type": "string"
+        },
+        "published": {
+          "type": "boolean"
+        },
+        "import_job_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "created"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_delete",
+    "domain": "templates",
+    "description": "Permanently delete an owned template.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "deleted"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_evaluate",
+    "domain": "templates",
+    "description": "Evaluate template suitability for the athlete and return a structured report.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "stance",
+        "summary",
+        "strengths",
+        "weaknesses",
+        "suggestions"
+      ],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "enum": [
+            "continue",
+            "monitor",
+            "adjust",
+            "critical"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "strengths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "weaknesses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "rationale"
+            ],
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "projected_readiness_at_comp": {
+          "type": "number"
+        },
+        "data_citations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "ai",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_get",
+    "domain": "templates",
+    "description": "Get a visible template with phases, sessions, and metadata.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "sk",
+        "meta",
+        "phases",
+        "sessions"
+      ],
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "pk": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object"
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "required_maxes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "glossary_resolution": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_list",
+    "domain": "templates",
+    "description": "List visible template summaries, excluding archived templates by default.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "include_archived": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sk",
+          "name",
+          "archived",
+          "published"
+        ],
+        "properties": {
+          "sk": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "published": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_publish",
+    "domain": "templates",
+    "description": "Publish an owned template to the shared library.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "published"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_unarchive",
+    "domain": "templates",
+    "description": "Restore an owned template to default lists.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "unarchived"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_unpublish",
+    "domain": "templates",
+    "description": "Remove an owned template from the shared library.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "unpublished"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_update",
+    "domain": "templates",
+    "description": "Update supplied editable fields of an owned template. Omitted fields, ownership and publication state are preserved.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "template": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "sk",
+        "template"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "status",
+        "sk"
+      ],
+      "properties": {
+        "status": {
+          "const": "updated"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_report",
+    "domain": "templates",
+    "description": "Return a template's computed analysis report (the app's weekly analysis run on the template alone), its program context and stored evaluation. No AI.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sk"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "sk",
+        "metrics"
+      ],
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "program_context": {
+          "type": "string"
+        },
+        "evaluation": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "metrics": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_patch",
+    "domain": "templates",
+    "description": "Apply structured edits to a template, including setting session weekdays by their 1-based position in template_get sessions, or replacing, re-prescribing, removing or adding exercises. apply=false previews every change; apply=true writes it.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string"
+        },
+        "sk": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": [
+              "op"
+            ],
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "replace_exercise",
+                  "set_prescription",
+                  "remove_exercise",
+                  "add_exercise",
+                  "set_session_weekdays"
+                ]
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "exercise": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "weeks": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "days": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "day_of_week": {
+                "type": "string"
+              },
+              "weekdays": {
+                "type": "object",
+                "description": "Map of 1-based positions in the full template_get sessions array to weekday names.",
+                "minProperties": 1,
+                "propertyNames": {
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "additionalProperties": {
+                  "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                }
+              },
+              "sets": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "reps": {
+                "type": [
+                  "number",
+                  "string",
+                  "null"
+                ]
+              },
+              "load_type": {
+                "type": "string",
+                "enum": [
+                  "rpe",
+                  "percentage",
+                  "absolute",
+                  "duration",
+                  "unresolvable"
+                ]
+              },
+              "rep_unit": {"type": "string", "enum": ["reps", "minutes", "seconds"]},
+              "rep_mode": {"enum": ["amrap", null]},
+              "load_value": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "rpe_target": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "const": "set_session_weekdays"
+                    }
+                  }
+                },
+                "then": {
+                  "required": ["weekdays"],
+                  "maxProperties": 2
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "const": "replace_exercise"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "from",
+                    "to"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "const": "set_prescription"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "exercise"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "const": "remove_exercise"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "exercise"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "op": {
+                      "const": "add_exercise"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "name"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "apply": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sk",
+        "operations"
+      ],
+      "additionalProperties": true
+    },
+    "result_schema": {
+      "type": "object",
+      "required": [
+        "sk",
+        "applied",
+        "preview_hash",
+        "changes",
+        "unmatched"
+      ],
+      "properties": {
+        "sk": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "boolean"
+        },
+        "preview_hash": {
+          "type": "string"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "unmatched": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "template_create_from_import",
+    "domain": "templates",
+    "description": "Create a template for a claimed import.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {"type": "string", "minLength": 1},
+        "import_id": {"type": "string", "minLength": 1},
+        "claim_id": {"type": "string", "minLength": 1},
+        "template": {"type": "object"},
+        "author": {"type": "string"}
+      },
+      "required": ["pk", "import_id", "claim_id", "template"],
+      "additionalProperties": false
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {"status": {"const": "created"}, "sk": {"type": "string"}},
+      "required": ["status", "sk"],
+      "additionalProperties": false
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  }
+]

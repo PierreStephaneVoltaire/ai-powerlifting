@@ -160,7 +160,7 @@ export async function applyTemplate(req: Request, res: Response) {
 
 export async function confirmApplyTemplate(req: Request, res: Response) {
   const sk = normalizeTemplateSk(req.params.sk)
-  const { backfilled_maxes, start_date, week_start_day, target, block_id, block_name } = req.body
+  const { backfilled_maxes, start_date, week_start_day, target, block_id, block_name, operation_id } = req.body
   try {
     const result = await callOperation('template_apply_confirm', { sk,
       backfilled_maxes,
@@ -169,6 +169,7 @@ export async function confirmApplyTemplate(req: Request, res: Response) {
       target,
       block_id,
       block_name,
+      operation_id,
       ...templateActor(req),
       pk: req.mapped_pk,
     })

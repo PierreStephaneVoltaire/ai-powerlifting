@@ -41,6 +41,12 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 	if !ok {
 		return nil, apperr.UnknownOperation()
 	}
+	if name == "template_apply_sessions" && auth.ServiceAccount(caller.Source) != "pl-templates" {
+		return nil, apperr.Forbidden("Operation is restricted to the templates workload")
+	}
+	if name == "program_apply_session_import" && auth.ServiceAccount(caller.Source) != "pl-imports" {
+		return nil, apperr.Forbidden("Operation is restricted to the imports workload")
+	}
 	for key := range arguments {
 		if slices.Contains(reserved, key) {
 			return nil, apperr.Forbidden("Reserved authorization fields cannot be supplied")
@@ -50,7 +56,7 @@ func (s *Service) Call(ctx context.Context, name string, arguments map[string]an
 	if err != nil {
 		return nil, err
 	}
-	if operation.InternalOnly && !caller.IsBackend() {
+	if operation.InternalOnly && !caller.IsBackend() && !(name == "template_apply_sessions" && auth.ServiceAccount(caller.Source) == "pl-templates") && !(name == "program_apply_session_import" && auth.ServiceAccount(caller.Source) == "pl-imports") {
 		return nil, apperr.Forbidden("Operation is internal to the gateway")
 	}
 	scoped, err := auth.Scope(operation, arguments, caller, access)

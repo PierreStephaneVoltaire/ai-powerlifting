@@ -162,7 +162,7 @@ type Sessions struct {
 
 func (s Sessions) List(ctx context.Context, athlete, programSK string, phases []any, window SessionWindow) ([]any, error) {
 	prefix := sessionPrefix + programSK + "#"
-	query := Query{Table: s.Tables.Sessions, PK: athlete}
+	query := Query{Table: s.Tables.Sessions, PK: athlete, Consistent: true}
 	if window.Start != "" || window.End != "" {
 		upper := window.End
 		if upper == "" {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Group, Modal, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core'
 import { useNavigate } from 'react-router-dom'
 import type { BlockTransitionInput, TemplateListEntry, WeekStartDay } from '@powerlifting/types'
@@ -25,6 +25,7 @@ export default function BlockTransitionPanel() {
   const [template, setTemplate] = useState('designer')
   const [templates, setTemplates] = useState<TemplateListEntry[]>([])
   const [renameId, setRenameId] = useState('')
+  const operationId = useRef('')
   useEffect(() => {
     if (action && permissions.includes('templates:read')) void fetchTemplates().then(setTemplates).catch(() => setError('Templates could not be loaded. Retry when connected.'))
   }, [action, permissions])
@@ -36,6 +37,7 @@ export default function BlockTransitionPanel() {
   const unfinished = program.sessions.filter(session => (session.block || 'current') === 'current' && !session.completed && session.status !== 'skipped').length
 
   function open(nextAction: BlockTransitionInput['action']) {
+    operationId.current = globalThis.crypto.randomUUID()
     setAction(nextAction)
     setWeekStart(weekStartForBlock(program))
     setCurrentName(blocks.find(block => block.id === sourceId)?.name || program!.meta.program_name || '')
@@ -57,7 +59,7 @@ export default function BlockTransitionPanel() {
     setError('')
     try {
       if (starting && template !== 'designer') {
-        await confirmApplyTemplate(template, { target: 'new_block', block_name: name.trim(), start_date: startDate, week_start_day: weekStart, backfilled_maxes: maxes })
+        await confirmApplyTemplate(template, { target: 'new_block', block_name: name.trim(), start_date: startDate, week_start_day: weekStart, backfilled_maxes: maxes, operation_id: operationId.current })
       } else {
         await transitionBlock(payload)
       }

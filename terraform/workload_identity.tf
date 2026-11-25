@@ -48,7 +48,7 @@ locals {
   workload_identity_dynamo_actions = {
     "pl-analytics"     = ["GetItem", "Query"]
     "pl-profile"       = ["GetItem", "PutItem", "UpdateItem", "DeleteItem", "Query", "Scan", "ConditionCheckItem"]
-    "pl-program"       = ["GetItem", "PutItem", "Query", "BatchWriteItem"]
+    "pl-program"       = ["GetItem", "PutItem", "UpdateItem", "Query", "BatchWriteItem", "ConditionCheckItem"]
     "pl-sessions"      = ["GetItem", "PutItem", "DeleteItem", "Query", "BatchWriteItem"]
     "pl-competition"   = ["GetItem", "UpdateItem", "Query"]
     "pl-glossary"      = ["GetItem", "PutItem", "UpdateItem", "Query"]
@@ -58,8 +58,8 @@ locals {
     "pl-weight-log"    = ["GetItem", "PutItem"]
     "pl-export"        = ["GetItem", "PutItem", "Query", "Scan"]
     "pl-imports"       = ["GetItem", "PutItem", "UpdateItem", "Query", "Scan"]
-    "pl-lift-profiles" = ["GetItem", "PutItem", "Query", "Scan"]
-    "pl-templates"     = ["GetItem", "PutItem", "UpdateItem", "DeleteItem", "Query", "Scan"]
+    "pl-lift-profiles" = ["GetItem", "PutItem", "UpdateItem", "Query", "Scan", "ConditionCheckItem"]
+    "pl-templates"     = ["GetItem", "PutItem", "UpdateItem", "DeleteItem", "Query", "Scan", "ConditionCheckItem"]
     "pl-videos"        = ["GetItem", "PutItem", "UpdateItem", "Query", "DeleteItem", "BatchWriteItem"]
     "pl-coach-discord" = ["GetItem", "PutItem", "UpdateItem", "Query"]
   }
@@ -202,7 +202,7 @@ resource "aws_iam_role_policy" "workload_identity" {
         Action   = [for action in lookup(local.workload_identity_dynamo_actions, each.key, []) : "dynamodb:${action}"]
         Resource = flatten([for table in lookup(local.workload_identity_tables, each.key, []) : ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/${table}", "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/${table}/index/*"]])
       }] : [],
-      each.key == "pl-templates" ? [{
+      contains(["pl-templates", "pl-imports"], each.key) ? [{
         Effect   = "Allow"
         Action   = ["dynamodb:Query"]
         Resource = ["arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:table/if-sessions"]
