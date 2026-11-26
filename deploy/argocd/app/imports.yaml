@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pl-imports
+  namespace: powerlifting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pl-imports
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: pl-imports
+        istio.io/dataplane-mode: ambient
+        nolift.io/aws-workload: 'true'
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: PL_DOMAIN
+          value: imports
+        - name: PORT
+          value: '8000'
+        - name: IF_API_URL
+          value: http://pl-coach.powerlifting.svc.cluster.local:8000
+        - name: IF_SUPPLEMENTS_TABLE_NAME
+          value: if-supplements
+        - name: PL_JOB_TOKEN_PUBLIC_KEY
+          value: nolift:private:job_token_public_key
+        - name: PL_SERVICE_URL_TEMPLATE
+          value: http://pl-{domain}.powerlifting.svc.cluster.local:8000
+        - name: PROMPT_CACHE_MCP_URL
+          value: http://pl-prompt-cache-mcp.powerlifting.svc.cluster.local:8000/mcp
+        - name: PROMPT_CACHE_QDRANT_URL
+          value: http://pl-prompt-cache.powerlifting.svc.cluster.local:6333
+        - name: PROMPT_CACHE_URL
+          value: http://pl-prompt-cache-api.powerlifting.svc.cluster.local:8000
+        - name: VALKEY_URL
+          value: redis://pl-valkey.powerlifting.svc.cluster.local:6379
+        - name: AWS_DEFAULT_REGION
+        - name: AWS_EC2_METADATA_DISABLED
+        - name: AWS_REGION
+        - name: AWS_ROLE_ARN
+        - name: AWS_STS_REGIONAL_ENDPOINTS
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+        envFrom:
+        - configMapRef:
+            name: powerlifting-app-config
+            optional: false
+        image: if-powerlifting-imports
+        imagePullPolicy: IfNotPresent
+        name: imports
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 25m
+            memory: 64Mi
+        volumeMounts:
+        - mountPath: /secrets/aws
+          mountPropagation: None
+          name: aws
+          readOnly: true
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: ecr-registry
+      securityContext: {}
+      serviceAccountName: pl-imports
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: aws
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              audience: sts.amazonaws.com
+              expirationSeconds: 3600
+              path: web-identity-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pl-imports
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: pl-imports
+  type: ClusterIP

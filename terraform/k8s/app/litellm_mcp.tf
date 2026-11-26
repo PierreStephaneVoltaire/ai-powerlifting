@@ -7,6 +7,7 @@ variable "litellm_mcp_servers" {
 }
 
 locals {
+  litellm_mcp_domains = ["sessions", "program", "competition", "profile", "glossary", "templates", "goals", "performance", "lift-profiles", "weight-log", "federation", "calculations"]
   litellm_mcp_registry = merge(
     {
       for domain in local.litellm_mcp_domains : replace(domain, "-", "_") => {
@@ -93,17 +94,7 @@ resource "kubernetes_secret_v1" "litellm_virtual_key" {
   }
 }
 
-resource "kubernetes_service_account_v1" "litellm_keys" {
-  metadata {
-    name      = "pl-litellm-keys"
-    namespace = var.namespace
-  }
-  automount_service_account_token = false
-}
-
 resource "kubernetes_job_v1" "litellm_keys" {
-  depends_on = [kubernetes_deployment_v1.litellm, kubectl_manifest.service_callers, kubectl_manifest.strict_mtls]
-
   metadata {
     name      = "litellm-keys-${substr(local.litellm_virtual_key_registration, 0, 10)}"
     namespace = var.namespace
@@ -118,7 +109,7 @@ resource "kubernetes_job_v1" "litellm_keys" {
       }
 
       spec {
-        service_account_name            = kubernetes_service_account_v1.litellm_keys.metadata[0].name
+        service_account_name            = "pl-litellm-keys"
         automount_service_account_token = false
         enable_service_links            = false
         restart_policy                  = "OnFailure"

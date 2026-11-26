@@ -1,0 +1,1981 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ecr-token-refresher-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: ecr-token-refresher
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: ecr-token-refresher
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: litellm-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: litellm
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 5432
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: litellm-postgres
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: edge
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: litellm
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: litellm-keys-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: litellm-keys
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: litellm-keys
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: oauth2-proxy-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: oauth2-proxy
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: powerlifting-app-backend
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: edge
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: oauth2-proxy
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-analytics-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-analytics
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-analytics
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-analytics-ai-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-analytics-ai
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-analytics-ai
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-analytics-export-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-analytics-export
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-analytics-export
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-assistant-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-assistant
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 5432
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          cnpg.io/cluster: assistant-postgres
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-assistant
+  - ports:
+    - port: 6500
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: dapr-system
+      podSelector:
+        matchLabels:
+          app: dapr-operator
+  - ports:
+    - port: 50005
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: dapr-system
+      podSelector:
+        matchLabels:
+          app: dapr-placement-server
+  - ports:
+    - port: 50006
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: dapr-system
+      podSelector:
+        matchLabels:
+          app: dapr-scheduler-server
+  - ports:
+    - port: 50001
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: dapr-system
+      podSelector:
+        matchLabels:
+          app: dapr-sentry
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-assistant
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-assistant
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-calculations-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-calculations
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-calculations
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-competition-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-competition
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-competition
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-export-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-export
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-export
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-federation-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-federation
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-federation
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-glossary-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-glossary
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-glossary
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-goals-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-goals
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-goals
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-imports-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-imports
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-imports
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-lift-profiles-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-lift-profiles
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-lift-profiles
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-performance-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-performance
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-performance
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-profile-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-profile
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-profile
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-program-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-program
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-program
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-prompt-cache-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-prompt-cache
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-prompt-cache-mcp
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-prompt-cache
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-prompt-cache-api-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-prompt-cache-api
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-prompt-cache-mcp
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-prompt-cache-api
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-prompt-cache-mcp-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-prompt-cache-mcp
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-prompt-cache
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-coach
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-prompt-cache-api
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-prompt-cache-mcp
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-rankings-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-rankings
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-rankings
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-sessions-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-sessions
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-sessions
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-templates-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-templates
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-templates
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-valkey-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-valkey
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: powerlifting-app-backend
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: oauth2-proxy
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-analytics
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-analytics-ai
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-prompt-cache-api
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-rankings
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-coach
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-calculations
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-competition
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-export
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-federation
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-glossary
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-goals
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-imports
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-lift-profiles
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-performance
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-profile
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-program
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-sessions
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-templates
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-videos
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - podSelector:
+        matchLabels:
+          app: pl-weight-log
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-valkey
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-videos-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-videos
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-videos
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pl-weight-log-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: pl-weight-log
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: pl-weight-log
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: powerlifting-app-backend-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: powerlifting-app-backend
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: pl-valkey
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: oauth2-proxy
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: powerlifting-app-backend
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: powerlifting-app-frontend-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: powerlifting-app-frontend
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: edge
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: powerlifting-app-frontend
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: reference-litellm-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/isolation: reference-litellm
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          gateway.networking.k8s.io/gateway-name: nolift-waypoint
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      app: reference-litellm
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nolift-waypoint-isolation
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    nolift.io/waypoint-isolation: 'true'
+spec:
+  egress:
+  - ports:
+    - port: 15008
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          app: litellm
+    - podSelector:
+        matchLabels:
+          app: pl-analytics
+    - podSelector:
+        matchLabels:
+          app: pl-analytics-ai
+    - podSelector:
+        matchLabels:
+          app: pl-analytics-export
+    - podSelector:
+        matchLabels:
+          app: pl-assistant
+    - podSelector:
+        matchLabels:
+          app: pl-calculations
+    - podSelector:
+        matchLabels:
+          app: pl-competition
+    - podSelector:
+        matchLabels:
+          app: pl-export
+    - podSelector:
+        matchLabels:
+          app: pl-federation
+    - podSelector:
+        matchLabels:
+          app: pl-glossary
+    - podSelector:
+        matchLabels:
+          app: pl-goals
+    - podSelector:
+        matchLabels:
+          app: pl-imports
+    - podSelector:
+        matchLabels:
+          app: pl-lift-profiles
+    - podSelector:
+        matchLabels:
+          app: pl-performance
+    - podSelector:
+        matchLabels:
+          app: pl-profile
+    - podSelector:
+        matchLabels:
+          app: pl-program
+    - podSelector:
+        matchLabels:
+          app: pl-prompt-cache-api
+    - podSelector:
+        matchLabels:
+          app: pl-rankings
+    - podSelector:
+        matchLabels:
+          app: pl-sessions
+    - podSelector:
+        matchLabels:
+          app: pl-templates
+    - podSelector:
+        matchLabels:
+          app: pl-videos
+    - podSelector:
+        matchLabels:
+          app: pl-weight-log
+    - podSelector:
+        matchLabels:
+          app: pl-coach
+    - podSelector:
+        matchLabels:
+          app: pl-coach-discord
+    - podSelector:
+        matchLabels:
+          app: reference-litellm
+  - ports:
+    - port: 15012
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-system
+      podSelector:
+        matchLabels:
+          app: istiod
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  - ports:
+    - port: 443
+      protocol: TCP
+    to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 0.0.0.0/8
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 127.0.0.0/8
+        - 169.254.0.0/16
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 224.0.0.0/4
+        - 240.0.0.0/4
+  ingress:
+  - from: []
+    ports:
+    - port: 15008
+      protocol: TCP
+  - from:
+    - ipBlock:
+        cidr: 169.254.7.127/32
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: nolift-waypoint
+  policyTypes:
+  - Ingress
+  - Egress

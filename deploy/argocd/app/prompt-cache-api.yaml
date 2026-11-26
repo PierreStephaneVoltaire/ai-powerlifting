@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pl-prompt-cache-api
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pl-prompt-cache-api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: pl-prompt-cache-api
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: PORT
+          value: '8000'
+        - name: VALKEY_URL
+          value: redis://pl-valkey.powerlifting.svc.cluster.local:6379
+        - name: PROMPT_CACHE_MCP_URL
+          value: http://pl-prompt-cache-mcp.powerlifting.svc.cluster.local:8000/mcp
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: OPENAI_API_KEY
+              name: pl-prompt-cache-api
+              optional: false
+        image: if-powerlifting-prompt-cache-api
+        imagePullPolicy: IfNotPresent
+        name: prompt-cache-api
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 2
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 25m
+            memory: 32Mi
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: ecr-registry
+      securityContext: {}
+      serviceAccountName: pl-prompt-cache-api
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pl-prompt-cache-api
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: pl-prompt-cache-api
+  type: ClusterIP

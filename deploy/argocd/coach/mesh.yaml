@@ -1,0 +1,88 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-coach-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-coach-discord
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+        - cluster.local/ns/powerlifting/sa/pl-glossary
+        - cluster.local/ns/powerlifting/sa/pl-imports
+        - cluster.local/ns/powerlifting/sa/pl-lift-profiles
+        - cluster.local/ns/powerlifting/sa/pl-templates
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-coach
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-coach-discord-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-coach-discord
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-coach-discord-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-coach-discord
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-coach-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-coach

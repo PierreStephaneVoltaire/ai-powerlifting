@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pl-prompt-cache-mcp
+  namespace: powerlifting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pl-prompt-cache-mcp
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: pl-prompt-cache-mcp
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - command:
+        - uvx
+        - mcp-server-qdrant==0.8.1
+        - --transport
+        - streamable-http
+        env:
+        - name: QDRANT_URL
+          value: http://pl-prompt-cache.powerlifting.svc.cluster.local:6333
+        - name: QDRANT_SEARCH_LIMIT
+          value: '5'
+        - name: FASTMCP_SERVER_HOST
+          value: 0.0.0.0
+        - name: FASTMCP_SERVER_PORT
+          value: '8000'
+        - name: FASTMCP_LOG_LEVEL
+          value: WARNING
+        - name: UV_CACHE_DIR
+          value: /cache/uv
+        - name: FASTEMBED_CACHE_PATH
+          value: /cache/fastembed
+        image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+        imagePullPolicy: IfNotPresent
+        name: mcp
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 8000
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 768Mi
+          requests:
+            cpu: 25m
+            memory: 384Mi
+        volumeMounts:
+        - mountPath: /cache
+          mountPropagation: None
+          name: cache
+      enableServiceLinks: false
+      securityContext: {}
+      serviceAccountName: pl-prompt-cache-mcp
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pl-prompt-cache-mcp
+  namespace: powerlifting
+spec:
+  ports:
+  - port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: pl-prompt-cache-mcp
+  type: ClusterIP

@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reference-litellm
+  namespace: powerlifting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reference-litellm
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/config: nolift:private:reference_checksum
+      labels:
+        app: reference-litellm
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - exec litellm --config /etc/litellm/config.yaml --port 4000 >/dev/null 2>&1
+        command:
+        - /bin/sh
+        - -c
+        envFrom:
+        - secretRef:
+            name: reference-litellm-credentials
+            optional: false
+        image: nolift:private:litellm_image
+        imagePullPolicy: IfNotPresent
+        name: litellm
+        ports:
+        - containerPort: 4000
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 4000
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 512Mi
+        volumeMounts:
+        - mountPath: /etc/litellm
+          mountPropagation: None
+          name: config
+          readOnly: true
+      enableServiceLinks: true
+      securityContext: {}
+      serviceAccountName: reference-litellm
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: reference-litellm-config
+          optional: false
+        name: config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reference-litellm
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  ports:
+  - name: http
+    port: 4000
+    protocol: TCP
+    targetPort: 4000
+  selector:
+    app: reference-litellm
+  type: ClusterIP
+---
+apiVersion: v1
+automountServiceAccountToken: true
+kind: ServiceAccount
+metadata:
+  name: reference-litellm
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'

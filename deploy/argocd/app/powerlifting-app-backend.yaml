@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: powerlifting-app-backend
+  namespace: powerlifting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: powerlifting-app-backend
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: powerlifting-app-backend
+        istio.io/dataplane-mode: ambient
+        nolift.io/aws-workload: 'true'
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: IF_API_URL
+          value: http://pl-coach.powerlifting.svc.cluster.local:8000
+        - name: MEDIA_SIGNING_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              key: MEDIA_SIGNING_PRIVATE_KEY
+              name: powerlifting-app-backend-secrets
+              optional: false
+        - name: AWS_DEFAULT_REGION
+        - name: AWS_EC2_METADATA_DISABLED
+        - name: AWS_REGION
+        - name: AWS_ROLE_ARN
+        - name: AWS_STS_REGIONAL_ENDPOINTS
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+        envFrom:
+        - configMapRef:
+            name: powerlifting-app-config
+            optional: false
+        image: if-powerlifting-app-backend
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 3005
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: backend
+        ports:
+        - containerPort: 3005
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 3005
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        volumeMounts:
+        - mountPath: /secrets/aws
+          mountPropagation: None
+          name: aws
+          readOnly: true
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: ecr-registry
+      securityContext: {}
+      serviceAccountName: powerlifting-app-backend
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: aws
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              audience: sts.amazonaws.com
+              expirationSeconds: 3600
+              path: web-identity-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: powerlifting-app-backend
+  namespace: powerlifting
+spec:
+  ports:
+  - name: http
+    port: 3005
+    protocol: TCP
+    targetPort: 3005
+  selector:
+    app: powerlifting-app-backend
+  type: ClusterIP

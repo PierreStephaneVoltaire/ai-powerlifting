@@ -1,0 +1,227 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pl-assistant
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pl-assistant
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        dapr.io/app-id: pl-assistant
+        dapr.io/app-port: '8000'
+        dapr.io/app-protocol: http
+        dapr.io/enabled: 'true'
+        dapr.io/sidecar-cpu-limit: 500m
+        dapr.io/sidecar-cpu-request: 50m
+        dapr.io/sidecar-memory-limit: 256Mi
+        dapr.io/sidecar-memory-request: 128Mi
+      labels:
+        app: pl-assistant
+        istio.io/dataplane-mode: ambient
+        nolift.io/aws-workload: 'true'
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - env:
+        - name: HTTP_ADDR
+          value: :8000
+        - name: GOMEMLIMIT
+          value: 1792MiB
+        - name: PL_REFERENCE_LITELLM_URL
+          value: http://reference-litellm.powerlifting.svc.cluster.local:4000
+        - name: PL_REFERENCE_LITELLM_KEY
+          valueFrom:
+            secretKeyRef:
+              key: LITELLM_MASTER_KEY
+              name: reference-litellm-credentials
+              optional: false
+        - name: PL_REFERENCE_BUCKET
+          value: nolift:private:reference_bucket
+        - name: AWS_DEFAULT_REGION
+        - name: AWS_EC2_METADATA_DISABLED
+        - name: AWS_REGION
+        - name: AWS_ROLE_ARN
+        - name: AWS_STS_REGIONAL_ENDPOINTS
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+        - name: PL_DELEGATION_BUDGET
+          value: '6'
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              key: dbname
+              name: assistant-postgres-connection
+              optional: false
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              key: host
+              name: assistant-postgres-connection
+              optional: false
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: assistant-postgres-connection
+              optional: false
+        - name: PGPORT
+          valueFrom:
+            secretKeyRef:
+              key: port
+              name: assistant-postgres-connection
+              optional: false
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              key: user
+              name: assistant-postgres-connection
+              optional: false
+        - name: PGSSLMODE
+          value: prefer
+        - name: LITELLM_BASE_URL
+          value: http://litellm.powerlifting.svc.cluster.local:4000
+        - name: LITELLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: LITELLM_API_KEY
+              name: litellm-virtual-key-assistant
+              optional: false
+        - name: LITELLM_MCP_ALIASES
+          value: nolift:private:mcp_aliases
+        - name: PL_PROFILE_URL
+          value: http://pl-profile.powerlifting.svc.cluster.local:8000
+        - name: PL_JOB_TOKEN_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              key: PL_JOB_TOKEN_PRIVATE_KEY
+              name: assistant-job-token
+              optional: false
+        - name: PL_MODEL_COORDINATOR
+          value: pl-coordinator
+        - name: PL_MODEL_EMBED
+          value: pl-embed
+        - name: PL_MODEL_RESPONDER_FAST
+          value: pl-responder-fast
+        - name: PL_MODEL_SECURITY
+          value: pl-light
+        - name: PL_MODEL_STRONG
+          value: pl-strong
+        - name: PL_MODEL_WEB
+          value: pl-web
+        image: if-powerlifting-assistant
+        imagePullPolicy: IfNotPresent
+        name: assistant
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 2Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        volumeMounts:
+        - mountPath: /secrets/aws
+          mountPropagation: None
+          name: aws
+          readOnly: true
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: ecr-registry
+      securityContext: {}
+      serviceAccountName: pl-assistant
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: aws
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              audience: sts.amazonaws.com
+              expirationSeconds: 3600
+              path: web-identity-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pl-assistant
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  ports:
+  - name: http
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: pl-assistant
+  type: ClusterIP
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  name: pl-assistant
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+---
+apiVersion: dapr.io/v1alpha1
+auth:
+  secretStore: kubernetes
+kind: Component
+metadata:
+  name: assistant-workflow-state
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  metadata:
+  - name: actorStateStore
+    value: 'true'
+  - name: host
+    secretKeyRef:
+      key: host
+      name: assistant-postgres-connection
+  - name: port
+    secretKeyRef:
+      key: port
+      name: assistant-postgres-connection
+  - name: database
+    secretKeyRef:
+      key: dbname
+      name: assistant-postgres-connection
+  - name: user
+    secretKeyRef:
+      key: user
+      name: assistant-postgres-connection
+  - name: password
+    secretKeyRef:
+      key: password
+      name: assistant-postgres-connection
+  type: state.postgresql
+  version: v2

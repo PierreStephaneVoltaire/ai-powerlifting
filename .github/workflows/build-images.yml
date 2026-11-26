@@ -11,6 +11,8 @@ on:
       - "src/lambda/**"
       - "docker/**"
       - "terraform/**"
+      - "deploy/argocd/**"
+      - "scripts/*argocd*"
       - "src/package.json"
       - "src/package-lock.json"
       - "src/tsconfig.json"
@@ -26,6 +28,10 @@ on:
 
   workflow_dispatch:
     inputs:
+      argocd_rollback_revision:
+        description: Restore Terraform ownership before auto-sync using this pre-migration commit SHA
+        required: false
+        type: string
       backend_only:
         description: Build only backend
         required: false
@@ -102,10 +108,18 @@ jobs:
           filters: .github/image-filters.yml
 
       - id: result
+        env:
+          ROLLBACK_REVISION: ${{ inputs.argocd_rollback_revision }}
         shell: bash
         run: |
           {
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "$ROLLBACK_REVISION" ]; then
+              echo "frontend=false"
+              echo "backend=false"
+              echo "services=false"
+              echo "terraform=false"
+              echo "kubernetes=true"
+            elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "frontend=true"
               if [ "${{ inputs.frontend_only }}" = "true" ] && [ "${{ inputs.backend_only }}" != "true" ] && [ "${{ inputs.apply_terraform }}" != "true" ]; then
                 echo "backend=false"
@@ -279,9 +293,6 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: ${{ needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
-    outputs:
-      image_uri: ${{ steps.image.outputs.image_uri }}
-      image_account: ${{ steps.image.outputs.image_account }}
     steps:
       - uses: actions/checkout@v4
 
@@ -327,117 +338,6 @@ jobs:
             -var "api_url=/api" \
             -var "cloudfront_media_base_url=${{ steps.tfout.outputs.cloudfront_media_base_url }}" \
             powerlifting-frontend.pkr.hcl
-
-      - name: Resolve immutable frontend image URI
-        id: image
-        env:
-          IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
-        run: |
-          set -euo pipefail
-          repository="${ECR_REPO_PREFIX}-powerlifting-app-frontend"
-          digest="$(aws ecr describe-images --repository-name "$repository" --image-ids "imageTag=$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text)"
-          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-            echo "Frontend image tag $IMAGE_TAG has no valid sha256 digest in ECR" >&2
-            exit 1
-          fi
-          account="$(aws sts get-caller-identity --query Account --output text)"
-          if [[ ! "$account" =~ ^[0-9]{12}$ ]]; then
-            echo "AWS returned an invalid account ID" >&2
-            exit 1
-          fi
-          image_uri="$account.dkr.ecr.$AWS_REGION.amazonaws.com/$repository@$digest"
-          echo "image_uri=$image_uri" >> "$GITHUB_OUTPUT"
-          echo "image_account=$account" >> "$GITHUB_OUTPUT"
-
-  deploy-frontend-only:
-    needs: [changes, build-frontend]
-    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
-    runs-on: powerlifting-k8s
-    if: >-
-      ${{ always()
-      && needs.changes.outputs.deploy == 'true'
-      && needs.build-frontend.result == 'success'
-      && github.triggering_actor == github.repository_owner
-      && github.actor == github.repository_owner
-      && needs.changes.outputs.backend == 'false'
-      && needs.changes.outputs.services == 'false'
-      && needs.changes.outputs.kubernetes == 'false'
-      && needs.changes.outputs.terraform == 'false' }}
-    concurrency:
-      group: kubernetes-apply
-      cancel-in-progress: false
-    env:
-      KUBE_LOAD_CONFIG_FILE: "false"
-      IMAGE_URI: ${{ needs.build-frontend.outputs.image_uri }}
-      IMAGE_ACCOUNT: ${{ needs.build-frontend.outputs.image_account }}
-    steps:
-      - uses: azure/setup-kubectl@v4
-        with:
-          version: v1.34.5
-
-      - name: Configure kubectl for the in-cluster runner
-        run: |
-          cat > "$RUNNER_TEMP/kubeconfig" <<'EOF'
-          apiVersion: v1
-          kind: Config
-          clusters:
-          - name: in-cluster
-            cluster:
-              certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-              server: https://kubernetes.default.svc
-          contexts:
-          - name: runner
-            context:
-              cluster: in-cluster
-              user: runner
-          current-context: runner
-          users:
-          - name: runner
-            user:
-              tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-          EOF
-          chmod 600 "$RUNNER_TEMP/kubeconfig"
-          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
-
-      - name: Deploy frontend image by immutable digest
-        run: |
-          set -euo pipefail
-          repository="${ECR_REPO_PREFIX}-powerlifting-app-frontend"
-          expected_prefix="$IMAGE_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$repository@sha256:"
-          if [[ ! "$IMAGE_ACCOUNT" =~ ^[0-9]{12}$ || "$IMAGE_URI" != "$expected_prefix"* || ! "$IMAGE_URI" =~ ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/[^@]+@sha256:[a-f0-9]{64}$ ]]; then
-            echo "Frontend image URI does not match the expected ECR account, region, repository, and sha256 digest" >&2
-            exit 1
-          fi
-          image="$IMAGE_URI"
-          allowed="$(kubectl auth can-i patch deployment/powerlifting-app-frontend -n powerlifting)"
-          if [ "$allowed" != "yes" ]; then
-            echo "The in-cluster runner cannot patch deployment/powerlifting-app-frontend in namespace powerlifting" >&2
-            exit 1
-          fi
-          previous="$(kubectl -n powerlifting get deployment powerlifting-app-frontend -o jsonpath='{.spec.template.spec.containers[?(@.name=="frontend")].image}')"
-          if [ -z "$previous" ]; then
-            echo "Could not read the current frontend container image for rollback" >&2
-            exit 1
-          fi
-          updated=0
-          rollback() {
-            status=$?
-            trap - EXIT
-            if [ "$status" -ne 0 ] && [ "$updated" -eq 1 ]; then
-              kubectl -n powerlifting set image deployment/powerlifting-app-frontend frontend="$previous" || true
-              kubectl -n powerlifting rollout status deployment/powerlifting-app-frontend --timeout=600s || true
-            fi
-            exit "$status"
-          }
-          trap rollback EXIT
-          updated=1
-          kubectl -n powerlifting set image deployment/powerlifting-app-frontend frontend="$image"
-          kubectl -n powerlifting rollout status deployment/powerlifting-app-frontend --timeout=600s
-          actual="$(kubectl -n powerlifting get deployment powerlifting-app-frontend -o jsonpath='{.spec.template.spec.containers[?(@.name=="frontend")].image}')"
-          if [ "$actual" != "$image" ]; then
-            echo "Frontend deployment image mismatch: expected $image, got $actual" >&2
-            exit 1
-          fi
 
   terraform-validate:
     needs: changes
@@ -516,6 +416,7 @@ jobs:
       TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
       TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
+      TF_VAR_argocd_domain: ${{ vars.ARGOCD_DOMAIN }}
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
@@ -554,7 +455,7 @@ jobs:
       workload_issuer: ${{ steps.apply.outputs.workload_issuer }}
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
+    if: ${{ github.ref_name == 'master' && needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -564,6 +465,7 @@ jobs:
       TF_VAR_cloudflare_zone_plan: ${{ vars.CLOUDFLARE_ZONE_PLAN }}
       TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
       TF_VAR_llm_domain: ${{ vars.LLM_DOMAIN }}
+      TF_VAR_argocd_domain: ${{ vars.ARGOCD_DOMAIN }}
       TF_VAR_litellm_provider_keys: ${{ secrets.LITELLM_PROVIDER_KEYS }}
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
@@ -602,34 +504,24 @@ jobs:
           printf 'workload_issuer=%s\n' "$(terraform output -raw workload_identity_issuer)" >> "$GITHUB_OUTPUT"
 
   kubernetes-apply:
-    needs: [changes, build-backend, build-services, build-coach, build-frontend, terraform-apply]
-    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
+    needs: [changes, terraform-apply]
+    environment: main
     runs-on: powerlifting-k8s
     if: >-
-      ${{ always()
-      && needs.changes.outputs.deploy == 'true'
-      && github.triggering_actor == github.repository_owner
-      && github.actor == github.repository_owner
-      && !contains(needs.*.result, 'failure')
-      && !contains(needs.*.result, 'cancelled')
-      && !(needs.build-frontend.result == 'success'
-        && needs.changes.outputs.backend == 'false'
-        && needs.changes.outputs.services == 'false'
-        && needs.changes.outputs.kubernetes == 'false'
-        && needs.changes.outputs.terraform == 'false')
-      && (needs.changes.outputs.kubernetes == 'true'
-        || needs.build-backend.result == 'success'
-        || needs.build-services.result == 'success'
-        || needs.build-coach.result == 'success'
-        || needs.build-frontend.result == 'success') }}
+      ${{ always() && github.ref_name == 'master'
+        && needs.changes.outputs.kubernetes == 'true' && (needs.changes.outputs.deploy == 'true' || inputs.argocd_rollback_revision != '')
+        && github.triggering_actor == github.repository_owner && github.actor == github.repository_owner
+        && (needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     concurrency:
       group: kubernetes-apply
       cancel-in-progress: false
     env:
       KUBE_LOAD_CONFIG_FILE: "false"
-      IMAGE_TAG: ${{ needs.changes.outputs.image_tag }}
+      TF_VAR_argocd_domain: ${{ vars.ARGOCD_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.argocd_rollback_revision && '0' || '1' }}
 
       - run: command -v unzip || (sudo apt-get update && sudo apt-get install -y unzip)
 
@@ -651,9 +543,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - run: python -m pip install boto3==1.42.83
+      - run: python -m pip install boto3==1.42.83 PyYAML==6.0.3
 
       - name: Preserve existing identity pointers
+        if: ${{ !inputs.argocd_rollback_revision }}
         run: |
           python scripts/migrate_identity_pointers.py
           python scripts/migrate_identity_pointers.py --apply
@@ -664,8 +557,7 @@ jobs:
           umask 077
           printf '%s' "$K8S_TFVARS" > "$RUNNER_TEMP/k8s.tfvars"
 
-      - if: ${{ needs.build-coach.result == 'success' || needs.changes.outputs.kubernetes == 'true' }}
-        env:
+      - env:
           COACH_TFVARS: ${{ secrets.COACH_TFVARS }}
         run: |
           umask 077
@@ -706,7 +598,7 @@ jobs:
           bash scripts/k3s-workload-identity-plan.sh "$WORKLOAD_IDENTITY_ISSUER" "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" > "$manifest"
           if [ -s "$manifest" ]; then
             kubectl apply -f "$manifest"
-            for attempt in {1..90}; do
+            for _ in {1..90}; do
               if kubectl --request-timeout=5s get --raw /.well-known/openid-configuration 2>/dev/null |
                 jq -e --arg issuer "$WORKLOAD_IDENTITY_ISSUER" '.issuer == $issuer and .jwks_uri == ($issuer + "/openid/v1/jwks")' >/dev/null; then
                 break
@@ -720,45 +612,40 @@ jobs:
             kubectl wait --for=condition=Ready --timeout=120s node -l node-role.kubernetes.io/control-plane
           fi
 
-      - env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          APPLY_COACH: ${{ needs.build-coach.result == 'success' || needs.changes.outputs.kubernetes == 'true' }}
-        working-directory: terraform/k8s
+      - name: Install pinned Argo CD CLI
         run: |
           set -euo pipefail
-          for stack in core perms network mesh app; do
-            terraform -chdir="$stack" init -input=false \
-              -backend-config="bucket=$TF_STATE_BUCKET" \
-              -backend-config="key=powerlifting-app/k8s/$stack.tfstate" \
-              -backend-config="region=$AWS_REGION" \
-              -backend-config="encrypt=true" \
-              -backend-config="use_lockfile=true"
-            image_args=()
-            if [ "$stack" = "app" ]; then
-              image_args=(-var="image_tag=$IMAGE_TAG")
-            fi
-            terraform -chdir="$stack" apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/k8s.tfvars" "${image_args[@]}"
-          done
+          mkdir -p "$RUNNER_TEMP/argocd-bin"
+          cd "$RUNNER_TEMP/argocd-bin"
+          curl --fail --silent --show-error --location --retry 3 -o argocd https://github.com/argoproj/argo-cd/releases/download/v3.6.3/argocd-linux-amd64
+          echo "3750cd7ed2a2ef05c640344b86f29aa99c9783e847c8f326c81e3900ad39412b  argocd" | sha256sum -c -
+          chmod 755 argocd
+          echo "$PWD" >> "$GITHUB_PATH"
+
+      - name: Reconcile NoLift applications
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          ROLLBACK_REVISION: ${{ inputs.argocd_rollback_revision }}
+        run: bash scripts/deploy_argocd.sh
+
+      - name: Verify Argo CD login through the gateway
+        if: ${{ !inputs.argocd_rollback_revision }}
+        env:
+          ARGOCD_DOMAIN: ${{ vars.ARGOCD_DOMAIN }}
+          AUTH_DOMAIN: ${{ vars.AUTH_DOMAIN }}
+        run: |
+          set -euo pipefail
+          kubectl -n argocd get configmap argocd-cm -o json | jq -e '.data["admin.enabled"] == "false"' > /dev/null
+          issuer="https://$AUTH_DOMAIN/application/o/argocd/"
+          authorize=$(curl -fsS --retry 4 --retry-all-errors "${issuer}.well-known/openid-configuration" | jq -er --arg issuer "$issuer" 'select(.issuer == $issuer).authorization_endpoint')
+          redirect=$(curl -fsS --retry 4 --retry-all-errors -o /dev/null -w '%{redirect_url}' "https://$ARGOCD_DOMAIN/auth/login")
+          [[ $redirect == "$authorize?"* && $redirect == *"client_id=nolift-argocd"* ]]
+
+      - name: Verify Istio
+        run: |
           kubectl -n istio-system rollout status daemonset/istio-cni-node --timeout=600s
           kubectl -n istio-system rollout status daemonset/ztunnel --timeout=600s
           kubectl -n istio-system rollout status deployment/istiod --timeout=600s
-          namespace="$(terraform -chdir=core output -raw namespace)"
-          for deployment in $(kubectl -n "$namespace" get deployments -o jsonpath='{.items[*].metadata.name}'); do
-            rollout_timeout=900s
-            if [ "$deployment" = "pl-rankings" ]; then rollout_timeout=1200s; fi
-            kubectl -n "$namespace" rollout status "deployment/$deployment" --timeout="$rollout_timeout"
-          done
-          if [ "$APPLY_COACH" = "true" ]; then
-            terraform -chdir=../coach init -input=false \
-              -backend-config="bucket=$TF_STATE_BUCKET" \
-              -backend-config="key=powerlifting-app/coach/terraform.tfstate" \
-              -backend-config="region=$AWS_REGION" \
-              -backend-config="encrypt=true" \
-              -backend-config="use_lockfile=true"
-            terraform -chdir=../coach apply -input=false -no-color -auto-approve -var-file="$RUNNER_TEMP/coach.tfvars" -var="image_tag=$IMAGE_TAG"
-            kubectl -n "$namespace" rollout status deployment/pl-coach --timeout=600s
-            kubectl -n "$namespace" rollout status deployment/pl-coach-discord --timeout=600s
-          fi
 
       - name: Verify projected AWS trust
         run: |
@@ -768,3 +655,4 @@ jobs:
           python3 scripts/verify_workload_identity.py \
             --namespace "$namespace" --region "$AWS_REGION" \
             --service-account pl-rankings --role-arn "$role"
+

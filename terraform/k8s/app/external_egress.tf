@@ -70,34 +70,3 @@ resource "kubectl_manifest" "external_callers" {
   })
   depends_on = [kubectl_manifest.external_service]
 }
-
-resource "kubectl_manifest" "waypoint_network_policy" {
-  count = var.waypoint_network_policy_enabled ? 1 : 0
-
-  lifecycle {
-    precondition {
-      condition     = var.external_service_entries_enabled
-      error_message = "Stage and verify external ServiceEntries before isolating the waypoint."
-    }
-  }
-
-  yaml_body = yamlencode({
-    apiVersion = "networking.k8s.io/v1"
-    kind       = "NetworkPolicy"
-    metadata   = { name = "nolift-waypoint-isolation", namespace = var.namespace }
-    spec = {
-      podSelector = { matchLabels = { "gateway.networking.k8s.io/gateway-name" = "nolift-waypoint" } }
-      policyTypes = ["Ingress", "Egress"]
-      ingress = [
-        { from = [for caller in local.network_waypoint_callers : { podSelector = { matchLabels = { app = lookup(local.network_pod_names, caller, caller) } } }], ports = [{ protocol = "TCP", port = 15008 }] },
-        { from = [{ ipBlock = { cidr = "169.254.7.127/32" } }] }
-      ]
-      egress = [
-        { to = [for target in concat(keys(local.mesh_callers), ["pl-coach", "pl-coach-discord", "reference-litellm"]) : { podSelector = { matchLabels = { app = target } } }], ports = [{ protocol = "TCP", port = 15008 }] },
-        { to = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "istio-system" } }, podSelector = { matchLabels = { app = "istiod" } } }], ports = [{ protocol = "TCP", port = 15012 }] },
-        { to = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "kube-system" } }, podSelector = { matchLabels = { "k8s-app" = "kube-dns" } } }], ports = [{ protocol = "UDP", port = 53 }, { protocol = "TCP", port = 53 }] },
-        { to = [{ ipBlock = { cidr = "0.0.0.0/0", except = ["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"] } }], ports = [{ protocol = "TCP", port = 443 }] }
-      ]
-    }
-  })
-}

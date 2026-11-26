@@ -1,0 +1,202 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: authentik
+  namespace: powerlifting
+  annotations:
+    nolift.io/hostname: auth
+spec:
+  hostnames:
+  - auth.invalid
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: edge
+  rules:
+  - backendRefs:
+    - group: ''
+      kind: Service
+      name: authentik-server
+      port: 80
+      weight: 1
+    filters:
+    - requestHeaderModifier:
+        set:
+        - name: X-Forwarded-Proto
+          value: https
+      type: RequestHeaderModifier
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: litellm
+  namespace: powerlifting
+  annotations:
+    nolift.io/hostname: llm
+spec:
+  hostnames:
+  - llm.invalid
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: edge
+  rules:
+  - backendRefs:
+    - group: ''
+      kind: Service
+      name: litellm
+      port: 4000
+      weight: 1
+    filters:
+    - extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: llm-headers
+      type: ExtensionRef
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: powerlifting-app
+  namespace: powerlifting
+  annotations:
+    nolift.io/hostname: app
+spec:
+  hostnames:
+  - app.invalid
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: edge
+  rules:
+  - backendRefs:
+    - group: ''
+      kind: Service
+      name: oauth2-proxy
+      port: 4180
+      weight: 1
+    filters:
+    - extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: edge-headers
+      type: ExtensionRef
+    matches:
+    - path:
+        type: PathPrefix
+        value: /oauth2
+  - backendRefs:
+    - group: ''
+      kind: Service
+      name: oauth2-proxy
+      port: 4180
+      weight: 1
+    filters:
+    - extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: edge-headers
+      type: ExtensionRef
+    matches:
+    - path:
+        type: PathPrefix
+        value: /api
+  - backendRefs:
+    - group: ''
+      kind: Service
+      name: powerlifting-app-frontend
+      port: 3001
+      weight: 1
+    filters:
+    - extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: edge-headers
+      type: ExtensionRef
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: edge-headers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  snippets:
+  - context: http.server.location
+    value: |
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header Authorization "";
+      proxy_set_header X-PL-Source-Principal "";
+      proxy_set_header X-Internal-Api-Token "";
+      proxy_read_timeout 300s;
+      client_max_body_size 500M;
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: llm-headers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  snippets:
+  - context: http.server.location
+    value: |
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-PL-Source-Principal "";
+      proxy_set_header X-Internal-Api-Token "";
+      proxy_read_timeout 900s;
+      proxy_buffering off;
+      proxy_buffer_size 64k;
+      proxy_buffers 8 64k;
+      proxy_busy_buffers_size 128k;
+      client_max_body_size 50M;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd
+  namespace: powerlifting
+  annotations:
+    nolift.io/hostname: argocd
+spec:
+  hostnames:
+  - argocd.invalid
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: edge
+  rules:
+  - backendRefs:
+    - name: argocd-server
+      namespace: argocd
+      port: 80
+    filters:
+    - requestHeaderModifier:
+        set:
+        - name: X-Forwarded-Proto
+          value: https
+      type: RequestHeaderModifier
+    matches:
+    - path:
+        type: PathPrefix
+        value: /

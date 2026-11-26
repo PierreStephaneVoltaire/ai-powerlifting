@@ -81,6 +81,9 @@ litellm_fallbacks = {
 }
 # litellm_mcp_servers = { custom = { url = "http://example.svc:8000/mcp" } }
 litellm_admins            = []
+argocd_domain             = ""
+argocd_admins             = []
+argocd_auto_sync          = false
 
 
 namespace_service_entry_visibility_enabled = false

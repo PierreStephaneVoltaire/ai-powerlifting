@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 const { chromium } = createRequire(new URL('../src/package.json', import.meta.url))('@playwright/test')
 const username = 'acceptance-luna-20260915'
 const person = 'person_be8959131fea4ca395a38e8f'
+const origin = process.env.PL_APP_ORIGIN || 'https://dev.nolift.training'
 const state = process.env.PL_STORAGE_STATE || '/tmp/nolift-test-session.json'
 const id = `codex-test-${randomUUID()}`
 const shell = code => {
@@ -21,7 +22,7 @@ try {
   browser = await chromium.launch({ headless: true })
   const context = await browser.newContext()
   const page = await context.newPage()
-  await page.goto('https://dev.nolift.training/oauth2/start')
+  await page.goto(`${origin}/oauth2/start`)
   const login = page.locator('input[name="uidField"]')
   await login.fill(username)
   await login.press('Enter')
@@ -29,8 +30,8 @@ try {
   const passwordInput = page.locator('input[type="password"]:visible').first()
   await passwordInput.fill(password)
   await passwordInput.press('Enter')
-  await page.waitForURL('https://dev.nolift.training/**', { timeout: 30000 })
-  const response = await context.request.get('https://dev.nolift.training/api/auth/me')
+  await page.waitForURL(`${origin}/**`, { timeout: 30000 })
+  const response = await context.request.get(`${origin}/api/auth/me`)
   const me = await response.json()
   if (!response.ok() || me.readOnly !== false || me.person_pk !== person) throw new Error('Login did not resolve the expected test Person')
   closeSync(openSync(state, 'w', 0o600))

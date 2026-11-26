@@ -41,3 +41,11 @@ variable "llm_hostname" {
 variable "llm_origin_url" {
   type = string
 }
+
+variable "argocd_hostname" {
+  type = string
+}
+
+variable "argocd_origin_url" {
+  type = string
+}
