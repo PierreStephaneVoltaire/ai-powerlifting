@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pl-valkey
+  namespace: powerlifting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pl-valkey
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: pl-valkey
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - --save
+        - '3600'
+        - '1'
+        - --appendonly
+        - 'no'
+        - --maxmemory
+        - 1gb
+        - --maxmemory-policy
+        - allkeys-lru
+        image: valkey/valkey:7.2.5
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - valkey-cli
+            - ping
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 3
+        name: valkey
+        ports:
+        - containerPort: 6379
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - valkey-cli
+            - ping
+          failureThreshold: 3
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1280Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+        - mountPath: /data
+          mountPropagation: None
+          name: data
+      enableServiceLinks: true
+      securityContext: {}
+      serviceAccountName: pl-valkey
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: pl-valkey-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pl-valkey
+  namespace: powerlifting
+spec:
+  ports:
+  - port: 6379
+    protocol: TCP
+    targetPort: 6379
+  selector:
+    app: pl-valkey
+  type: ClusterIP

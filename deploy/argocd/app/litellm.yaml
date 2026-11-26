@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        checksum/config: nolift:private:litellm_checksum
+      labels:
+        app: litellm
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - --config
+        - /etc/litellm/config.yaml
+        - --port
+        - '4000'
+        env:
+        - name: CHATGPT_TOKEN_DIR
+          value: /data/chatgpt
+        - name: PROXY_BASE_URL
+          value: nolift:private:llm_url
+        - name: GENERIC_AUTHORIZATION_ENDPOINT
+          value: nolift:private:authorization_endpoint
+        - name: GENERIC_TOKEN_ENDPOINT
+          value: nolift:private:token_endpoint
+        - name: GENERIC_USERINFO_ENDPOINT
+          value: nolift:private:userinfo_endpoint
+        - name: GENERIC_SCOPE
+          value: openid email profile litellm
+        - name: GENERIC_USER_ID_ATTRIBUTE
+          value: preferred_username
+        - name: GENERIC_USER_ROLE_ATTRIBUTE
+          value: litellm_role
+        - name: STORE_MODEL_IN_DB
+          value: 'False'
+        - name: NO_DOCS
+          value: 'true'
+        envFrom:
+        - secretRef:
+            name: litellm-keys
+            optional: false
+        image: nolift:private:litellm_image
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health/liveliness
+            port: 4000
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: litellm
+        ports:
+        - containerPort: 4000
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health/liveliness
+            port: 4000
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+          requests:
+            cpu: 50m
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /etc/litellm
+          mountPropagation: None
+          name: config
+          readOnly: true
+        - mountPath: /data/chatgpt
+          mountPropagation: None
+          name: chatgpt-token
+      enableServiceLinks: false
+      securityContext: {}
+      serviceAccountName: litellm
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: litellm-config
+          optional: false
+        name: config
+      - name: chatgpt-token
+        persistentVolumeClaim:
+          claimName: litellm-chatgpt-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: powerlifting
+  labels:
+    istio.io/use-waypoint: nolift-waypoint
+spec:
+  ports:
+  - name: http
+    port: 4000
+    protocol: TCP
+    targetPort: 4000
+  selector:
+    app: litellm
+  type: ClusterIP

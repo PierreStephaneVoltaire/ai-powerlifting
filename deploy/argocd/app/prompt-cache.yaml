@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pl-prompt-cache
+  namespace: powerlifting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pl-prompt-cache
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: pl-prompt-cache
+        istio.io/dataplane-mode: ambient
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - image: ghcr.io/qdrant/qdrant/qdrant:v1.15.5
+        imagePullPolicy: IfNotPresent
+        name: qdrant
+        ports:
+        - containerPort: 6333
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: 6333
+            scheme: HTTP
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 25m
+            memory: 96Mi
+        volumeMounts:
+        - mountPath: /qdrant/storage
+          mountPropagation: None
+          name: storage
+      enableServiceLinks: false
+      securityContext: {}
+      serviceAccountName: pl-prompt-cache
+      shareProcessNamespace: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: pl-prompt-cache-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pl-prompt-cache
+  namespace: powerlifting
+spec:
+  ports:
+  - port: 6333
+    protocol: TCP
+    targetPort: 6333
+  selector:
+    app: pl-prompt-cache
+  type: ClusterIP

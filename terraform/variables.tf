@@ -37,6 +37,13 @@ variable "auth_domain" {
   type = string
 }
 
+variable "argocd_domain" {
+  type = string
+  validation {
+    condition     = endswith(var.argocd_domain, ".${var.app_zone}") && !contains([var.app_domain, var.auth_domain, var.llm_domain], var.argocd_domain)
+    error_message = "Set argocd_domain to a distinct hostname in the portal's Cloudflare zone."
+  }
+}
 
 variable "glossary_table_name" {
   type = string

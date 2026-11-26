@@ -1,0 +1,460 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- analytics-ai.yaml
+- analytics-export.yaml
+- analytics.yaml
+- assistant.yaml
+- calculations.yaml
+- competition.yaml
+- export.yaml
+- federation.yaml
+- glossary.yaml
+- goals.yaml
+- imports.yaml
+- lift-profiles.yaml
+- litellm-keys.yaml
+- litellm.yaml
+- mesh.yaml
+- oauth2-proxy.yaml
+- performance.yaml
+- powerlifting-app-backend.yaml
+- powerlifting-app-frontend.yaml
+- profile.yaml
+- program.yaml
+- prompt-cache-api.yaml
+- prompt-cache-mcp.yaml
+- prompt-cache.yaml
+- rankings.yaml
+- reference-litellm.yaml
+- sessions.yaml
+- templates.yaml
+- valkey.yaml
+- videos.yaml
+- weight-log.yaml
+- network-policy.yaml
+replacements:
+- source:
+    kind: Deployment
+    name: pl-analytics-ai
+    fieldPath: spec.template.spec.containers.[name=analytics-ai].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-analytics-ai}
+    fieldPaths: ['metadata.annotations.[nolift.io/analytics-ai-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-analytics-ai
+    fieldPath: metadata.annotations.[nolift.io/analytics-ai-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-analytics-ai}
+    fieldPaths: ['spec.template.spec.containers.[name=analytics-ai].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-analytics-export
+    fieldPath: spec.template.spec.containers.[name=analytics-export].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-analytics-export}
+    fieldPaths: ['metadata.annotations.[nolift.io/analytics-export-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-analytics-export
+    fieldPath: metadata.annotations.[nolift.io/analytics-export-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-analytics-export}
+    fieldPaths: ['spec.template.spec.containers.[name=analytics-export].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-analytics
+    fieldPath: spec.template.spec.containers.[name=analytics].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-analytics}
+    fieldPaths: ['metadata.annotations.[nolift.io/analytics-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-analytics
+    fieldPath: metadata.annotations.[nolift.io/analytics-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-analytics}
+    fieldPaths: ['spec.template.spec.containers.[name=analytics].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-assistant
+    fieldPath: spec.template.spec.containers.[name=assistant].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-assistant}
+    fieldPaths: ['metadata.annotations.[nolift.io/assistant-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-assistant
+    fieldPath: metadata.annotations.[nolift.io/assistant-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-assistant}
+    fieldPaths: ['spec.template.spec.containers.[name=assistant].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-calculations
+    fieldPath: spec.template.spec.containers.[name=calculations].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-calculations}
+    fieldPaths: ['metadata.annotations.[nolift.io/calculations-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-calculations
+    fieldPath: metadata.annotations.[nolift.io/calculations-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-calculations}
+    fieldPaths: ['spec.template.spec.containers.[name=calculations].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-competition
+    fieldPath: spec.template.spec.containers.[name=competition].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-competition}
+    fieldPaths: ['metadata.annotations.[nolift.io/competition-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-competition
+    fieldPath: metadata.annotations.[nolift.io/competition-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-competition}
+    fieldPaths: ['spec.template.spec.containers.[name=competition].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-export
+    fieldPath: spec.template.spec.containers.[name=export].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-export}
+    fieldPaths: ['metadata.annotations.[nolift.io/export-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-export
+    fieldPath: metadata.annotations.[nolift.io/export-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-export}
+    fieldPaths: ['spec.template.spec.containers.[name=export].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-federation
+    fieldPath: spec.template.spec.containers.[name=federation].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-federation}
+    fieldPaths: ['metadata.annotations.[nolift.io/federation-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-federation
+    fieldPath: metadata.annotations.[nolift.io/federation-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-federation}
+    fieldPaths: ['spec.template.spec.containers.[name=federation].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-glossary
+    fieldPath: spec.template.spec.containers.[name=glossary].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-glossary}
+    fieldPaths: ['metadata.annotations.[nolift.io/glossary-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-glossary
+    fieldPath: metadata.annotations.[nolift.io/glossary-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-glossary}
+    fieldPaths: ['spec.template.spec.containers.[name=glossary].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-goals
+    fieldPath: spec.template.spec.containers.[name=goals].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-goals}
+    fieldPaths: ['metadata.annotations.[nolift.io/goals-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-goals
+    fieldPath: metadata.annotations.[nolift.io/goals-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-goals}
+    fieldPaths: ['spec.template.spec.containers.[name=goals].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-imports
+    fieldPath: spec.template.spec.containers.[name=imports].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-imports}
+    fieldPaths: ['metadata.annotations.[nolift.io/imports-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-imports
+    fieldPath: metadata.annotations.[nolift.io/imports-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-imports}
+    fieldPaths: ['spec.template.spec.containers.[name=imports].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-lift-profiles
+    fieldPath: spec.template.spec.containers.[name=lift-profiles].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-lift-profiles}
+    fieldPaths: ['metadata.annotations.[nolift.io/lift-profiles-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-lift-profiles
+    fieldPath: metadata.annotations.[nolift.io/lift-profiles-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-lift-profiles}
+    fieldPaths: ['spec.template.spec.containers.[name=lift-profiles].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-performance
+    fieldPath: spec.template.spec.containers.[name=performance].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-performance}
+    fieldPaths: ['metadata.annotations.[nolift.io/performance-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-performance
+    fieldPath: metadata.annotations.[nolift.io/performance-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-performance}
+    fieldPaths: ['spec.template.spec.containers.[name=performance].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: powerlifting-app-backend
+    fieldPath: spec.template.spec.containers.[name=backend].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: powerlifting-app-backend}
+    fieldPaths: ['metadata.annotations.[nolift.io/backend-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: powerlifting-app-backend
+    fieldPath: metadata.annotations.[nolift.io/backend-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: powerlifting-app-backend}
+    fieldPaths: ['spec.template.spec.containers.[name=backend].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: powerlifting-app-frontend
+    fieldPath: spec.template.spec.containers.[name=frontend].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: powerlifting-app-frontend}
+    fieldPaths: ['metadata.annotations.[nolift.io/frontend-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: powerlifting-app-frontend
+    fieldPath: metadata.annotations.[nolift.io/frontend-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: powerlifting-app-frontend}
+    fieldPaths: ['spec.template.spec.containers.[name=frontend].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-profile
+    fieldPath: spec.template.spec.containers.[name=profile].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-profile}
+    fieldPaths: ['metadata.annotations.[nolift.io/profile-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-profile
+    fieldPath: metadata.annotations.[nolift.io/profile-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-profile}
+    fieldPaths: ['spec.template.spec.containers.[name=profile].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-program
+    fieldPath: spec.template.spec.containers.[name=program].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-program}
+    fieldPaths: ['metadata.annotations.[nolift.io/program-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-program
+    fieldPath: metadata.annotations.[nolift.io/program-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-program}
+    fieldPaths: ['spec.template.spec.containers.[name=program].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-prompt-cache-api
+    fieldPath: spec.template.spec.containers.[name=prompt-cache-api].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-prompt-cache-api}
+    fieldPaths: ['metadata.annotations.[nolift.io/prompt-cache-api-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-prompt-cache-api
+    fieldPath: metadata.annotations.[nolift.io/prompt-cache-api-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-prompt-cache-api}
+    fieldPaths: ['spec.template.spec.containers.[name=prompt-cache-api].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-rankings
+    fieldPath: spec.template.spec.containers.[name=rankings].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-rankings}
+    fieldPaths: ['metadata.annotations.[nolift.io/rankings-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-rankings
+    fieldPath: metadata.annotations.[nolift.io/rankings-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-rankings}
+    fieldPaths: ['spec.template.spec.containers.[name=rankings].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-sessions
+    fieldPath: spec.template.spec.containers.[name=sessions].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-sessions}
+    fieldPaths: ['metadata.annotations.[nolift.io/sessions-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-sessions
+    fieldPath: metadata.annotations.[nolift.io/sessions-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-sessions}
+    fieldPaths: ['spec.template.spec.containers.[name=sessions].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-templates
+    fieldPath: spec.template.spec.containers.[name=templates].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-templates}
+    fieldPaths: ['metadata.annotations.[nolift.io/templates-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-templates
+    fieldPath: metadata.annotations.[nolift.io/templates-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-templates}
+    fieldPaths: ['spec.template.spec.containers.[name=templates].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-videos
+    fieldPath: spec.template.spec.containers.[name=videos].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-videos}
+    fieldPaths: ['metadata.annotations.[nolift.io/videos-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-videos
+    fieldPath: metadata.annotations.[nolift.io/videos-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-videos}
+    fieldPaths: ['spec.template.spec.containers.[name=videos].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-weight-log
+    fieldPath: spec.template.spec.containers.[name=weight-log].image
+    options: {delimiter: ':latest@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-weight-log}
+    fieldPaths: ['metadata.annotations.[nolift.io/weight-log-image-base]']
+    options: {create: true}
+- source:
+    kind: Deployment
+    name: pl-weight-log
+    fieldPath: metadata.annotations.[nolift.io/weight-log-image-base]
+    options: {delimiter: '@', index: 0}
+  targets:
+  - select: {kind: Deployment, name: pl-weight-log}
+    fieldPaths: ['spec.template.spec.containers.[name=weight-log].image']
+    options: {delimiter: '@', index: 0}
+- source:
+    kind: Deployment
+    name: pl-analytics
+    fieldPath: spec.template.spec.containers.[name=analytics].image
+  targets:
+  - select:
+      kind: Deployment
+      name: pl-analytics
+    fieldPaths:
+    - spec.template.spec.containers.[name=analytics].env.[name=BUILD_ID].value

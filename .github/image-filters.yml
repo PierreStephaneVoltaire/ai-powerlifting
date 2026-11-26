@@ -22,6 +22,10 @@ services:
   - 'src/**/tsconfig*.json'
   - 'scripts/image_tag.py'
 kubernetes:
+  - 'deploy/argocd/**'
+  - 'scripts/*argocd*'
+  - '.github/workflows/build-images.yml'
+  - '.github/image-filters.yml'
   - 'terraform/k8s/**'
   - 'terraform/coach/**'
   - 'terraform/security/**'

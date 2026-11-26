@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 
 const { request } = createRequire(new URL('../src/package.json', import.meta.url))('@playwright/test')
-const context = await request.newContext({ baseURL: 'https://dev.nolift.training', storageState: process.env.PL_STORAGE_STATE || '/tmp/nolift-test-session.json' })
+const context = await request.newContext({ baseURL: process.env.PL_APP_ORIGIN || 'https://dev.nolift.training', storageState: process.env.PL_STORAGE_STATE || '/tmp/nolift-test-session.json' })
 try {
   async function get(path) {
     const response = await context.get(path)

@@ -313,6 +313,35 @@ rejects a wrong audience or an unrelated service account. See the
 [shared workload settings](../terraform/k8s/modules/workload-aws/main.tf) and
 [ADR 0010](adr/0010-aws-workload-identity-and-network-hardening.md).
 
+### Workload delivery
+
+Each Argo Application reads one manifest directory on `master`. The in-cluster
+runner scans those same files for ECR names, private values and workload
+identity markers. Terraform owns the resulting Kustomize patches. Image Updater
+owns the digest overrides and reads the refreshed ECR pull secret. Its
+write-back replaces the Application spec, so the runner pauses the updater
+while Terraform changes patches. Kustomize preserves the repository and digest
+when the updater adds a redundant `:latest` tag. This keeps sibling pod
+templates stable when one service gets a new digest. Authentik
+grants console access through the `argocd-admins` group. The master environment
+supplies `ARGOCD_DOMAIN`. Its `K8S_TFVARS` contains the matching
+`argocd_domain` and the Authentik usernames in `argocd_admins`.
+
+During adoption the pipeline keeps sync manual and pauses Image Updater. It
+seeds digests from live Deployments, compares server-side dry runs, then
+checks Deployment specs, pod UIDs and restart counts after sync. Terraform
+releases each object only after its UID and Argo tracking ID match. The
+namespaced handoff record retains import addresses for rollback. The first
+successful run completes this phase even when automatic sync was requested.
+
+The run after the handoff moves OAuth2 Proxy to its existing cookie key in its
+Secret and expands the redirect domain in its arguments. This rolls the proxy
+once. The handoff itself preserves the running template and keeps the key out
+of Git and the Application spec. On a later infrastructure release,
+`argocd_auto_sync = true` enables pruning, self-healing and two-minute image
+polling.
+[ADR 0011](adr/0011-argocd-mutation-injection-and-spot-workers.md)
+
 ### Mesh, monitoring and deployment
 
 Istio Ambient supplies workload identity and strict mTLS through `ztunnel`.
@@ -341,13 +370,17 @@ flowchart LR
 
   CI["GitHub Actions"] -->|"build and publish images"| ECR["AWS ECR"]
   CI -->|"kubernetes-apply job"| Runner["In-cluster Actions runner"]
-  Runner -->|"Terraform stacks"| Workloads["k3s workloads"]
+  Runner -->|"Terraform installs and configures"| Argo["Argo CD"]
+  Master["master manifests"] --> Argo
+  ECR -->|"digest of latest"| Updater["Image Updater"]
+  Updater -->|"Application image overrides"| Argo
+  Argo -->|"server-side apply"| Workloads["k3s workloads"]
   Workloads -->|"pull images"| ECR
   Workloads -->|"container logs"| Promtail
 ```
 
-Grafana is reached by port-forward on `localhost:3000`. Infrastructure is
-Terraform, with separate states for each scope:
+Grafana is reached by port-forward on `localhost:3000`. Each Terraform scope
+has its own state. The Git manifests live alongside those stacks.
 
 | Location | Scope |
 | --- | --- |
@@ -355,10 +388,12 @@ Terraform, with separate states for each scope:
 | `terraform/ci-access` | Permissions the existing CI role needs to manage AWS resources, including workload identity |
 | `terraform/k8s/core` | Namespaces, secrets, runner, Authentik, CNPG Postgres, monitoring |
 | `terraform/k8s/perms` | Kubernetes service accounts and RBAC |
-| `terraform/k8s/network` | NGINX Gateway, HTTP routes, Cloudflare tunnel |
+| `terraform/k8s/network` | NGINX Gateway, Gateway API and tunnel credential checksum |
+| `terraform/k8s/argocd` | Argo CD, Authentik SSO settings, ECR Image Updater and Application patches |
+| `deploy/argocd/{app,coach,network}` | Namespaced workloads, workload policies, waypoint and HTTP routes |
 | `terraform/k8s/mesh` | Istio control plane, CNI and ztunnel |
-| `terraform/k8s/app` | Portal, domain services, caches, OAuth2 Proxy, waypoint and service policies |
-| `terraform/coach` | Coach, Discord bot and persistent state |
+| `terraform/k8s/app` | Application secrets, private configuration, persistent volumes, registry refresh and LiteLLM key registration |
+| `terraform/coach` | Coach credentials and persistent state |
 
 The in-cluster runner applies the core, permissions, network, mesh and app
 stacks in order. The same job applies the separate Coach state when a Coach

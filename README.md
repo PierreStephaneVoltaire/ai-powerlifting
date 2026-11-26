@@ -365,9 +365,11 @@ publishes these documents and configures the issuer before rolling out workloads
 See [AWS workload identity](docs/ARCHITECTURE.md#aws-workload-identity)
 and [ADR 0010](docs/adr/0010-aws-workload-identity-and-network-hardening.md).
 
-CI applies the AWS and Cloudflare resources in `terraform/`. An in-cluster
-runner applies the Kubernetes stacks in `terraform/k8s/` and the separate
-Coach state in `terraform/coach/` through the [deployment workflow](.github/workflows/build-images.yml).
+CI provisions AWS, Cloudflare and the cluster platform. Argo CD tracks the
+portal, Coach and gateway manifests on `master`. Terraform injects the
+deployment-specific values into three Argo Applications. After the initial
+handoff, Image Updater follows the ECR digest behind each repository’s
+`latest` tag. [Deployment workflow](.github/workflows/build-images.yml)
 
 For more on the request flow, data model and caching, see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -421,7 +423,8 @@ powerlifting-app/
 │   ├── lambda/               Retained AWS Lambdas: master-sync and video-thumbnail
 │   └── dependencies/types/   Shared TypeScript types
 ├── docker/         Container build context
-├── terraform/      AWS + Cloudflare (main), k8s/ stacks (core, perms, network, app), coach/
+├── deploy/argocd/  Portal, Coach and network Kubernetes manifests
+├── terraform/      AWS, Cloudflare and Kubernetes platform stacks
 └── docs/           Architecture, formulas, and the implementation reference
 ```
 

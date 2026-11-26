@@ -1,0 +1,1525 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: edge-powerlifting-edge-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/cloudflared
+    to:
+    - operation:
+        ports:
+        - '80'
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: edge
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: litellm-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
+        - cluster.local/ns/powerlifting/sa/pl-litellm-keys
+    to:
+    - operation:
+        ports:
+        - '4000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: litellm
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: litellm-edge-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/edge-powerlifting
+    to:
+    - operation:
+        ports:
+        - '4000'
+  selector:
+    matchLabels:
+      app: litellm
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: litellm-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: litellm
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: oauth2-proxy-edge-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/edge-powerlifting
+    to:
+    - operation:
+        ports:
+        - '4180'
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-analytics-ai-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-analytics-export
+    to:
+    - operation:
+        ports:
+        - '8000'
+        - '50051'
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-export
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/analytics.correlation
+        - /operations/analytics.block_evaluation
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-analytics-ai
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-analytics-ai-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-analytics-ai
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-analytics-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+        - cluster.local/ns/powerlifting/sa/pl-analytics-export
+        - cluster.local/ns/powerlifting/sa/pl-competition
+        - cluster.local/ns/powerlifting/sa/pl-export
+        - cluster.local/ns/powerlifting/sa/pl-profile
+        - cluster.local/ns/powerlifting/sa/pl-program
+        - cluster.local/ns/powerlifting/sa/pl-templates
+    to:
+    - operation:
+        ports:
+        - '8000'
+        - '50051'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-analytics
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-analytics-export-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+    to:
+    - operation:
+        ports:
+        - '8000'
+        - '50051'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-analytics-export
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-analytics-export-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-analytics-export
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-analytics-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-analytics
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-assistant-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-coach-discord
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-assistant
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-assistant-dapr-peers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-assistant
+    to:
+    - operation:
+        ports:
+        - '50002'
+  selector:
+    matchLabels:
+      app: pl-assistant
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-assistant-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-assistant
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-calculations-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-calculations
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-calculations-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-calculations
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-competition-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-competition
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-competition-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-competition
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-export-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-export
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-export-to-pl-glossary
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-export
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/exercise_get_glossary
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-glossary
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-export-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-export
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-federation-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-federation
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-federation-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-federation
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-glossary-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-glossary
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-glossary-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-glossary
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-goals-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-goals
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-goals-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-goals
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-imports-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-imports
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-imports-to-pl-glossary
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-imports
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/exercise_upsert
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-glossary
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-imports-to-pl-templates
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-imports
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/template_create_from_import
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-templates
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-imports-to-program-publication
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-imports
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/program_apply_session_import
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-program
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-imports-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-imports
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-lift-profiles-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-lift-profiles
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-lift-profiles-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-lift-profiles
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-performance-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-export
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-performance
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-performance-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-performance
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-profile-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-rankings
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+        - cluster.local/ns/powerlifting/sa/pl-analytics-export
+        - cluster.local/ns/powerlifting/sa/pl-sessions
+        - cluster.local/ns/powerlifting/sa/pl-program
+        - cluster.local/ns/powerlifting/sa/pl-competition
+        - cluster.local/ns/powerlifting/sa/pl-glossary
+        - cluster.local/ns/powerlifting/sa/pl-assistant
+        - cluster.local/ns/powerlifting/sa/pl-calculations
+        - cluster.local/ns/powerlifting/sa/pl-federation
+        - cluster.local/ns/powerlifting/sa/pl-goals
+        - cluster.local/ns/powerlifting/sa/pl-weight-log
+        - cluster.local/ns/powerlifting/sa/pl-performance
+        - cluster.local/ns/powerlifting/sa/pl-export
+        - cluster.local/ns/powerlifting/sa/pl-imports
+        - cluster.local/ns/powerlifting/sa/pl-lift-profiles
+        - cluster.local/ns/powerlifting/sa/pl-templates
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-profile
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-profile-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-profile
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-program-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-program
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-program-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-program
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-prompt-cache-api-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+        - cluster.local/ns/powerlifting/sa/pl-calculations
+        - cluster.local/ns/powerlifting/sa/pl-competition
+        - cluster.local/ns/powerlifting/sa/pl-export
+        - cluster.local/ns/powerlifting/sa/pl-federation
+        - cluster.local/ns/powerlifting/sa/pl-glossary
+        - cluster.local/ns/powerlifting/sa/pl-goals
+        - cluster.local/ns/powerlifting/sa/pl-imports
+        - cluster.local/ns/powerlifting/sa/pl-lift-profiles
+        - cluster.local/ns/powerlifting/sa/pl-performance
+        - cluster.local/ns/powerlifting/sa/pl-profile
+        - cluster.local/ns/powerlifting/sa/pl-program
+        - cluster.local/ns/powerlifting/sa/pl-sessions
+        - cluster.local/ns/powerlifting/sa/pl-templates
+        - cluster.local/ns/powerlifting/sa/pl-videos
+        - cluster.local/ns/powerlifting/sa/pl-weight-log
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-prompt-cache-api
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-prompt-cache-api-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-prompt-cache-api
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-prompt-cache-authorized-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-prompt-cache-mcp
+    to:
+    - operation:
+        ports:
+        - '6333'
+  selector:
+    matchLabels:
+      app: pl-prompt-cache
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-prompt-cache-mcp-authorized-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-prompt-cache-api
+    to:
+    - operation:
+        ports:
+        - '8000'
+  selector:
+    matchLabels:
+      app: pl-prompt-cache-mcp
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-rankings-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-rankings
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-rankings-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-rankings
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-sessions-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-sessions
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-sessions-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-sessions
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-templates-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-templates
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-templates-to-pl-goals
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-templates
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/goals_list
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-goals
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-templates-to-pl-program
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-templates
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/block_transition
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-program
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-templates-to-program-publication
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-templates
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /operations/template_apply_sessions
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-program
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-templates-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-templates
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-valkey-authorized-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/oauth2-proxy
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+        - cluster.local/ns/powerlifting/sa/pl-prompt-cache-api
+        - cluster.local/ns/powerlifting/sa/pl-rankings
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-calculations
+        - cluster.local/ns/powerlifting/sa/pl-competition
+        - cluster.local/ns/powerlifting/sa/pl-export
+        - cluster.local/ns/powerlifting/sa/pl-federation
+        - cluster.local/ns/powerlifting/sa/pl-glossary
+        - cluster.local/ns/powerlifting/sa/pl-goals
+        - cluster.local/ns/powerlifting/sa/pl-imports
+        - cluster.local/ns/powerlifting/sa/pl-lift-profiles
+        - cluster.local/ns/powerlifting/sa/pl-performance
+        - cluster.local/ns/powerlifting/sa/pl-profile
+        - cluster.local/ns/powerlifting/sa/pl-program
+        - cluster.local/ns/powerlifting/sa/pl-sessions
+        - cluster.local/ns/powerlifting/sa/pl-templates
+        - cluster.local/ns/powerlifting/sa/pl-videos
+        - cluster.local/ns/powerlifting/sa/pl-weight-log
+    to:
+    - operation:
+        ports:
+        - '6379'
+  selector:
+    matchLabels:
+      app: pl-valkey
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-videos-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-videos
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-videos-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-videos
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-weight-log-allowed-callers
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/litellm
+    to:
+    - operation:
+        ports:
+        - '8000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: pl-weight-log
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: pl-weight-log-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: pl-weight-log
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: powerlifting-app-backend-oauth2-proxy-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/oauth2-proxy
+    to:
+    - operation:
+        ports:
+        - '3005'
+  selector:
+    matchLabels:
+      app: powerlifting-app-backend
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: powerlifting-app-frontend-edge-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/edge-powerlifting
+    to:
+    - operation:
+        ports:
+        - '3001'
+  selector:
+    matchLabels:
+      app: powerlifting-app-frontend
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: reference-litellm-assistant-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-assistant
+    to:
+    - operation:
+        methods:
+        - POST
+        paths:
+        - /v1/embeddings
+        - /v1/chat/completions
+        ports:
+        - '4000'
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: reference-litellm
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: reference-litellm-waypoint-only
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/nolift-waypoint
+  selector:
+    matchLabels:
+      app: reference-litellm
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: powerlifting-strict-mtls
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: nolift-waypoint-source-principal
+  namespace: powerlifting
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  configPatches:
+  - applyTo: HTTP_FILTER
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inlineCode: |
+            function envoy_on_request(request_handle)
+              local headers = request_handle:headers()
+              headers:remove("x-pl-source-principal")
+              local state = request_handle:streamInfo():filterState()
+              if not state then return end
+              local principal = state:get("io.istio.peer_principal")
+              if principal then headers:replace("x-pl-source-principal", principal) end
+            end
+  priority: 10
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: nolift-waypoint
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: nolift-waypoint
+  namespace: powerlifting
+  labels:
+    istio.io/waypoint-for: service
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  gatewayClassName: istio-waypoint
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: Same
+    name: mesh
+    port: 15008
+    protocol: HBONE

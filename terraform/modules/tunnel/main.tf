@@ -44,6 +44,14 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
     }
 
     ingress_rule {
+      hostname = var.argocd_hostname
+      service  = var.argocd_origin_url
+      origin_request {
+        http_host_header = var.argocd_hostname
+      }
+    }
+
+    ingress_rule {
       service = "http_status:404"
     }
   }
@@ -68,6 +76,14 @@ resource "cloudflare_record" "auth" {
 resource "cloudflare_record" "llm" {
   zone_id = cloudflare_zone.this.id
   name    = trimsuffix(var.llm_hostname, ".${var.zone}")
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.this.id}.cfargotunnel.com"
+  proxied = true
+}
+
+resource "cloudflare_record" "argocd" {
+  zone_id = cloudflare_zone.this.id
+  name    = trimsuffix(var.argocd_hostname, ".${var.zone}")
   type    = "CNAME"
   content = "${cloudflare_zero_trust_tunnel_cloudflared.this.id}.cfargotunnel.com"
   proxied = true

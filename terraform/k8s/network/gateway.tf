@@ -33,7 +33,7 @@ resource "helm_release" "gateway_controller" {
       replicas              = 1
       gatewayClassName      = local.gateway_class
       gatewayControllerName = "gateway.nginx.org/${local.gateway_class}-controller"
-      watchNamespaces       = [var.namespace]
+      watchNamespaces       = [var.namespace, "argocd"]
       snippets              = { enable = true }
     }
     nginx = {

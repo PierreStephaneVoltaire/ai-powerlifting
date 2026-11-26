@@ -73,5 +73,7 @@ module "tunnel" {
   auth_origin_url      = var.tunnel_origin_url
   llm_hostname         = var.llm_domain
   llm_origin_url       = var.tunnel_origin_url
+  argocd_hostname      = var.argocd_domain
+  argocd_origin_url    = var.tunnel_origin_url
   token_parameter_name = "/powerlifting/k8s/tunnel-token"
 }
