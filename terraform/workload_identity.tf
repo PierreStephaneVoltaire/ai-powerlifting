@@ -238,7 +238,7 @@ resource "aws_iam_role_policy" "workload_identity" {
       flatten([for enabled in(each.key == "ecr-refresher" ? [true] : []) : [{
         Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*"
         }, {
-        Effect   = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+        Effect   = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:ListImages"]
         Resource = "arn:aws:ecr:${var.region}:${data.aws_caller_identity.workload_identity.account_id}:repository/if-powerlifting-*"
       }]])
     )
