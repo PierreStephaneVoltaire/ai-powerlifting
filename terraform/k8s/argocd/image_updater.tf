@@ -12,7 +12,7 @@ resource "kubectl_manifest" "image_updater" {
         images = [for repo in local.ecr_repos[each.key] : {
           alias                = trimprefix(repo, "if-")
           imageName            = "${local.ecr}/${repo}:latest"
-          commonUpdateSettings = { updateStrategy = "digest" }
+          commonUpdateSettings = { updateStrategy = "digest", forceUpdate = true }
           manifestTargets      = { kustomize = { name = "${local.ecr}/${repo}" } }
         }]
       }]

@@ -75,7 +75,7 @@ jq -n --slurpfile app "$work/app.inputs" --slurpfile coach "$work/coach.inputs" 
   > "$work/manifest.tfvars.json"
 TF_VAR_argocd_client_secret=$(terraform -chdir=terraform/k8s/core output -raw argocd_client_secret)
 export TF_VAR_argocd_client_secret
-updater=deployment/argocd-image-updater
+updater=deployment/argocd-image-updater-controller
 resume_updates() {
   if [[ -n $(kubectl -n argocd get application nolift-app -o jsonpath='{.spec.syncPolicy.automated}') ]]; then
     kubectl -n argocd scale "$updater" --replicas=1
