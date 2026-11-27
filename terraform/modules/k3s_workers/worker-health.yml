@@ -1,0 +1,20 @@
+- name: Check worker health
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check node readiness
+      block:
+        - name: Wait for node to become ready
+          ansible.builtin.command:
+            argv: [k3s, kubectl, --kubeconfig, /var/lib/rancher/k3s/agent/kubelet.kubeconfig, --request-timeout=5s, get, node, '{{ node_name }}', -o, json]
+          register: node
+          until: node.rc == 0 and ((node.stdout | from_json).status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) == 1
+          retries: 10
+          delay: 60
+          changed_when: false
+      rescue:
+        - name: Terminate unhealthy worker
+          ansible.builtin.command: shutdown -h now
+          changed_when: true

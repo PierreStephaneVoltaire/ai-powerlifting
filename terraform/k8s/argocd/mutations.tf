@@ -67,26 +67,5 @@ locals {
     }
   ] }
 
-  mutations = { for app in local.apps : app => concat(local.workload_patches[app], local.route_patches[app], local.policy_patches[app], local.waypoint_patches[app], local.cookie_handoff_patches[app]) }
-}
-
-locals {
-  cookie_handoff_patches = { for app, docs in local.docs : app => [
-    for d in docs : {
-      target = { kind = d.kind, name = d.metadata.name }
-      patch = yamlencode({
-        apiVersion = d.apiVersion, kind = d.kind, metadata = { name = d.metadata.name }
-        spec = { template = { spec = { containers = [
-          for c in d.spec.template.spec.containers : {
-            name = c.name
-            args = [for arg in c.args : replace(arg, "$(APP_DOMAIN)", var.app_domain)]
-            env = [for e in c.env : e.name == "APP_DOMAIN" ?
-              { name = e.name, "$patch" = "delete" } : e.name == "OAUTH2_PROXY_COOKIE_SECRET" ?
-              { name = e.name, value = null, valueFrom = null } : { name = e.name }
-            ]
-          }
-        ] } } }
-      })
-    } if !var.argocd_auto_sync && !var.argocd_cookie_migrated && try(d.metadata.annotations["nolift.io/legacy-cookie"] == "true", false)
-  ] }
+  mutations = { for app in local.apps : app => concat(local.workload_patches[app], local.route_patches[app], local.policy_patches[app], local.waypoint_patches[app]) }
 }

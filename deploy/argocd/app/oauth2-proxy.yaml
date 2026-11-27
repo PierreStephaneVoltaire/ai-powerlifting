@@ -4,7 +4,6 @@ metadata:
   name: oauth2-proxy
   namespace: powerlifting
   annotations:
-    nolift.io/legacy-cookie: 'true'
 spec:
   progressDeadlineSeconds: 600
   replicas: 1

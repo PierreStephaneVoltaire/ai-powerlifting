@@ -28,10 +28,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      argocd_rollback_revision:
-        description: Restore Terraform ownership before auto-sync using this pre-migration commit SHA
-        required: false
-        type: string
       backend_only:
         description: Build only backend
         required: false
@@ -108,18 +104,10 @@ jobs:
           filters: .github/image-filters.yml
 
       - id: result
-        env:
-          ROLLBACK_REVISION: ${{ inputs.argocd_rollback_revision }}
         shell: bash
         run: |
           {
-            if [ -n "$ROLLBACK_REVISION" ]; then
-              echo "frontend=false"
-              echo "backend=false"
-              echo "services=false"
-              echo "terraform=false"
-              echo "kubernetes=true"
-            elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "frontend=true"
               if [ "${{ inputs.frontend_only }}" = "true" ] && [ "${{ inputs.backend_only }}" != "true" ] && [ "${{ inputs.apply_terraform }}" != "true" ]; then
                 echo "backend=false"
@@ -362,6 +350,11 @@ jobs:
       - working-directory: terraform
         run: terraform validate
 
+      - working-directory: terraform/k8s/nodes
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
   workload-identity-inputs:
     needs: changes
     if: >-
@@ -421,6 +414,9 @@ jobs:
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
       TF_VAR_workload_identity_jwks: ${{ needs.workload-identity-inputs.outputs.jwks }}
+      TF_VAR_workers_enabled: ${{ vars.WORKERS_ENABLED || 'false' }}
+      TF_VAR_worker_desired: ${{ vars.WORKER_DESIRED || '0' }}
+      TF_VAR_home_lan_cidr: ${{ secrets.HOME_LAN_CIDR }}
     steps:
       - uses: actions/checkout@v4
 
@@ -470,6 +466,9 @@ jobs:
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
       TF_VAR_workload_identity_jwks: ${{ needs.workload-identity-inputs.outputs.jwks }}
+      TF_VAR_workers_enabled: ${{ vars.WORKERS_ENABLED || 'false' }}
+      TF_VAR_worker_desired: ${{ vars.WORKER_DESIRED || '0' }}
+      TF_VAR_home_lan_cidr: ${{ secrets.HOME_LAN_CIDR }}
     steps:
       - uses: actions/checkout@v4
 
@@ -509,7 +508,7 @@ jobs:
     runs-on: powerlifting-k8s
     if: >-
       ${{ always() && github.ref_name == 'master'
-        && needs.changes.outputs.kubernetes == 'true' && (needs.changes.outputs.deploy == 'true' || inputs.argocd_rollback_revision != '')
+        && needs.changes.outputs.kubernetes == 'true' && needs.changes.outputs.deploy == 'true'
         && github.triggering_actor == github.repository_owner && github.actor == github.repository_owner
         && (needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     concurrency:
@@ -517,11 +516,12 @@ jobs:
       cancel-in-progress: false
     env:
       KUBE_LOAD_CONFIG_FILE: "false"
+      TF_VAR_workers_enabled: ${{ vars.WORKERS_ENABLED || 'false' }}
+      TAILSCALE_OAUTH_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TAILSCALE_OAUTH_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
       TF_VAR_argocd_domain: ${{ vars.ARGOCD_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ inputs.argocd_rollback_revision && '0' || '1' }}
 
       - run: command -v unzip || (sudo apt-get update && sudo apt-get install -y unzip)
 
@@ -546,7 +546,6 @@ jobs:
       - run: python -m pip install boto3==1.42.83 PyYAML==6.0.3
 
       - name: Preserve existing identity pointers
-        if: ${{ !inputs.argocd_rollback_revision }}
         run: |
           python scripts/migrate_identity_pointers.py
           python scripts/migrate_identity_pointers.py --apply
@@ -622,14 +621,45 @@ jobs:
           chmod 755 argocd
           echo "$PWD" >> "$GITHUB_PATH"
 
+      - name: Reconcile platform infrastructure
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          set -euo pipefail
+          for stack in core perms network mesh app coach; do
+            directory="terraform/k8s/$stack"
+            key="powerlifting-app/k8s/$stack.tfstate"
+            variables="$RUNNER_TEMP/k8s.tfvars"
+            if [[ $stack == coach ]]; then
+              directory=terraform/coach
+              key=powerlifting-app/coach/terraform.tfstate
+              variables="$RUNNER_TEMP/coach.tfvars"
+            fi
+            terraform -chdir="$directory" init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
+              -backend-config="key=$key" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+            terraform -chdir="$directory" apply -input=false -auto-approve -compact-warnings -var-file="$variables"
+          done
+
       - name: Reconcile NoLift applications
         env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          ROLLBACK_REVISION: ${{ inputs.argocd_rollback_revision }}
         run: bash scripts/deploy_argocd.sh
 
+      - name: Reconcile worker infrastructure
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          terraform -chdir=terraform/k8s/nodes init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=powerlifting-app/k8s/nodes.tfstate" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+          terraform -chdir=terraform/k8s/nodes apply -input=false -auto-approve -compact-warnings -var-file="$RUNNER_TEMP/k8s.tfvars"
+
+      - name: Refresh worker application
+        if: ${{ vars.WORKERS_ENABLED == 'true' }}
+        run: |
+          kubectl -n argocd annotate application nolift-nodes argocd.argoproj.io/refresh=normal --overwrite
+          argocd app wait nolift-nodes --core --sync --health --timeout 900
+
       - name: Verify Argo CD login through the gateway
-        if: ${{ !inputs.argocd_rollback_revision }}
         env:
           ARGOCD_DOMAIN: ${{ vars.ARGOCD_DOMAIN }}
           AUTH_DOMAIN: ${{ vars.AUTH_DOMAIN }}

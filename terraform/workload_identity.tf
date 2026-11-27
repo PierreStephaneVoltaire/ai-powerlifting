@@ -252,3 +252,29 @@ output "workload_identity_issuer" {
 output "workload_identity_role_arns" {
   value = { for account, role in aws_iam_role.workload_identity : account => role.arn }
 }
+
+resource "aws_iam_role" "node_termination_handler" {
+  lifecycle { prevent_destroy = true }
+  count = var.workers_enabled ? 1 : 0
+  name  = "nolift-aws-node-termination-handler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow", Action = "sts:AssumeRoleWithWebIdentity"
+      Principal = { Federated = aws_iam_openid_connect_provider.workload_identity.arn }
+      Condition = { StringEquals = {
+        "${local.workload_identity_host}:aud" = "sts.amazonaws.com"
+        "${local.workload_identity_host}:sub" = "system:serviceaccount:kube-system:aws-node-termination-handler"
+      } }
+    }]
+  })
+}
+resource "aws_iam_role_policy" "node_termination_handler" {
+  lifecycle { prevent_destroy = true }
+  count = var.workers_enabled ? 1 : 0
+  role  = aws_iam_role.node_termination_handler[0].id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = module.k3s_workers[0].queue_arn },
+    { Effect = "Allow", Action = ["autoscaling:CompleteLifecycleAction", "autoscaling:DescribeAutoScalingInstances", "autoscaling:DescribeTags", "ec2:DescribeInstances"], Resource = "*" }
+  ] })
+}

@@ -76,8 +76,3 @@ variable "coach_inputs" {
 variable "network_inputs" {
   type = object({ tunnel_checksum = string })
 }
-
-variable "argocd_cookie_migrated" {
-  type    = bool
-  default = false
-}

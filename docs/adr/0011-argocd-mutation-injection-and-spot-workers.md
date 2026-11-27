@@ -6,6 +6,12 @@ Date: 2026-11-25
 
 Accepted
 
+Implementation amendment, 2026-11-27: worker bootstrap and ongoing health checks
+use Ansible through cloud-init. The home server uses a one-time Ansible playbook,
+not a pipeline host script or automatic rollback. Argo manages the termination handler and reaper CronJob; Terraform retains generated secrets,
+AWS resources and Argo application registration. The worker VPC CIDR is fixed
+inside the module. the corresponding instructions below.
+
 ## Context
 
 - **Slow deploys.** Every master push, and every push to a branch with an open PR, runs `kubernetes-apply` on the in-cluster runner. That job applies five Terraform states in sequence (`core perms network mesh app`), then Coach, then waits on every rollout. It took 9 minutes in the last successful master run. Images are resolved from tag to digest at apply time (`terraform/k8s/app/images.tf`).
@@ -20,6 +26,7 @@ Accepted
   - Coach Discord IDs
 
 **Outcome:**
+
 1. Argo CD and Image Updater are installed by Terraform. Argo tracks `master`.
 2. Git holds plain manifests with **no private values**. Terraform generates the mutations and injects them into each Argo Application through the native `spec.source.kustomize.patches`. No custom plugin.
 3. Rollouts happen when the **ECR digest** behind `latest` changes, not on commits.
@@ -29,6 +36,7 @@ Accepted
 Crossplane is out of scope. It will be one more Argo Application later.
 
 ### Changes from the previous draft
+
 - **No custom renderer.** The draft built a Config Management Plugin with a custom renderer. It is dropped: Argo already supports inline Kustomize patches in the Application spec. [Argo CD Kustomize](https://argo-cd.readthedocs.io/en/stable/user-guide/kustomize/)
 - **No CRD deletion.** The draft deleted the leftover Argo CRDs. Live check: they carry `meta.helm.sh/release-name=argocd` / `argocd-image-updater` in namespace `argocd`, and 0 instances exist. Installing releases with those names in `argocd` adopts them.
 - **Public workers.** The draft used private subnets with fck-nat. You asked for public instances. They get a security group with no inbound except Tailscale's UDP port.
@@ -42,12 +50,12 @@ Crossplane is out of scope. It will be one more Argo Application later.
 
 ### A1. What moves to Argo, what stays in Terraform
 
-| Moves to Git manifests (Argo) | Stays in Terraform |
-|---|---|
-| `terraform/k8s/app`: Deployments, Services, ServiceAccounts, waypoint, AuthorizationPolicies, PeerAuthentication, NetworkPolicies, non-private ConfigMaps | all `kubernetes_secret_v1`, `random_password`, `tls_private_key`, `aws_ssm_parameter` |
-| `terraform/coach`: Deployments, Services, ServiceAccounts, mesh and network policies | PVCs, which Argo must never prune |
-| `terraform/k8s/network`: HTTPRoutes, SnippetsFilters, cloudflared Deployment | namespaces, Authentik (`authentik_*`), platform Helm releases (Istio, CNPG, Dapr, Authentik, gateway, ARC), monitoring stack, ECR refresher CronJob, `kubernetes_job_v1.litellm_keys` |
-| | any ConfigMap or manifest that embeds a private value through a channel other than the four in A3 |
+| Moves to Git manifests (Argo)                                                                                                                             | Stays in Terraform                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `terraform/k8s/app`: Deployments, Services, ServiceAccounts, waypoint, AuthorizationPolicies, PeerAuthentication, NetworkPolicies, non-private ConfigMaps | all `kubernetes_secret_v1`, `random_password`, `tls_private_key`, `aws_ssm_parameter`                                                                                                 |
+| `terraform/coach`: Deployments, Services, ServiceAccounts, mesh and network policies                                                                      | PVCs, which Argo must never prune                                                                                                                                                     |
+| `terraform/k8s/network`: HTTPRoutes, SnippetsFilters, cloudflared Deployment                                                                              | namespaces, Authentik (`authentik_*`), platform Helm releases (Istio, CNPG, Dapr, Authentik, gateway, ARC), monitoring stack, ECR refresher CronJob, `kubernetes_job_v1.litellm_keys` |
+|                                                                                                                                                           | any ConfigMap or manifest that embeds a private value through a channel other than the four in A3                                                                                     |
 
 The Git layout mirrors the stacks. Every folder has a `kustomization.yaml` that lists its resource files.
 
@@ -64,17 +72,18 @@ deploy/argocd/
 
 Manifests mark where a private value goes. Terraform scans these markers. It does **not** keep a separate list of targets.
 
-| Marker in Git | Terraform injects |
-|---|---|
-| Container `image: if-powerlifting-sessions` (bare ECR repository name, regex `^if-[a-z0-9-]+$`) | Patch to `<account>.dkr.ecr.<region>.amazonaws.com/if-powerlifting-sessions:latest`, plus one ImageUpdater entry |
-| Env value `nolift:private:<key>`, where `<key>` is one of `app_domain`, `auth_domain`, `llm_domain`, `region`, `dataset_bucket`, `reference_bucket`, `discord_operator_id`, … | Strategic-merge patch setting that env var's real value. Args that need the value use Kubernetes `$(VAR)` expansion, e.g. `--redirect-url=https://$(APP_DOMAIN)/oauth2/callback` |
-| Pod label `nolift.io/aws-workload: "true"` | Env patch with today's `module.workload_aws` output: `AWS_ROLE_ARN=arn:aws:iam::<acct>:role/nolift-<serviceAccountName>`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_REGION`, … The token volume stays in Git. |
-| Annotation `nolift.io/home-node: "true"` (pl-coach) | `nodeSelector: {kubernetes.io/hostname: <node_name>}` |
-| HTTPRoute annotation `nolift.io/hostname: app\|auth\|llm\|argocd` | JSON patch `replace /spec/hostnames` |
+| Marker in Git                                                                                                                                                                 | Terraform injects                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Container `image: if-powerlifting-sessions` (bare ECR repository name, regex `^if-[a-z0-9-]+$`)                                                                               | Patch to `<account>.dkr.ecr.<region>.amazonaws.com/if-powerlifting-sessions:latest`, plus one ImageUpdater entry                                                                                        |
+| Env value `nolift:private:<key>`, where `<key>` is one of `app_domain`, `auth_domain`, `llm_domain`, `region`, `dataset_bucket`, `reference_bucket`, `discord_operator_id`, … | Strategic-merge patch setting that env var's real value. Args that need the value use Kubernetes `$(VAR)` expansion, e.g. `--redirect-url=https://$(APP_DOMAIN)/oauth2/callback`                        |
+| Pod label `nolift.io/aws-workload: "true"`                                                                                                                                    | Env patch with today's `module.workload_aws` output: `AWS_ROLE_ARN=arn:aws:iam::<acct>:role/nolift-<serviceAccountName>`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_REGION`, … The token volume stays in Git. |
+| Annotation `nolift.io/home-node: "true"` (pl-coach)                                                                                                                           | `nodeSelector: {kubernetes.io/hostname: <node_name>}`                                                                                                                                                   |
+| HTTPRoute annotation `nolift.io/hostname: app\|auth\|llm\|argocd`                                                                                                             | JSON patch `replace /spec/hostnames`                                                                                                                                                                    |
 
 ### A3. Terraform stack `terraform/k8s/argocd`
 
 This is a new state (`powerlifting-app/k8s/argocd.tfstate`), applied by the in-cluster runner after `app`. Split it into these files:
+
 - `install.tf`
 - `sso.tf`
 - `manifests.tf` (scan)
@@ -84,6 +93,7 @@ This is a new state (`powerlifting-app/k8s/argocd.tfstate`), applied by the in-c
 - `variables.tf`
 
 **Install (`install.tf`):**
+
 - `helm_release.argocd`
   - argo-cd chart, release `argocd`, namespace `argocd`, pinned chart version. This adopts the existing CRDs.
   - Images: `quay.io/argoproj/argocd`. Redis comes from `public.ecr.aws/docker/library/redis`; override the chart if its default points elsewhere (no Docker Hub).
@@ -95,15 +105,16 @@ This is a new state (`powerlifting-app/k8s/argocd.tfstate`), applied by the in-c
   - Registry config (in-cluster only):
     ```yaml
     registries:
-    - name: ecr
-      api_url: https://<acct>.dkr.ecr.<region>.amazonaws.com
-      prefix: <acct>.dkr.ecr.<region>.amazonaws.com
-      credentials: pullsecret:powerlifting/ecr-registry
-      credsexpire: 5h
+      - name: ecr
+        api_url: https://<acct>.dkr.ecr.<region>.amazonaws.com
+        prefix: <acct>.dkr.ecr.<region>.amazonaws.com
+        credentials: pullsecret:powerlifting/ecr-registry
+        credsexpire: 5h
     ```
   - This reuses the existing `ecr-token-refresher` Secret, which is refreshed every 6h and valid for 12h. Add a Role and RoleBinding letting the updater's ServiceAccount `get` that one Secret.
 
 **Manifest scan (`manifests.tf`):**
+
 ```hcl
 locals {
   argocd_apps = toset(["app", "coach", "network"])
@@ -115,12 +126,15 @@ locals {
   ]) }
 }
 ```
+
 From `local.docs` derive per app:
+
 - `workloads`: Deployments with container names, images, env placeholders and markers
 - `routes`
 - `ecr_repos`: the distinct bare image names
 
 A `precondition` fails the plan when:
+
 - a placeholder key is missing from `local.private_values`, or
 - a `nolift.io/aws-workload` pod has no matching `data.aws_iam_role` (the role name is `nolift-<sa>`, already created by the AWS root).
 
@@ -144,9 +158,11 @@ image_patches = [for w in local.workloads[app] : {
   })
 }]
 ```
+
 `module.workload_aws` is moved here from `app/workload_identity.tf` unchanged.
 
 **Applications (`applications.tf`):**
+
 - One `kubectl_manifest` per app, with `server_side_apply = true` and `field_manager = "terraform"`. Terraform therefore **never owns** `spec.source.kustomize.images`, which Image Updater writes.
 - AppProject `nolift`: source repo is the public repo only, destination namespace `powerlifting`, no cluster-scoped resources.
 
@@ -172,6 +188,7 @@ spec:
 Kustomize runs `patches` before `images`. So the Terraform image patch (`<ecr>/repo:latest`) is a valid fallback, and Image Updater's override pins the digest. A missing override never renders a Docker Hub name.
 
 **Image Updater (`image_updater.tf`):** one `ImageUpdater` per app, generated from `ecr_repos`. Each repository appears once, even when several Deployments share it (e.g. `if-powerlifting-fns`).
+
 ```yaml
 apiVersion: argocd-image-updater.argoproj.io/v1alpha1
 kind: ImageUpdater
@@ -179,15 +196,17 @@ metadata: { name: nolift-app, namespace: argocd }
 spec:
   writeBackConfig: { method: argocd }
   applicationRefs:
-  - namePattern: nolift-app
-    images:
-    - alias: powerlifting-sessions
-      imageName: <ecr>/if-powerlifting-sessions:latest
-      commonUpdateSettings: { updateStrategy: digest }
-      manifestTargets: { kustomize: { name: <ecr>/if-powerlifting-sessions } }
+    - namePattern: nolift-app
+      images:
+        - alias: powerlifting-sessions
+          imageName: <ecr>/if-powerlifting-sessions:latest
+          commonUpdateSettings: { updateStrategy: digest }
+          manifestTargets:
+            { kustomize: { name: <ecr>/if-powerlifting-sessions } }
 ```
 
 **SSO (`sso.tf` plus `core` and `network`):**
+
 - **Authentik client.** `authentik_provider_oauth2.argocd` and `authentik_application.argocd` copy the shape of `core/litellm_identity.tf`. Redirect: `https://${var.argocd_domain}/auth/callback`. Add a group `argocd-admins` with members from `var.argocd_admins`, like `litellm_admins`.
 - **Argo config.**
   - `configs.cm."oidc.config"` points at `https://${var.auth_domain}/application/o/argocd/`, client `nolift-argocd`, `requestedScopes: [openid, profile, email, groups]`.
@@ -202,6 +221,7 @@ spec:
 ### A4. Handoff from Terraform to Argo with no restarts
 
 Run as **PR 1**, inside the normal pipeline, with `argocd_auto_sync = false`.
+
 1. Apply the `argocd` stack. Argo, Image Updater, the Applications (manual sync) and the ImageUpdaters now exist.
 2. `scripts/argocd_handoff.sh` (pipeline step, idempotent) seeds images:
    - For each Application whose `spec.source.kustomize.images` is empty, read each live Deployment's current `repo@sha256` image.
@@ -230,6 +250,7 @@ The Personal plan includes 6 users and 50 tagged devices. Ephemeral nodes are me
 **One-time account input** (the only operator action, like the Cloudflare token): a Tailscale OAuth client with scopes `policy_file`, `oauth_keys`, `auth_keys`, `devices:core`, `dns`, stored as CI secrets `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_CLIENT_SECRET`.
 
 Terraform provider `tailscale/tailscale` (~> 0.30), in the new k8s stack `terraform/k8s/nodes`:
+
 - `tailscale_acl.policy`
   - If the tailnet already has a policy, the pipeline imports it once, idempotently: `terraform state list | grep -q tailscale_acl.policy || terraform import tailscale_acl.policy acl`. Its existing rules are carried into the HCL.
   - Adds `tagOwners` for `tag:k3s-server` and `tag:k3s-worker`.
@@ -248,6 +269,7 @@ Terraform provider `tailscale/tailscale` (~> 0.30), in the new k8s stack `terraf
 Use the existing host-mutation pattern: a system-upgrade-controller `Plan`, like `scripts/k3s-workload-identity-plan.sh` and `-host.sh`, but rendered by Terraform in the `nodes` stack. Its node selector is the control-plane label, so no hostname appears in Git. Use a `public.ecr.aws/docker/library/alpine` image.
 
 The host script `scripts/k3s-tailnet-host.sh`, running under chroot `/host`:
+
 1. Install Tailscale from its apt repo if missing. Run `tailscale up --auth-key=$KEY?preauthorized=true --advertise-tags=tag:k3s-server --hostname=nolift-k3s-server --port=41641`, then `tailscale set --auto-update=false`.
 2. Back up `config.yaml.d/`. Write `zzzz-nolift-tailnet.yaml`, which sets the node IP to the Tailscale address so the API advertise address, kubelet and flannel all move to the tailnet. Every value is computed when the script runs; none is in Git:
    ```yaml
@@ -265,6 +287,7 @@ The host script `scripts/k3s-tailnet-host.sh`, running under chroot `/host`:
 Pods keep running across a k3s restart, because containerd is untouched. Pod MTU becomes about 1230 (1280 − 50 VXLAN) for pods created afterwards.
 
 The `nodes` stack also writes these SSM parameters, so the AWS side never needs cluster values:
+
 - `/nolift/k3s/server-url` = `https://nolift-k3s-server:6443`
 - `/nolift/k3s/version` = the server's `kubeletVersion`, read from the node
 - `/nolift/k3s/agent-token` (SecureString). This is a bootstrap token:
@@ -274,19 +297,20 @@ The `nodes` stack also writes these SSM parameters, so the AWS side never needs 
 
 ### B3. AWS module `terraform/modules/k3s_workers` (AWS root, applied by CI)
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `workers_enabled` | `false` | Master switch for the whole module (`count`) |
-| `worker_vpc_cidr` | `10.60.0.0/16` | Validated not to overlap 10.42/16 (pods), 10.43/16 (services), `var.home_lan_cidr` (private tfvars, no default), 100.64/10 (tailnet) |
-| `worker_azs` | `["ca-central-1a","ca-central-1b","ca-central-1d"]` | One public /24 per AZ |
-| `worker_min` / `worker_desired` / `worker_max` | `0 / 0 / 3` | Validated `min ≤ desired ≤ max` |
-| `worker_instance_types` | `["m6a.large","m6i.large","m5a.large","m5.large","m7a.large","m7i.large"]` | 2 vCPU / 8 GiB amd64; the images are amd64 |
-| `worker_ami_ssm_parameter` | `/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id` | Ubuntu 24.04, same as the server |
-| `worker_root_volume_gib` | `40` | Encrypted gp3 |
-| `worker_spot_max_price` | `null` | `null` means pay up to the on-demand price |
-| `allow_tailscale_direct` | `true` | Inbound UDP 41641 from `0.0.0.0/0`, for direct WireGuard instead of a relay |
+| Variable                                       | Default                                                                              | Purpose                                                                                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `workers_enabled`                              | `false`                                                                              | Master switch for the whole module (`count`)                                                                                         |
+| `worker_vpc_cidr`                              | `10.60.0.0/16`                                                                       | Validated not to overlap 10.42/16 (pods), 10.43/16 (services), `var.home_lan_cidr` (private tfvars, no default), 100.64/10 (tailnet) |
+| `worker_azs`                                   | `["ca-central-1a","ca-central-1b","ca-central-1d"]`                                  | One public /24 per AZ                                                                                                                |
+| `worker_min` / `worker_desired` / `worker_max` | `0 / 0 / 3`                                                                          | Validated `min ≤ desired ≤ max`                                                                                                      |
+| `worker_instance_types`                        | `["m6a.large","m6i.large","m5a.large","m5.large","m7a.large","m7i.large"]`           | 2 vCPU / 8 GiB amd64; the images are amd64                                                                                           |
+| `worker_ami_ssm_parameter`                     | `/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id` | Ubuntu 24.04, same as the server                                                                                                     |
+| `worker_root_volume_gib`                       | `40`                                                                                 | Encrypted gp3                                                                                                                        |
+| `worker_spot_max_price`                        | `null`                                                                               | `null` means pay up to the on-demand price                                                                                           |
+| `allow_tailscale_direct`                       | `true`                                                                               | Inbound UDP 41641 from `0.0.0.0/0`, for direct WireGuard instead of a relay                                                          |
 
 **Resources:**
+
 - **Network.**
   - VPC, Internet Gateway, public subnets with `map_public_ip_on_launch`, and a route table.
   - A free S3 gateway endpoint, since ECR layers come from S3.
@@ -307,6 +331,7 @@ The `nodes` stack also writes these SSM parameters, so the AWS side never needs 
 - **Interruption events.** SQS queue plus EventBridge rules (Spot interruption, rebalance recommendation, ASG lifecycle, instance state-change) for node-termination-handler (NTH).
 
 **`worker-init.sh.tftpl` at boot:**
+
 1. Read the four `/nolift/k3s/*` parameters with the instance role. Retry for up to 20 min, so a desired count above 0 before the `nodes` stack exists does not fail-loop.
 2. Install Tailscale and run `tailscale up --auth-key=… --advertise-tags=tag:k3s-worker --hostname=nolift-k3s-<instance-id> --port=41641`. Add the same `ExecStartPost` drop-in pointing at `k3s-agent`.
 3. Write `/etc/rancher/k3s/config.yaml`, then install k3s with `INSTALL_K3S_VERSION=$(version) INSTALL_K3S_EXEC=agent` from get.k3s.io:
@@ -334,7 +359,7 @@ The `nodes` stack also writes these SSM parameters, so the AWS side never needs 
   - Do the same for `node_exporter`, `cadvisor` and `promtail` in `core`.
 - **Scheduling policy.** Workers are tainted, so nothing moves unless it opts in.
   - Stateful pods cannot move: local-path PV node affinity keeps the 14 PVC-backed pods home, and pl-coach is pinned.
-  - Opt-in happens in Git: a toleration plus a *preferred* node affinity for `nolift.io/pool=aws-spot`. Pods run on Spot when capacity exists and fall back home at desired = 0.
+  - Opt-in happens in Git: a toleration plus a _preferred_ node affinity for `nolift.io/pool=aws-spot`. Pods run on Spot when capacity exists and fall back home at desired = 0.
   - First candidates: `pl-rankings`, `pl-analytics`, `pl-analytics-ai`, `pl-analytics-export`, `pl-export`, and the ARC runner scale set.
   - Authentik, the CNPG databases, valkey, litellm and the gateway stay home, because they are chatty with home-node state.
 
@@ -346,6 +371,7 @@ The `nodes` stack also writes these SSM parameters, so the AWS side never needs 
 4. **PR 5:** add opt-in tolerations to the candidate manifests in `deploy/argocd`. Raise the count when needed.
 
 **Approximate cost per worker** (ca-central-1; check the AWS pricing pages):
+
 - m6a.large Spot ≈ $25/mo
 - public IPv4 $3.65/mo
 - 40 GiB gp3 ≈ $3.50/mo
@@ -358,6 +384,7 @@ Tailscale is $0.
 ## Part C — Pipeline (`.github/workflows/build-images.yml`)
 
 ### C1. Changes
+
 - **Builds are unchanged.** Master pushes publish `latest`; branch pushes publish `branch-*`.
 - **No Terraform for code pushes.** `kubernetes-apply` no longer depends on the build jobs. It runs only when the `kubernetes` filter matches (add `deploy/argocd/**`), and **only on master**. PR branches no longer deploy to the live cluster. That is a behavior change, and it follows from "Argo points to master".
 - **Stack order** becomes `core perms network mesh app argocd nodes`, then Coach. The `argocd` and `nodes` states use the same `-backend-config` loop.
@@ -371,6 +398,7 @@ Tailscale is $0.
 - **Leave `pull-requests.yml` alone.**
 
 ### C2. Resulting flow
+
 ```
 push master (src/**) → GitHub-hosted build → ECR :latest digest changes → Image Updater (≤2 min poll)
                      → writes Application kustomize.images → Argo renders master + Terraform patches → rollout
@@ -385,6 +413,7 @@ push master (terraform/k8s/** or deploy/argocd/**) → in-cluster runner applies
 Every check runs in the pipeline or is read-only. No full test suites.
 
 **Argo and mutations**
+
 - **Render check** (pipeline, before sync): `argocd app manifests nolift-<app> --core --source live`. Fail on any of these in the output:
   - `nolift:private:`
   - a bare `image: if-`
@@ -397,6 +426,7 @@ Every check runs in the pipeline or is read-only. No full test suites.
 - **App OIDC unchanged:** `node scripts/test-auth-session.mjs`, then `node scripts/test-live-api.mjs`, and the existing `scripts/verify_workload_identity.py` step.
 
 **Workers** (with `worker_desired = 1`)
+
 - **Join:** `kubectl get nodes -o wide` shows the worker `Ready` with a 100.x InternalIP and the `aws-spot` taint. `tailscale ping nolift-k3s-<id>` reports a direct connection, not a relay.
 - **Networking:** start a disposable `public.ecr.aws/docker/library/busybox` pod tolerating the taint and pinned to the worker. Check:
   - DNS works (`nslookup kubernetes.default`)
@@ -416,6 +446,7 @@ Every check runs in the pipeline or is read-only. No full test suites.
 - **Server rollback path:** for a dry run, run the Plan with a forced `/readyz` failure flag. The backup config is restored and the API returns.
 
 ## Critical files
+
 - **New:**
   - `deploy/argocd/{app,coach,network}/*`
   - `terraform/k8s/argocd/*`, `terraform/k8s/nodes/*`

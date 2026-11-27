@@ -327,19 +327,18 @@ grants console access through the `argocd-admins` group. The master environment
 supplies `ARGOCD_DOMAIN`. Its `K8S_TFVARS` contains the matching
 `argocd_domain` and the Authentik usernames in `argocd_admins`.
 
-During adoption the pipeline keeps sync manual and pauses Image Updater. It
-seeds digests from live Deployments, compares server-side dry runs, then
-checks Deployment specs, pod UIDs and restart counts after sync. Terraform
-releases each object only after its UID and Argo tracking ID match. The
-namespaced handoff record retains import addresses for rollback. The first
-successful run completes this phase even when automatic sync was requested.
+The promoted Applications use automatic sync and digest-based image updates.
+The deployment pipeline verifies rendered manifests and Application health after
+Terraform refreshes their private patches.
 
-The run after the handoff moves OAuth2 Proxy to its existing cookie key in its
-Secret and expands the redirect domain in its arguments. This rolls the proxy
-once. The handoff itself preserves the running template and keeps the key out
-of Git and the Application spec. On a later infrastructure release,
-`argocd_auto_sync = true` enables pruning, self-healing and two-minute image
-polling.
+The home node and public EC2 Spot workers communicate over Tailscale. Workers
+use a restricted instance role for bootstrap; pod AWS access uses the existing
+projected workload identity. Spot workers are tainted, so existing workloads
+remain on the home node unless explicitly configured otherwise. Argo manages
+the termination handler, which drains workers on interruption or scale-in, and
+a CronJob that removes stale worker records. Terraform keeps the desired worker
+count at zero by default.
+
 [ADR 0011](adr/0011-argocd-mutation-injection-and-spot-workers.md)
 
 ### Mesh, monitoring and deployment
@@ -390,14 +389,14 @@ has its own state. The Git manifests live alongside those stacks.
 | `terraform/k8s/perms` | Kubernetes service accounts and RBAC |
 | `terraform/k8s/network` | NGINX Gateway, Gateway API and tunnel credential checksum |
 | `terraform/k8s/argocd` | Argo CD, Authentik SSO settings, ECR Image Updater and Application patches |
+| `terraform/k8s/nodes` | Tailscale, k3s bootstrap parameters and generated credentials |
+| `deploy/argocd/nodes` | Worker termination handler and reaper CronJob |
 | `deploy/argocd/{app,coach,network}` | Namespaced workloads, workload policies, waypoint and HTTP routes |
 | `terraform/k8s/mesh` | Istio control plane, CNI and ztunnel |
 | `terraform/k8s/app` | Application secrets, private configuration, persistent volumes, registry refresh and LiteLLM key registration |
 | `terraform/coach` | Coach credentials and persistent state |
 
-The in-cluster runner applies the core, permissions, network, mesh and app
-stacks in order. The same job applies the separate Coach state when a Coach
-image builds successfully or the workflow selects Kubernetes changes.
+The in-cluster runner applies the platform, Argo CD, node and Coach states through the deployment pipeline.
 
 ## Analysis page: the four computation paths
 

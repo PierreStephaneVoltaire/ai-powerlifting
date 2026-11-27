@@ -365,6 +365,11 @@ publishes these documents and configures the issuer before rolling out workloads
 See [AWS workload identity](docs/ARCHITECTURE.md#aws-workload-identity)
 and [ADR 0010](docs/adr/0010-aws-workload-identity-and-network-hardening.md).
 
+Optional public EC2 Spot workers join the k3s cluster over Tailscale. They are
+tainted so workloads remain on the home node unless explicitly opted in.
+Worker interruption handling drains nodes before termination. See
+[ADR 0011](docs/adr/0011-argocd-mutation-injection-and-spot-workers.md).
+
 CI provisions AWS, Cloudflare and the cluster platform. Argo CD tracks the
 portal, Coach and gateway manifests on `master`. Terraform injects the
 deployment-specific values into three Argo Applications. After the initial
