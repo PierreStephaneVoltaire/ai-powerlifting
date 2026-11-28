@@ -32,7 +32,7 @@ spec:
         - name: PROMPT_CACHE_URL
           value: http://pl-prompt-cache-api.powerlifting.svc.cluster.local:8000
         - name: IF_API_URL
-          value: http://pl-coach.powerlifting.svc.cluster.local:8000
+          value: http://pl-assistant.powerlifting.svc.cluster.local:8000
         - name: ANALYTICS_GRPC_URL
           value: pl-analytics.powerlifting.svc.cluster.local:50051
         - name: EXPORT_GRPC_URL

@@ -27,19 +27,28 @@ func (d *Deps) ModelCall(ctx context.Context, in ModelCallInput) (ModelCallOutpu
 }
 
 func (d *Deps) modelCall(ctx context.Context, in ModelCallInput) (llm.ChatResponse, error) {
+	request := llm.ChatRequest{Model: in.Model, Meta: in.Meta, Messages: in.Messages, Tools: in.Tools, MaxTokens: in.MaxTokens}
+	if in.Meta.TurnID == "" || d.Store == nil {
+		return d.Chat(ctx, request)
+	}
 	release, err := d.acquire(ctx)
 	if err != nil {
 		return llm.ChatResponse{}, err
 	}
 	defer release()
-	request := llm.ChatRequest{Model: in.Model, Meta: in.Meta, Messages: in.Messages, Tools: in.Tools, MaxTokens: in.MaxTokens}
-	if in.Meta.TurnID == "" || d.Store == nil {
-		return d.LLM.Chat(ctx, request)
-	}
 	stream := newProgressStream(ctx, d.Store, in.Meta.TurnID, in.Meta.Role+" · "+in.Model)
 	response, err := d.LLM.ChatStream(ctx, request, stream.Add)
 	stream.Flush()
 	return response, err
+}
+
+func (d *Deps) Chat(ctx context.Context, request llm.ChatRequest) (llm.ChatResponse, error) {
+	release, err := d.acquire(ctx)
+	if err != nil {
+		return llm.ChatResponse{}, err
+	}
+	defer release()
+	return d.LLM.Chat(ctx, request)
 }
 
 func (d *Deps) ListTools(ctx context.Context, in ListToolsInput) (ListToolsOutput, error) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"powerlifting/assistant/internal/activities"
 	"powerlifting/assistant/internal/audit"
 	"powerlifting/assistant/internal/config"
+	"powerlifting/assistant/internal/domainjobs"
 	"powerlifting/assistant/internal/httpapi"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/reference"
@@ -65,6 +67,39 @@ func referenceClient(cfg config.Config) *llm.Client {
 		return nil
 	}
 	return llm.New(cfg.ReferenceLiteLLMURL, cfg.ReferenceLiteLLMKey)
+}
+
+func loadDomainJobs(ctx context.Context, cfg config.Config, d *activities.Deps) (*domainjobs.Service, error) {
+	modelConfig := os.Getenv("PL_DOMAIN_OPERATION_AI")
+	catalog, models, err := domainjobs.LoadCatalog("/operations", "/permissions.json", modelConfig)
+	if err != nil {
+		return nil, err
+	}
+	jobs := &domainjobs.Service{
+		Store: d.Store, Access: d.Access, Catalog: catalog, Models: models, Chat: d.Chat,
+		HTTP: &http.Client{Timeout: time.Minute}, ServiceURL: os.Getenv("PL_SERVICE_URL_TEMPLATE"),
+	}
+	if jobs.ServiceURL == "" {
+		jobs.ServiceURL = "http://pl-{domain}:8000"
+	}
+	if bucket := os.Getenv("PL_DOMAIN_LIFETIME_BUCKET"); bucket != "" {
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
+		if err != nil {
+			return nil, err
+		}
+		client := s3.NewFromConfig(awsCfg)
+		jobs.Lifetime = func(ctx context.Context, athlete string) (string, error) {
+			key := "lifetime/" + athlete + "/latest.md"
+			object, err := client.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &key})
+			if err != nil {
+				return "", err
+			}
+			defer object.Body.Close()
+			body, err := io.ReadAll(object.Body)
+			return string(body), err
+		}
+	}
+	return jobs, nil
 }
 
 func run(cfg config.Config, log *slog.Logger) error {
@@ -129,6 +164,10 @@ func run(cfg config.Config, log *slog.Logger) error {
 		MCP:    tools.NewMCPClient(cfg.MCPURL, cfg.LiteLLMAPIKey, cfg.MCPAliases, cfg.MCPSeparator),
 		Signer: signer, Log: log, Slots: make(chan struct{}, cfg.MaxConcurrency), Now: time.Now,
 	}
+	deps.DomainJobs, err = loadDomainJobs(ctx, cfg, deps)
+	if err != nil {
+		return err
+	}
 
 	registry := dw.NewRegistry()
 	if err := activities.Register(registry, deps); err != nil {
@@ -146,7 +185,7 @@ func run(cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 
-	api := &httpapi.Server{Store: db, Access: resolver, Audit: recorder, Engine: engine, Log: log, AllowedCallers: cfg.AllowedCallers, Now: time.Now}
+	api := &httpapi.Server{Store: db, Access: resolver, Audit: recorder, Engine: engine, DomainJobs: deps.DomainJobs, Log: log, AllowedCallers: cfg.AllowedCallers, Now: time.Now}
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	failures := make(chan error, 1)
 	go func() { failures <- server.ListenAndServe() }()

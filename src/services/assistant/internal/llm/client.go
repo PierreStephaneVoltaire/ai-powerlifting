@@ -27,10 +27,11 @@ type ToolCall struct {
 }
 
 type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role             string          `json:"role"`
+	Content          string          `json:"content"`
+	ToolCalls        []ToolCall      `json:"tool_calls,omitempty"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
+	ReasoningDetails json.RawMessage `json:"reasoning_details,omitempty"`
 }
 
 type FunctionDef struct {
@@ -105,11 +106,12 @@ type ChatRequest struct {
 }
 
 type ChatResponse struct {
-	Content          string     `json:"content"`
-	ToolCalls        []ToolCall `json:"tool_calls"`
-	FinishReason     string     `json:"finish_reason"`
-	PromptTokens     int        `json:"prompt_tokens"`
-	CompletionTokens int        `json:"completion_tokens"`
+	Content          string          `json:"content"`
+	ToolCalls        []ToolCall      `json:"tool_calls"`
+	FinishReason     string          `json:"finish_reason"`
+	PromptTokens     int             `json:"prompt_tokens"`
+	CompletionTokens int             `json:"completion_tokens"`
+	ReasoningDetails json.RawMessage `json:"-"`
 }
 
 type Client struct {
@@ -194,6 +196,7 @@ func (c *Client) Chat(ctx context.Context, request ChatRequest) (ChatResponse, e
 		FinishReason:     choice.FinishReason,
 		PromptTokens:     payload.Usage.PromptTokens,
 		CompletionTokens: payload.Usage.CompletionTokens,
+		ReasoningDetails: choice.Message.ReasoningDetails,
 	}, nil
 }
 

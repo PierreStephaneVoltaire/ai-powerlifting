@@ -177,6 +177,9 @@ func (s *Server) ownTurn(w http.ResponseWriter, r *http.Request) (store.Turn, bo
 
 func (s *Server) job(result bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s.domainJob(w, r, result, false) {
+			return
+		}
 		turn, ok := s.ownTurn(w, r)
 		if !ok {
 			return
@@ -191,6 +194,9 @@ func (s *Server) job(result bool) http.HandlerFunc {
 }
 
 func (s *Server) cancel(w http.ResponseWriter, r *http.Request) {
+	if s.domainJob(w, r, false, true) {
+		return
+	}
 	turn, ok := s.ownTurn(w, r)
 	if !ok {
 		return

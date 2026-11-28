@@ -27,7 +27,7 @@ resource "kubectl_manifest" "nodes_application" {
     spec = {
       project     = "nolift-nodes"
       destination = { server = "https://kubernetes.default.svc", namespace = "kube-system" }
-      source      = { repoURL = local.repo, targetRevision = "master", path = "deploy/argocd/nodes" }
+      source      = { repoURL = local.repo, targetRevision = var.argocd_target_revision, path = "deploy/argocd/nodes" }
       syncPolicy  = { automated = { prune = true, selfHeal = true }, syncOptions = ["ServerSideApply=true", "PruneLast=true", "FailOnSharedResource=true"] }
     }
   })

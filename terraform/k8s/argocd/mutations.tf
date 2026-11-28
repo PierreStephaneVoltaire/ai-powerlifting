@@ -6,13 +6,10 @@ locals {
     llm_domain             = var.llm_domain
     region                 = var.region
     dataset_bucket         = var.dataset_bucket
-    coach_dataset_bucket   = var.coach_inputs.dataset_bucket
     reference_bucket       = "powerlifting-reference-documents-${data.aws_caller_identity.current.account_id}-${var.region}"
     discord_operator_id    = var.coach_inputs.discord_operator_id
     operator_person        = var.coach_inputs.operator_person
     discord_persons        = var.coach_inputs.discord_persons
-    coach_providers        = var.coach_inputs.coach_providers
-    operation_ai           = var.coach_inputs.operation_ai
     job_token_public_key   = var.app_inputs.job_token_public_key
     mcp_aliases            = var.app_inputs.mcp_aliases
     llm_url                = "https://${var.llm_domain}"
@@ -32,14 +29,13 @@ locals {
         apiVersion = "apps/v1"
         kind       = "Deployment"
         metadata   = { name = w.name }
-        spec = merge(w.home ? { replicas = var.coach_inputs.replicas } : {}, {
+        spec = {
           template = {
             metadata = merge(
               w.aws ? { labels = { "nolift.io/aws-workload" = null } } : {},
               length(w.annotations) > 0 ? { annotations = { for k, v in w.annotations : k => local.private_values[v] } } : {}
             )
             spec = merge(
-              w.home ? { nodeSelector = { "kubernetes.io/hostname" = var.coach_inputs.node_name } } : {},
               w.coach ? { imagePullSecrets = [{ "$patch" = "replace" }, { name = var.coach_inputs.image_pull_secret }] } : {},
               { containers = [for c in w.containers : merge(
                 { name = c.name },
@@ -55,9 +51,9 @@ locals {
               )] }
             )
           }
-        })
+        }
       })
-    } if w.aws || w.home || w.coach || length(w.annotations) > 0 || anytrue([for c in w.containers : can(regex(local.ecr_pattern, c.image)) || startswith(c.image, local.marker) || length(c.private_env) > 0])
+    } if w.aws || w.coach || length(w.annotations) > 0 || anytrue([for c in w.containers : can(regex(local.ecr_pattern, c.image)) || startswith(c.image, local.marker) || length(c.private_env) > 0])
   ] }
 
   route_patches = { for app, routes in local.routes : app => [

@@ -58,7 +58,7 @@ func run() error {
 	svc := &service.Service{
 		Registry:   registry,
 		Access:     auth.ProfileClient{URL: strings.TrimRight(env("PL_PROFILE_URL", "http://pl-profile:8000"), "/"), HTTP: httpClient},
-		Coach:      coach.HTTP{URL: env("IF_API_URL", "http://pl-coach:8000"), Client: httpClient},
+		Coach:      coach.HTTP{URL: env("IF_API_URL", "http://pl-assistant:8000"), Client: httpClient},
 		Executions: execution.New(cache.Prompts{Versions: versions, URL: env("PROMPT_CACHE_URL", "http://pl-prompt-cache-api:8000"), HTTP: httpClient}),
 		Handlers: map[string]func(context.Context, map[string]any, execution.Inferer) (any, error){
 			"program_update_lift_profiles":   programs.Update,

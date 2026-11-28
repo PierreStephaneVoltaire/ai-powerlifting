@@ -19,7 +19,6 @@ locals {
       name        = d.metadata.name
       sa          = try(d.spec.template.spec.serviceAccountName, "default")
       aws         = try(d.spec.template.metadata.labels["nolift.io/aws-workload"] == "true", false)
-      home        = try(d.metadata.annotations["nolift.io/home-node"] == "true", false)
       coach       = try(d.metadata.annotations["nolift.io/coach-settings"] == "true", false)
       annotations = { for key, value in try(d.spec.template.metadata.annotations, {}) : key => trimprefix(value, local.marker) if startswith(value, local.marker) }
       containers = [for c in d.spec.template.spec.containers : {

@@ -39,6 +39,9 @@ func validateTurn(request TurnRequest) error {
 		return errors.New("messages must hold between 1 and 40 entries")
 	}
 	for _, message := range request.Messages {
+		if len(message.ReasoningDetails) != 0 {
+			return errors.New("messages cannot contain model reasoning details")
+		}
 		if message.Role != "user" && message.Role != "assistant" {
 			return errors.New("message roles must be user or assistant")
 		}

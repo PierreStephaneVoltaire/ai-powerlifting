@@ -33,7 +33,7 @@ build {
   sources = ["source.docker.powerlifting_assistant"]
 
   provisioner "shell" {
-    inline = ["apk add --no-cache tzdata"]
+    inline = ["apk add --no-cache tzdata", "mkdir -p /operations"]
   }
 
   provisioner "shell-local" {
@@ -47,6 +47,16 @@ build {
     generated   = true
     source      = ".build/assistant/pl-assistant"
     destination = "/pl-assistant"
+  }
+
+  provisioner "file" {
+    source      = "../src/services/operations/"
+    destination = "/operations/"
+  }
+
+  provisioner "file" {
+    source      = "../src/services/runtime/permissions.json"
+    destination = "/permissions.json"
   }
 
   post-processors {

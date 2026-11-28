@@ -1,42 +1,9 @@
 region                 = ""
-image_tag              = "latest"
 namespace              = ""
-node_name              = ""
 image_pull_secret      = ""
 
 discord_operator_id    = ""
 operator_person        = ""
 discord_persons        = {}
-coach_providers = {
-  chatgpt    = { auth = "chatgpt", max_concurrent = 0 }
-  openrouter = { auth = "api_key", base_url = "", max_concurrent = 0 }
-}
-coach_provider_api_keys = { openrouter = "" }
-operation_ai = {
-  block_correlation_analysis      = { provider = "", model = "", effort = "" }
-  block_program_evaluation        = { provider = "", model = "", effort = "" }
-  correlation_analysis            = { provider = "", model = "", effort = "" }
-  multi_block_comparison_analysis = { provider = "", model = "", effort = "" }
-  program_evaluation              = { provider = "", model = "", effort = "" }
-  template_evaluate               = { provider = "", model = "", effort = "" }
-  import_parse_file               = { provider = "chatgpt", model = "gpt-6-astra", effort = "high" }
-  lift_profile_suggest            = { provider = "", model = "", effort = "" }
-  lift_profile_estimate_stimulus  = { provider = "", model = "", effort = "" }
-  glossary_estimate_batch         = { provider = "litellm", model = "pl-light", effort = "high" }
-  muscle_group_estimate           = { provider = "", model = "", effort = "" }
-  fatigue_profile_estimate        = { provider = "", model = "", effort = "" }
-  glossary_generic_estimate       = { provider = "litellm", model = "pl-background", effort = "minimal" }
-}
-dataset_bucket = "<powerlifting-dataset-bucket-name>"
-coach_replicas = 1
-
-# LiteLLM cutover (after the one-time device login), replace the providers and AI models above:
-# coach_providers = {
-#   litellm = { auth = "api_key", base_url = "http://litellm.powerlifting.svc.cluster.local:4000/v1", max_concurrent = 4 }
-# }
-# operation_ai = {
-#   program_evaluation = { provider = "litellm", model = "<alias>", effort = "high" }
-# }
-
 network_policy_ingress_workloads = []
 network_policy_egress_workloads  = []

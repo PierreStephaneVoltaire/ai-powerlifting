@@ -100,6 +100,27 @@ spec:
           value: nolift:private:mcp_aliases
         - name: PL_PROFILE_URL
           value: http://pl-profile.powerlifting.svc.cluster.local:8000
+        - name: PL_DOMAIN_OPERATION_AI
+          value: >-
+            {
+              "block_correlation_analysis": {"model":"pl-analysis","effort":"medium"},
+              "block_program_evaluation": {"model":"pl-analysis","effort":"high"},
+              "correlation_analysis": {"model":"pl-analysis","effort":"medium"},
+              "fatigue_profile_estimate": {"model":"pl-light","effort":"low"},
+              "glossary_estimate_batch": {"model":"pl-light","effort":"high"},
+              "glossary_generic_estimate": {"model":"pl-background","effort":"minimal"},
+              "import_parse_file": {"model":"pl-documents","effort":"high"},
+              "lift_profile_estimate_stimulus": {"model":"pl-standard","effort":"high"},
+              "lift_profile_suggest": {"model":"pl-standard","effort":"medium"},
+              "multi_block_comparison_analysis": {"model":"pl-analysis","effort":"high"},
+              "muscle_group_estimate": {"model":"pl-light","effort":"low"},
+              "program_evaluation": {"model":"pl-analysis","effort":"high"},
+              "template_evaluate": {"model":"pl-analysis","effort":"high"}
+            }
+        - name: PL_DOMAIN_LIFETIME_BUCKET
+          value: nolift:private:dataset_bucket
+        - name: PL_SERVICE_URL_TEMPLATE
+          value: http://pl-{domain}.powerlifting.svc.cluster.local:8000
         - name: PL_JOB_TOKEN_PRIVATE_KEY
           valueFrom:
             secretKeyRef:

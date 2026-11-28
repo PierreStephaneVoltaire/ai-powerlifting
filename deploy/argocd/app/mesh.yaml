@@ -33,7 +33,6 @@ spec:
   - from:
     - source:
         principals:
-        - cluster.local/ns/powerlifting/sa/pl-coach
         - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/pl-litellm-keys
     to:
@@ -121,7 +120,7 @@ spec:
     - source:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/pl-analytics
         - cluster.local/ns/powerlifting/sa/pl-analytics-export
     to:
@@ -179,7 +178,7 @@ spec:
     - source:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/pl-analytics-ai
         - cluster.local/ns/powerlifting/sa/pl-analytics-export
         - cluster.local/ns/powerlifting/sa/pl-competition
@@ -277,6 +276,22 @@ spec:
     - operation:
         ports:
         - '8000'
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/powerlifting/sa/pl-analytics
+        - cluster.local/ns/powerlifting/sa/pl-analytics-ai
+        - cluster.local/ns/powerlifting/sa/pl-glossary
+        - cluster.local/ns/powerlifting/sa/pl-imports
+        - cluster.local/ns/powerlifting/sa/pl-lift-profiles
+        - cluster.local/ns/powerlifting/sa/pl-templates
+    to:
+    - operation:
+        paths:
+        - /v1/jobs
+        - /v1/jobs/*
+        ports:
+        - '8000'
   targetRefs:
   - group: ''
     kind: Service
@@ -337,7 +352,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -381,7 +396,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -425,7 +440,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
     to:
     - operation:
         ports:
@@ -495,7 +510,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -539,7 +554,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -583,7 +598,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -627,7 +642,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
     to:
     - operation:
         ports:
@@ -751,7 +766,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -795,7 +810,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/pl-export
         - cluster.local/ns/powerlifting/sa/litellm
     to:
@@ -840,7 +855,6 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
         - cluster.local/ns/powerlifting/sa/pl-rankings
         - cluster.local/ns/powerlifting/sa/pl-analytics-ai
         - cluster.local/ns/powerlifting/sa/pl-analytics-export
@@ -901,7 +915,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -1021,7 +1035,7 @@ spec:
   - from:
     - source:
         principals:
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/pl-prompt-cache-api
     to:
     - operation:
@@ -1046,7 +1060,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
     to:
     - operation:
         ports:
@@ -1089,7 +1103,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -1133,7 +1147,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:
@@ -1262,7 +1276,7 @@ spec:
         - cluster.local/ns/powerlifting/sa/pl-analytics-ai
         - cluster.local/ns/powerlifting/sa/pl-prompt-cache-api
         - cluster.local/ns/powerlifting/sa/pl-rankings
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/pl-calculations
         - cluster.local/ns/powerlifting/sa/pl-competition
         - cluster.local/ns/powerlifting/sa/pl-export
@@ -1301,7 +1315,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
     to:
     - operation:
         ports:
@@ -1344,7 +1358,7 @@ spec:
         principals:
         - cluster.local/ns/powerlifting/sa/powerlifting-app-backend
         - cluster.local/ns/powerlifting/sa/pl-analytics
-        - cluster.local/ns/powerlifting/sa/pl-coach
+        - cluster.local/ns/powerlifting/sa/pl-assistant
         - cluster.local/ns/powerlifting/sa/litellm
     to:
     - operation:

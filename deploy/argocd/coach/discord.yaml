@@ -27,8 +27,6 @@ spec:
       automountServiceAccountToken: false
       containers:
       - env:
-        - name: COACH_URL
-          value: http://pl-coach.powerlifting.svc.cluster.local:8000
         - name: ASSISTANT_URL
           value: http://pl-assistant.powerlifting.svc.cluster.local:8000
         - name: DISCORD_OPERATOR_ID

@@ -26,6 +26,10 @@ variable "namespace" {
   }
 }
 variable "argocd_domain" { type = string }
+variable "argocd_target_revision" {
+  type    = string
+  default = "master"
+}
 variable "auth_domain" { type = string }
 variable "app_domain" { type = string }
 variable "llm_domain" { type = string }
@@ -60,15 +64,10 @@ variable "app_inputs" {
 variable "coach_inputs" {
   sensitive = true
   type = object({
-    node_name           = string
     image_pull_secret   = string
-    replicas            = number
-    coach_providers     = string
-    operation_ai        = string
     discord_operator_id = string
     operator_person     = string
     discord_persons     = string
-    dataset_bucket      = string
     ingress             = set(string)
     egress              = set(string)
   })

@@ -44,6 +44,7 @@ locals {
     "pl-analytics-export"      = ["powerlifting-data-2b0f699b"]
     "pl-rankings"              = ["powerlifting-data-2b0f699b"]
     "pl-coach"                 = ["powerlifting-data-2b0f699b"]
+    "pl-assistant"             = ["powerlifting-data-2b0f699b"]
   }
   workload_identity_dynamo_actions = {
     "pl-analytics"     = ["GetItem", "Query"]
@@ -72,6 +73,7 @@ locals {
     "pl-analytics-export"      = ["GetObject", "PutObject"]
     "pl-rankings"              = ["GetObject", "PutObject"]
     "pl-coach"                 = ["GetObject"]
+    "pl-assistant"             = ["GetObject"]
   }
   workload_identity_s3_prefixes = {
     "powerlifting-app-backend" = "videos/*"
@@ -82,6 +84,7 @@ locals {
     "pl-analytics-export"      = "lifetime/*"
     "pl-rankings"              = "datasets/openpowerlifting-*"
     "pl-coach"                 = "lifetime/*/latest.md"
+    "pl-assistant"             = "lifetime/*/latest.md"
   }
   workload_identity_list_prefixes = {
     "pl-analytics"        = "analysis/*"

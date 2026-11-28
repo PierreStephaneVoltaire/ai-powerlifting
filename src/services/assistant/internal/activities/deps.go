@@ -11,6 +11,7 @@ import (
 	"powerlifting/assistant/internal/access"
 	"powerlifting/assistant/internal/audit"
 	"powerlifting/assistant/internal/config"
+	"powerlifting/assistant/internal/domainjobs"
 	"powerlifting/assistant/internal/llm"
 	"powerlifting/assistant/internal/reference"
 	"powerlifting/assistant/internal/store"
@@ -24,6 +25,7 @@ type Deps struct {
 	Access       *access.Client
 	Audit        *audit.Recorder
 	LLM          *llm.Client
+	DomainJobs   *domainjobs.Service
 	ReferenceLLM *llm.Client
 	MCP          *tools.MCPClient
 	Reference    interface {
@@ -66,21 +68,22 @@ func wrap[I, O any](fn func(context.Context, I) (O, error)) workflow.Activity {
 
 func Register(registry *workflow.Registry, d *Deps) error {
 	entries := map[string]workflow.Activity{
-		NameResolveIdentity: wrap(d.ResolveIdentity),
-		NameMintToken:       wrap(d.MintToken),
-		NameGuard:           wrap(d.Guard),
-		NameSecurityReview:  wrap(d.SecurityReview),
-		NameRecord:          wrap(d.Record),
-		NameRetrieve:        wrap(d.Retrieve),
-		NameReferenceLookup: wrap(d.ReferenceLookup),
-		NameHistory:         wrap(d.History),
-		NameListTools:       wrap(d.ListTools),
-		NameModelCall:       wrap(d.ModelCall),
-		NameToolCall:        wrap(d.ToolCall),
-		NamePropose:         wrap(d.Propose),
-		NameExpireProposal:  wrap(d.ExpireProposal),
-		NameCommit:          wrap(d.Commit),
-		NameDeliver:         wrap(d.Deliver),
+		NameResolveIdentity:     wrap(d.ResolveIdentity),
+		NameMintToken:           wrap(d.MintToken),
+		NameGuard:               wrap(d.Guard),
+		NameSecurityReview:      wrap(d.SecurityReview),
+		NameRecord:              wrap(d.Record),
+		NameRetrieve:            wrap(d.Retrieve),
+		NameReferenceLookup:     wrap(d.ReferenceLookup),
+		NameHistory:             wrap(d.History),
+		NameListTools:           wrap(d.ListTools),
+		NameModelCall:           wrap(d.ModelCall),
+		NameToolCall:            wrap(d.ToolCall),
+		NamePropose:             wrap(d.Propose),
+		NameExpireProposal:      wrap(d.ExpireProposal),
+		NameCommit:              wrap(d.Commit),
+		NameDeliver:             wrap(d.Deliver),
+		domainjobs.ActivityName: wrap(d.DomainJobs.Step),
 	}
 	for name, activity := range entries {
 		if err := registry.AddActivityN(name, activity); err != nil {

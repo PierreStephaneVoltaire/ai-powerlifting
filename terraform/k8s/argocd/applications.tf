@@ -28,7 +28,7 @@ resource "kubectl_manifest" "application" {
       destination = { server = "https://kubernetes.default.svc", namespace = var.namespace }
       source = {
         repoURL        = local.repo
-        targetRevision = "master"
+        targetRevision = var.argocd_target_revision
         path           = "deploy/argocd/${each.key}"
         kustomize      = { patches = local.mutations[each.key] }
       }

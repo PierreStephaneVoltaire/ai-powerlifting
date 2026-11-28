@@ -40,6 +40,21 @@ func schema(dim int) []string {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE TABLE IF NOT EXISTS domain_jobs (
+			id TEXT PRIMARY KEY,
+			person_pk TEXT NOT NULL,
+			athlete_pk TEXT NOT NULL,
+			conversation_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			payload JSONB NOT NULL,
+			result JSONB,
+			error JSONB,
+			state JSONB NOT NULL DEFAULT '{}',
+			step INTEGER NOT NULL DEFAULT -1,
+			in_flight BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 		`CREATE INDEX IF NOT EXISTS turns_conversation_idx ON turns (conversation_id, created_at DESC)`,
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS embeddings (
 			id BIGSERIAL PRIMARY KEY,
