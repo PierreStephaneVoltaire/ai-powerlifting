@@ -143,3 +143,11 @@ func (s *Service) replaceAll(ctx context.Context, arguments map[string]any) (any
 func (s *Service) rangeOf(ctx context.Context, arguments map[string]any) (any, error) {
 	return s.sessions.Range(ctx, athleteOf(arguments), text(arguments, "start_date"), text(arguments, "end_date"))
 }
+
+func (s *Service) exerciseHistory(ctx context.Context, arguments map[string]any) (any, error) {
+	return s.sessions.ExerciseHistory(ctx, athleteOf(arguments), text(arguments, "exercise_name"), text(arguments, "exclude_session_id"))
+}
+
+func (s *Service) exercisePRs(ctx context.Context, arguments map[string]any) (any, error) {
+	return s.sessions.ExercisePRs(ctx, athleteOf(arguments), text(arguments, "exercise_name"))
+}

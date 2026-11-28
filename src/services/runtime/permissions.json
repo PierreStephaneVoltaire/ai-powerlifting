@@ -344,6 +344,12 @@
   "session_delete": {
     "permission": "sessions:write"
   },
+  "session_exercise_history": {
+    "permission": "sessions:read"
+  },
+  "session_exercise_prs": {
+    "permission": "sessions:read"
+  },
   "session_get": {
     "permission": "sessions:read"
   },

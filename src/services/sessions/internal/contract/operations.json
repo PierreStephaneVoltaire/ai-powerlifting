@@ -381,5 +381,135 @@
     },
     "execution": "deterministic",
     "ownership": "athlete"
+  },
+  {
+    "name": "session_exercise_history",
+    "domain": "sessions",
+    "description": "List performed sets for an exercise across the athlete's current training block, newest first.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "exercise_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exercise name to match (normalized)."
+        },
+        "exclude_session_id": {
+          "type": "string",
+          "description": "Optional session id to exclude (such as the currently open session)."
+        }
+      },
+      "required": [
+        "exercise_name"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              },
+              "sets": {
+                "type": "integer"
+              },
+              "reps": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "kg": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "failed"
+                ]
+              }
+            },
+            "required": [
+              "date",
+              "sets",
+              "reps",
+              "kg",
+              "status"
+            ]
+          }
+        }
+      },
+      "required": [
+        "entries"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
+  },
+  {
+    "name": "session_exercise_prs",
+    "domain": "sessions",
+    "description": "Return best completed weight per rep count (1-12) for an exercise in the athlete's current training block.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pk": {
+          "type": "string",
+          "description": "User partition key. Defaults to env HEALTH_PROGRAM_PK."
+        },
+        "exercise_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exercise name to match (normalized)."
+        }
+      },
+      "required": [
+        "exercise_name"
+      ]
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reps": {
+                "type": "integer"
+              },
+              "kg": {
+                "type": "number"
+              },
+              "date": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reps",
+              "kg",
+              "date"
+            ]
+          }
+        }
+      },
+      "required": [
+        "records"
+      ]
+    },
+    "execution": "deterministic",
+    "ownership": "athlete"
   }
 ]

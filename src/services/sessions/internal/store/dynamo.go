@@ -92,6 +92,29 @@ func (d *Dynamo) Listing(ctx context.Context, pk, programSK string) ([]value.Ite
 	})
 }
 
+func (d *Dynamo) CurrentBlockExercises(ctx context.Context, pk, programSK string) ([]value.Item, error) {
+	return d.query(ctx, &dynamodb.QueryInput{
+		KeyConditionExpression: ptr("pk = :pk AND begins_with(sk, :prefix)"),
+		FilterExpression:       ptr("(attribute_not_exists(#block) OR #block = :current) AND size(#exercises) > :zero"),
+		ProjectionExpression:   ptr("#date, #exercises, #completed, #session_id, #id"),
+		ExpressionAttributeNames: map[string]string{
+			"#block":      "block",
+			"#date":       "date",
+			"#exercises":  "exercises",
+			"#completed":  "completed",
+			"#session_id": "session_id",
+			"#id":         "id",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk":      &types.AttributeValueMemberS{Value: pk},
+			":prefix":  &types.AttributeValueMemberS{Value: "session#" + programSK + "#"},
+			":current": &types.AttributeValueMemberS{Value: "current"},
+			":zero":    &types.AttributeValueMemberN{Value: "0"},
+		},
+		ScanIndexForward: ptr(false),
+	})
+}
+
 func (d *Dynamo) Put(ctx context.Context, item value.Item) error {
 	_, err := d.API.PutItem(ctx, &dynamodb.PutItemInput{TableName: &d.SessionsTable, Item: value.ToAV(item)})
 	if err != nil {

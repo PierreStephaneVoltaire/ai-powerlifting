@@ -104,6 +104,35 @@ func TestListingFiltersByProgramAndProjectsSummaryFields(t *testing.T) {
 	}
 }
 
+func TestCurrentBlockExercisesUsesLeanProjectionAndCurrentFilter(t *testing.T) {
+	api := &stubAPI{pages: []*dynamodb.QueryOutput{{}}}
+	if _, err := newDynamo(api).CurrentBlockExercises(context.Background(), "athlete", "program#v002"); err != nil {
+		t.Fatal(err)
+	}
+	query := api.queries[0]
+	if *query.KeyConditionExpression != "pk = :pk AND begins_with(sk, :prefix)" {
+		t.Fatalf("key condition %s", *query.KeyConditionExpression)
+	}
+	if query.ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS).Value != "session#program#v002#" {
+		t.Fatalf("prefix %v", query.ExpressionAttributeValues)
+	}
+	if query.ExpressionAttributeValues[":current"].(*types.AttributeValueMemberS).Value != "current" {
+		t.Fatalf("current %v", query.ExpressionAttributeValues)
+	}
+	if query.ExpressionAttributeValues[":zero"].(*types.AttributeValueMemberN).Value != "0" {
+		t.Fatalf("zero %v", query.ExpressionAttributeValues)
+	}
+	if *query.FilterExpression != "(attribute_not_exists(#block) OR #block = :current) AND size(#exercises) > :zero" {
+		t.Fatalf("filter %s", *query.FilterExpression)
+	}
+	if *query.ProjectionExpression != "#date, #exercises, #completed, #session_id, #id" {
+		t.Fatalf("projection %s", *query.ProjectionExpression)
+	}
+	if query.ScanIndexForward == nil || *query.ScanIndexForward {
+		t.Fatalf("scan index forward %v", query.ScanIndexForward)
+	}
+}
+
 func TestPutNeverSendsConditionAndEncodesFloatsAsDecimalText(t *testing.T) {
 	api := &stubAPI{}
 	err := newDynamo(api).Put(context.Background(), value.Item{"pk": "a", "sk": "b", "kg": json.Number("100.5"), "n": json.Number("2.0")})

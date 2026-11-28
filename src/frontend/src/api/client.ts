@@ -43,6 +43,8 @@ import type {
   MasterFederation,
   BlockTransitionInput,
   BlockTransitionResult,
+  ExerciseHistoryEntry,
+  ExercisePRRecord,
 } from '@powerlifting/types'
 
 
@@ -270,6 +272,27 @@ export async function requestAutoRegulation(
     data
   )
   return res.data.data
+}
+
+export async function fetchExerciseHistory(
+  exerciseName: string,
+  excludeSessionId?: string,
+): Promise<ExerciseHistoryEntry[]> {
+  const res = await api.get<ApiResponse<{ entries: ExerciseHistoryEntry[] }>>(
+    '/sessions/current/exercise-history',
+    { params: { exercise: exerciseName, ...(excludeSessionId ? { excludeSessionId } : {}) } }
+  )
+  return res.data.data.entries
+}
+
+export async function fetchExercisePRs(
+  exerciseName: string,
+): Promise<ExercisePRRecord[]> {
+  const res = await api.get<ApiResponse<{ records: ExercisePRRecord[] }>>(
+    '/sessions/current/exercise-prs',
+    { params: { exercise: exerciseName } }
+  )
+  return res.data.data.records
 }
 
 // ─── Maxes ───────────────────────────────────────────────────────────────────
