@@ -326,8 +326,9 @@ supplies `ARGOCD_DOMAIN`. Its `K8S_TFVARS` contains the matching
 After Terraform updates the Application specs, Argo CD reconciles the selected
 branch automatically and Image Updater reconciles the ECR digests.
 
-The home node and public EC2 Spot workers communicate over Tailscale. Workers
-use a restricted instance role for bootstrap; pod AWS access uses the existing
+The home node and private EC2 Spot workers communicate over Tailscale. Workers
+have no public IPs or direct inbound access; one ARM64 fck-nat instance in a
+dedicated public subnet provides IPv4 egress. Workers use a restricted instance role for bootstrap; pod AWS access uses the existing
 projected workload identity. Spot workers are tainted, so existing workloads
 remain on the home node unless explicitly configured otherwise. Argo manages
 the termination handler, which drains workers on interruption or scale-in, and

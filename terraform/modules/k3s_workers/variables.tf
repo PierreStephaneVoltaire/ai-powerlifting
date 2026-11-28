@@ -10,6 +10,4 @@ variable "spot_max_price" {
   type    = string
   default = null
 }
-variable "allow_tailscale_direct" { type = bool }
-
 variable "home_lan_cidr" { type = string }

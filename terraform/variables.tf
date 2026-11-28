@@ -93,7 +93,3 @@ variable "worker_spot_max_price" {
   type    = string
   default = null
 }
-variable "allow_tailscale_direct" {
-  type    = bool
-  default = true
-}

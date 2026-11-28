@@ -33,14 +33,14 @@ resource "aws_subnet" "workers" {
   vpc_id                  = aws_vpc.workers.id
   availability_zone       = each.key
   cidr_block              = cidrsubnet(local.vpc_cidr, 8, each.value)
-  map_public_ip_on_launch = true
+  map_public_ip_on_launch = false
 }
 resource "aws_route_table" "workers" {
   lifecycle { prevent_destroy = true }
   vpc_id = aws_vpc.workers.id
   route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.workers.id
+    cidr_block           = "0.0.0.0/0"
+    network_interface_id = aws_instance.fck_nat.primary_network_interface_id
   }
 }
 resource "aws_route_table_association" "workers" {
@@ -59,15 +59,6 @@ resource "aws_security_group" "workers" {
   lifecycle { prevent_destroy = true }
   name   = "nolift-k3s-workers"
   vpc_id = aws_vpc.workers.id
-  dynamic "ingress" {
-    for_each = var.allow_tailscale_direct ? [1] : []
-    content {
-      from_port   = 41641
-      to_port     = 41641
-      protocol    = "udp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -101,7 +92,11 @@ resource "aws_launch_template" "workers" {
   image_id                             = data.aws_ssm_parameter.ami.value
   instance_initiated_shutdown_behavior = "terminate"
   iam_instance_profile { name = aws_iam_instance_profile.workers.name }
-  vpc_security_group_ids = [aws_security_group.workers.id]
+  network_interfaces {
+    associate_public_ip_address = false
+    device_index                = 0
+    security_groups             = [aws_security_group.workers.id]
+  }
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
@@ -132,6 +127,7 @@ resource "aws_launch_template" "workers" {
 }
 resource "aws_autoscaling_group" "workers" {
   lifecycle { prevent_destroy = true }
+  depends_on          = [aws_route_table_association.workers]
   name                = "nolift-k3s-workers"
   min_size            = var.min
   desired_capacity    = var.desired

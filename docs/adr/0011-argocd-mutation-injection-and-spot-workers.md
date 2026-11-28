@@ -30,7 +30,7 @@ inside the module. the corresponding instructions below.
 1. Argo CD and Image Updater are installed by Terraform. Argo tracks `master`.
 2. Git holds plain manifests with **no private values**. Terraform generates the mutations and injects them into each Argo Application through the native `spec.source.kustomize.patches`. No custom plugin.
 3. Rollouts happen when the **ECR digest** behind `latest` changes, not on commits.
-4. Terraform provisions **public** EC2 Spot workers that join the cluster over Tailscale. Counts and AWS layout are variables.
+4. Terraform provisions EC2 Spot workers in private subnets. They have no public IPs or direct inbound access and join the cluster over Tailscale. One ARM64 fck-nat instance in a dedicated public subnet provides IPv4 egress; the existing S3 gateway endpoint remains in place.
 5. Istio Ambient, AWS workload identity (OIDC) and Authentik login keep working.
 
 Crossplane is out of scope. It will be one more Argo Application later.
@@ -39,7 +39,7 @@ Crossplane is out of scope. It will be one more Argo Application later.
 
 - **No custom renderer.** The draft built a Config Management Plugin with a custom renderer. It is dropped: Argo already supports inline Kustomize patches in the Application spec. [Argo CD Kustomize](https://argo-cd.readthedocs.io/en/stable/user-guide/kustomize/)
 - **No CRD deletion.** The draft deleted the leftover Argo CRDs. Live check: they carry `meta.helm.sh/release-name=argocd` / `argocd-image-updater` in namespace `argocd`, and 0 instances exist. Installing releases with those names in `argocd` adopts them.
-- **Public workers.** The draft used private subnets with fck-nat. You asked for public instances. They get a security group with no inbound except Tailscale's UDP port.
+- **Private workers.** Workers run in private subnets without public IPs or direct inbound access. A single ARM64 fck-nat instance in a dedicated public subnet provides IPv4 egress. Tailscale joins over outbound connectivity and can use direct paths or DERP relay.
 - **Argo SSO is in scope.** The draft said "Authentik config is out of scope", but Authentik clients are already Terraform-managed (`terraform/k8s/core/litellm_identity.tf`). Argo SSO follows that pattern.
 - **No manual tokens.** The draft relied on manually created tokens and console checks. Terraform now mints the k3s bootstrap token and the Tailscale key. The pipeline does every step.
 - **Conversion is planned.** The draft ignored that every workload is HCL today. Converting them to YAML is the main work and is planned below.
@@ -241,7 +241,7 @@ Run as **PR 1**, inside the normal pipeline, with `argocd_auto_sync = false`.
 
 ---
 
-## Part B — Public EC2 Spot workers over Tailscale
+## Part B — Private EC2 Spot workers over Tailscale
 
 ### B1. Tailscale (Personal plan is enough)
 
@@ -301,21 +301,20 @@ The `nodes` stack also writes these SSM parameters, so the AWS side never needs 
 | ---------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `workers_enabled`                              | `false`                                                                              | Master switch for the whole module (`count`)                                                                                         |
 | `worker_vpc_cidr`                              | `10.60.0.0/16`                                                                       | Validated not to overlap 10.42/16 (pods), 10.43/16 (services), `var.home_lan_cidr` (private tfvars, no default), 100.64/10 (tailnet) |
-| `worker_azs`                                   | `["ca-central-1a","ca-central-1b","ca-central-1d"]`                                  | One public /24 per AZ                                                                                                                |
+| `worker_azs`                                   | `["ca-central-1a","ca-central-1b","ca-central-1d"]`                                  | One private /24 per AZ                                                                                                               |
 | `worker_min` / `worker_desired` / `worker_max` | `0 / 0 / 3`                                                                          | Validated `min ≤ desired ≤ max`                                                                                                      |
 | `worker_instance_types`                        | `["m6a.large","m6i.large","m5a.large","m5.large","m7a.large","m7i.large"]`           | 2 vCPU / 8 GiB amd64; the images are amd64                                                                                           |
 | `worker_ami_ssm_parameter`                     | `/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id` | Ubuntu 24.04, same as the server                                                                                                     |
 | `worker_root_volume_gib`                       | `40`                                                                                 | Encrypted gp3                                                                                                                        |
 | `worker_spot_max_price`                        | `null`                                                                               | `null` means pay up to the on-demand price                                                                                           |
-| `allow_tailscale_direct`                       | `true`                                                                               | Inbound UDP 41641 from `0.0.0.0/0`, for direct WireGuard instead of a relay                                                          |
 
 **Resources:**
 
 - **Network.**
-  - VPC, Internet Gateway, public subnets with `map_public_ip_on_launch`, and a route table.
-  - A free S3 gateway endpoint, since ECR layers come from S3.
-  - No NAT, no SSH, no port 22.
-- **Security group.** No inbound rules except optional UDP 41641; all outbound allowed.
+  - Private worker subnets with no public IP assignment, plus one dedicated public subnet for an ARM64 fck-nat instance.
+  - Private subnet default routes use fck-nat for IPv4 egress. The existing S3 gateway endpoint remains for ECR layers.
+  - No worker inbound rules, SSH or port 22. Tailscale can establish direct connectivity where outbound paths allow it, or use DERP relay.
+- **Security group.** No inbound rules; all outbound allowed.
 - **IAM instance role.**
   - `ssm:GetParameter(s)` on `arn:aws:ssm:<region>:<acct>:parameter/nolift/k3s/*`
   - `AmazonSSMManagedInstanceCore`, for Session Manager debugging
@@ -373,9 +372,9 @@ The `nodes` stack also writes these SSM parameters, so the AWS side never needs 
 **Approximate cost per worker** (ca-central-1; check the AWS pricing pages):
 
 - m6a.large Spot ≈ $25/mo
-- public IPv4 $3.65/mo
 - 40 GiB gp3 ≈ $3.50/mo
 - internet egress to home over Tailscale at $0.09/GB after 100 GB/mo
+- shared fck-nat instance and its IPv4 egress
 
 Tailscale is $0.
 
@@ -424,7 +423,7 @@ Every check runs in the pipeline or is read-only. No full test suites.
 
 **Workers** (with `worker_desired = 1`)
 
-- **Join:** `kubectl get nodes -o wide` shows the worker `Ready` with a 100.x InternalIP and the `aws-spot` taint. `tailscale ping nolift-k3s-<id>` reports a direct connection, not a relay.
+- **Join:** `kubectl get nodes -o wide` shows the worker `Ready` with a 100.x InternalIP and the `aws-spot` taint. Tailscale ping succeeds over a direct path or DERP relay.
 - **Networking:** start a disposable `public.ecr.aws/docker/library/busybox` pod tolerating the taint and pinned to the worker. Check:
   - DNS works (`nslookup kubernetes.default`)
   - ClusterIP reachability

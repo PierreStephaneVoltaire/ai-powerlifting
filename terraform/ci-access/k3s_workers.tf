@@ -16,6 +16,12 @@ resource "aws_iam_role_policy" "k3s_workers" {
         Resource = "*"
       },
       {
+        Effect    = "Allow"
+        Action    = ["ec2:ModifyInstanceAttribute"]
+        Resource  = "arn:aws:ec2:${var.region}:${local.account}:instance/*"
+        Condition = { StringEquals = { "ec2:ResourceTag/Name" = "nolift-k3s-fck-nat" } }
+      },
+      {
         Effect   = "Allow"
         Action   = ["autoscaling:Describe*", "autoscaling:CreateAutoScalingGroup", "autoscaling:UpdateAutoScalingGroup", "autoscaling:CreateOrUpdateTags", "autoscaling:PutLifecycleHook", "autoscaling:StartInstanceRefresh", "autoscaling:CancelInstanceRefresh"]
         Resource = "*"
