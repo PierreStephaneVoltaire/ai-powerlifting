@@ -116,8 +116,6 @@ jobs:
 
       - id: result
         shell: bash
-        env:
-          LIVE_RELEASE: ${{ steps.release.outputs.live_release }}
         run: |
           {
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -133,12 +131,6 @@ jobs:
                 echo "terraform=true"
                 echo "kubernetes=true"
               fi
-            elif [[ "$LIVE_RELEASE" == true && "$GITHUB_REF_NAME" == feature/* ]]; then
-              echo "backend=true"
-              echo "frontend=true"
-              echo "services=true"
-              echo "kubernetes=true"
-              echo "terraform=${{ steps.filter.outputs.terraform }}"
             else
               echo "backend=${{ steps.filter.outputs.backend }}"
               echo "frontend=${{ steps.filter.outputs.frontend }}"
@@ -503,9 +495,13 @@ jobs:
     runs-on: powerlifting-k8s
     if: >-
       ${{ always() && needs.changes.outputs.live_release == 'true'
-        && needs.changes.outputs.kubernetes == 'true' && needs.changes.outputs.deploy == 'true'
+        && (needs.changes.outputs.kubernetes == 'true' || startsWith(github.ref_name, 'feature/'))
+        && needs.changes.outputs.deploy == 'true'
         && github.triggering_actor == github.repository_owner && github.actor == github.repository_owner
-        && (github.ref_name == 'master' || (needs.build-backend.result == 'success' && needs.build-services.result == 'success' && needs.build-frontend.result == 'success'))
+        && (github.ref_name == 'master'
+          || ((needs.changes.outputs.backend != 'true' || needs.build-backend.result == 'success')
+            && (needs.changes.outputs.services != 'true' || needs.build-services.result == 'success')
+            && (needs.changes.outputs.frontend != 'true' || needs.build-frontend.result == 'success')))
         && (needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     concurrency:
       group: kubernetes-apply
