@@ -318,6 +318,20 @@ export interface ExerciseSetData {
   rpe: number | null
 }
 
+export interface ExerciseHistoryEntry {
+  date: string
+  sets: number
+  reps: number | null
+  kg: number | null
+  status: 'completed' | 'failed'
+}
+
+export interface ExercisePRRecord {
+  reps: number
+  kg: number
+  date: string
+}
+
 export type SetStatus = 'pending' | 'completed' | 'failed' | 'skipped'
 export type FailedSetReason =
   | 'strength_failure'

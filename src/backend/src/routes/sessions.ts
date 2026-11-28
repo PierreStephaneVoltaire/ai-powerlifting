@@ -219,6 +219,35 @@ function normalizeCoachResponse(raw: any, session?: Session, exerciseIndex?: num
   }
 }
 
+sessionsRouter.get('/current/exercise-history', async (req, res, next) => {
+  try {
+    const exercise = typeof req.query.exercise === 'string' ? req.query.exercise.trim() : ''
+    if (!exercise) {
+      return res.status(400).json({ data: null, error: 'exercise query parameter is required' })
+    }
+    const excludeSessionId = typeof req.query.excludeSessionId === 'string' && req.query.excludeSessionId.trim()
+      ? req.query.excludeSessionId.trim()
+      : undefined
+    const result = await sessionController.getExerciseHistory(req.mapped_pk!, exercise, excludeSessionId)
+    res.json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
+sessionsRouter.get('/current/exercise-prs', async (req, res, next) => {
+  try {
+    const exercise = typeof req.query.exercise === 'string' ? req.query.exercise.trim() : ''
+    if (!exercise) {
+      return res.status(400).json({ data: null, error: 'exercise query parameter is required' })
+    }
+    const result = await sessionController.getExercisePRs(req.mapped_pk!, exercise)
+    res.json({ data: result, error: null })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /api/sessions/current/:date/:index - Get a specific session
 sessionsRouter.get('/current/:date/:index', async (req, res, next) => {
   try {

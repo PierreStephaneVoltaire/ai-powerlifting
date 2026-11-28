@@ -11,7 +11,7 @@ import { phaseColor } from '@/utils/phases'
 import { fetchGlossary } from '@/api/client'
 import { readDraft, removeDraftIfMatch, saveDraft, sessionDraftKey, type Draft } from '@/api/drafts'
 import { requestPartition } from '@/api/context'
-import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, MoreHorizontal, AlertTriangle } from 'lucide-react'
+import { X, Check, Save, RotateCcw, Plus, GripVertical, Trash2, Film, HeartPulse, ArrowLeft, Calculator, Circle, CheckCircle2, XCircle, Minus, Bot, MoreHorizontal, AlertTriangle, History, Trophy } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -34,6 +34,8 @@ import VideoGrid from './VideoGrid'
 import DraftNumberInput from './DraftNumberInput'
 import VideoUploadModal from './VideoUploadModal'
 import SessionToolkitModal from './SessionToolkitModal'
+import ExerciseHistoryModal from './ExerciseHistoryModal'
+import ExercisePRsModal from './ExercisePRsModal'
 import AssistantDrawer from '../assistant/AssistantDrawer'
 import { useAssistant } from '../assistant/useAssistant'
 import RestTimerHeaderButton from './RestTimerHeaderButton'
@@ -559,20 +561,32 @@ function SortableExerciseItem({
 function editableSession(session: Session): Session {
   const clone = JSON.parse(JSON.stringify(session)) as Session
   if (!clone.completed && clone.exercises.length === 0 && (clone.planned_exercises?.length ?? 0) > 0) {
-    clone.exercises = clone.planned_exercises!.map(pe => ({
-      name: pe.name,
-      sets: pe.sets,
-      kg: pe.kg,
-      load_source: pe.load_source,
-      rep_mode: pe.rep_mode,
-      rep_unit: pe.rep_unit ?? (pe.duration_minutes != null ? 'minutes' : undefined),
-      reps: pe.reps ?? pe.duration_minutes ?? null,
-      glossary_id: pe.glossary_id,
-      rpe_target: pe.rpe_target,
-      notes: pe.notes ?? '',
-      set_statuses: Array(pe.sets).fill('pending'),
-      failed_set_reasons: Array.from({ length: pe.sets }, () => []),
-    }))
+    clone.exercises = clone.planned_exercises!.map((pe) => {
+      const plan = pe.set_plan?.length ? pe.set_plan : null
+      const setCount = plan ? plan.length : pe.sets
+      const first = plan?.[0]
+      return {
+        name: pe.name,
+        sets: setCount,
+        kg: first ? (first.kg ?? null) : pe.kg,
+        load_source: pe.load_source,
+        rep_mode: pe.rep_mode,
+        rep_unit: pe.rep_unit ?? (pe.duration_minutes != null ? 'minutes' : undefined),
+        reps: first ? (first.reps ?? pe.reps ?? pe.duration_minutes ?? null) : (pe.reps ?? pe.duration_minutes ?? null),
+        ...(plan ? {
+          sets_data: plan.map((set) => ({
+            reps: set.reps ?? pe.reps ?? pe.duration_minutes ?? null,
+            kg: set.kg ?? null,
+            rpe: null,
+          })),
+        } : {}),
+        glossary_id: pe.glossary_id,
+        rpe_target: pe.rpe_target,
+        notes: pe.notes ?? '',
+        set_statuses: Array(setCount).fill('pending'),
+        failed_set_reasons: Array.from({ length: setCount }, () => []),
+      }
+    })
   }
   clone.exercises = clone.exercises.map((ex) => ({
     ...withSetStatusFields(ex.duration_minutes != null && !ex.rep_unit ? { ...ex, rep_unit: 'minutes', reps: ex.duration_minutes, duration_minutes: undefined } : ex, clone.completed),
@@ -645,6 +659,8 @@ export default function SessionDrawer({
     reps: number | null
     isBarbell: boolean
   } | null>(null)
+  const [historyExerciseName, setHistoryExerciseName] = useState<string | null>(null)
+  const [prsExerciseName, setPrsExerciseName] = useState<string | null>(null)
   const savedDateRef = useRef('')
   const draftKeyRef = useRef('')
   const draftPartitionRef = useRef('')
@@ -921,8 +937,7 @@ export default function SessionDrawer({
   handleSaveRef.current = handleSave
 
   const handleDiscard = () => {
-    const clone = JSON.parse(JSON.stringify(savedSessionRef.current ?? baseline)) as Session
-    clone.exercises = clone.exercises.map((ex) => withSetStatusFields(ex, clone.completed))
+    const clone = editableSession(savedSessionRef.current ?? baseline)
     pendingSaveRef.current = false
     setLocalSession(clone)
     changeVersionRef.current = 0
@@ -1214,16 +1229,31 @@ export default function SessionDrawer({
           style={{ minHeight: 44, minWidth: 44 }}
           title="Exercise actions"
           aria-label={`Exercise actions for ${exercise.name || 'unnamed'}`}
-          disabled={readOnly}
         >
           <MoreHorizontal size={18} />
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        {/* Safe actions grouped at top — BUG-1.1 */}
+        <Menu.Item
+          leftSection={<History size={16} />}
+          onClick={() => setHistoryExerciseName(exercise.name)}
+          disabled={!exercise.name.trim()}
+          styles={{ item: { minHeight: 44, paddingInline: 12 } }}
+        >
+          History
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<Trophy size={16} />}
+          onClick={() => setPrsExerciseName(exercise.name)}
+          disabled={!exercise.name.trim()}
+          styles={{ item: { minHeight: 44, paddingInline: 12 } }}
+        >
+          PRs
+        </Menu.Item>
         <Menu.Item
           leftSection={<Bot size={16} />}
           onClick={() => setAssistantExerciseIndex(exerciseIndex)}
+          disabled={readOnly}
           styles={{ item: { minHeight: 44, paddingInline: 12 } }}
         >
           Assistant
@@ -1231,15 +1261,16 @@ export default function SessionDrawer({
         <Menu.Item
           leftSection={<Calculator size={16} />}
           onClick={() => openToolkitForExercise(exercise)}
+          disabled={readOnly}
           styles={{ item: { minHeight: 44, paddingInline: 12 } }}
         >
           Plate calculator
         </Menu.Item>
         <Menu.Divider />
-        {/* Destructive action separated + ordered away + confirm — BUG-1.1 */}
         <Menu.Item
           color="red"
           leftSection={<Trash2 size={16} />}
+          disabled={readOnly}
           styles={{ item: { minHeight: 44, paddingInline: 12 } }}
           onClick={() => {
             const label = exercise.name || 'this exercise'
@@ -1256,6 +1287,32 @@ export default function SessionDrawer({
 
   const renderDesktopExerciseActions = (exercise: Exercise, exerciseIndex: number, iconSize = 16) => (
     <>
+      <ActionIcon
+        visibleFrom="sm"
+        variant="subtle"
+        color="gray"
+        size="md"
+        style={{ minHeight: 44, minWidth: 44 }}
+        onClick={() => setHistoryExerciseName(exercise.name)}
+        title="History"
+        disabled={!exercise.name.trim()}
+        data-testid={`exercise-history-${exerciseIndex}`}
+      >
+        <History size={iconSize} />
+      </ActionIcon>
+      <ActionIcon
+        visibleFrom="sm"
+        variant="subtle"
+        color="yellow"
+        size="md"
+        style={{ minHeight: 44, minWidth: 44 }}
+        onClick={() => setPrsExerciseName(exercise.name)}
+        title="PRs"
+        disabled={!exercise.name.trim()}
+        data-testid={`exercise-prs-${exerciseIndex}`}
+      >
+        <Trophy size={iconSize} />
+      </ActionIcon>
       <ActionIcon
         visibleFrom="sm"
         variant="subtle"
@@ -1845,6 +1902,19 @@ export default function SessionDrawer({
         targetKg={toolkitExercise?.targetKg ?? null}
         reps={toolkitExercise?.reps ?? null}
         isBarbell={toolkitExercise?.isBarbell ?? true}
+      />
+
+      <ExerciseHistoryModal
+        opened={historyExerciseName !== null}
+        onClose={() => setHistoryExerciseName(null)}
+        exerciseName={historyExerciseName || ''}
+        excludeSessionId={localSession.id}
+      />
+
+      <ExercisePRsModal
+        opened={prsExerciseName !== null}
+        onClose={() => setPrsExerciseName(null)}
+        exerciseName={prsExerciseName || ''}
       />
     </>
   )

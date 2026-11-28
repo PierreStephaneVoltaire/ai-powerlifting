@@ -1,4 +1,8 @@
 {
+  "program_apply_session_import": {"internal_only": true, "permission": "imports:write"},
+  "template_apply_sessions": {
+    "permission": "program:write"
+  },
   "access_context": {
     "permission": "profile:read",
     "public": true
@@ -339,6 +343,12 @@
   },
   "session_delete": {
     "permission": "sessions:write"
+  },
+  "session_exercise_history": {
+    "permission": "sessions:read"
+  },
+  "session_exercise_prs": {
+    "permission": "sessions:read"
   },
   "session_get": {
     "permission": "sessions:read"

@@ -304,8 +304,8 @@ func TestSwaggerDocumentsEveryOperationWithHeaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry, _ := contract.Load()
-	if len(registry.All()) != 10 {
-		t.Fatalf("expected the ten sessions operations, got %d", len(registry.All()))
+	if len(registry.All()) != 12 {
+		t.Fatalf("expected twelve sessions operations, got %d", len(registry.All()))
 	}
 	paths := document["paths"].(map[string]any)
 	wantHeaders := []string{"X-Person-Pk", "X-Athlete-Pk", "X-PL-Source-Principal", "X-If-Job-Id", "X-If-Turn-Id", "X-PL-Nested-Operation", "X-If-Generation-Id", "X-If-Generation-Attempt"}
@@ -363,7 +363,7 @@ func rpc(t *testing.T, e *env, body string) map[string]any {
 func TestMCPListsAndCallsTools(t *testing.T) {
 	e := newEnv(t, 200)
 	listed := rpc(t, e, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)["result"].(map[string]any)["tools"].([]any)
-	if len(listed) != 10 {
+	if len(listed) != 12 {
 		t.Fatalf("tools %d", len(listed))
 	}
 	called := rpc(t, e, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"session_list","arguments":{"limit":5}}}`)["result"].(map[string]any)
@@ -381,5 +381,64 @@ func TestMCPListsAndCallsTools(t *testing.T) {
 	unknown := rpc(t, e, `{"jsonrpc":"2.0","id":5,"method":"nope"}`)
 	if unknown["error"].(map[string]any)["code"] != float64(-32601) {
 		t.Fatalf("unknown %v", unknown)
+	}
+}
+
+func TestExerciseHistoryAndPRsHTTP(t *testing.T) {
+	e := newEnv(t, 200)
+	e.memory.SeedSession(value.Item{
+		"pk": "athlete_1", "sk": "session#program#v001#2026-09-14#001#a",
+		"session_id": "a", "date": "2026-09-14", "program_sk": "program#v001", "completed": false,
+		"exercises": []any{
+			map[string]any{
+				"name": "Squat",
+				"sets": json.Number("3"),
+				"sets_data": []any{
+					map[string]any{"reps": json.Number("3"), "kg": json.Number("150.0")},
+					map[string]any{"reps": json.Number("3"), "kg": json.Number("150")},
+					map[string]any{"reps": json.Number("1"), "kg": json.Number("170")},
+				},
+				"set_statuses": []any{"completed", "completed", "failed"},
+			},
+		},
+	})
+	historyRes := e.do("POST", "/operations/session_exercise_history", `{"exercise_name":"Squat"}`, identity)
+	if historyRes.Code != http.StatusOK {
+		t.Fatalf("history status %d body %s", historyRes.Code, historyRes.Body)
+	}
+	var historyBody struct {
+		Entries []struct {
+			Date   string   `json:"date"`
+			Sets   int      `json:"sets"`
+			Reps   *float64 `json:"reps"`
+			Kg     *float64 `json:"kg"`
+			Status string   `json:"status"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(historyRes.Body.Bytes(), &historyBody); err != nil {
+		t.Fatal(err)
+	}
+	if len(historyBody.Entries) != 2 || historyBody.Entries[0].Sets != 2 || *historyBody.Entries[0].Kg != 150 || historyBody.Entries[0].Status != "completed" || historyBody.Entries[1].Status != "failed" {
+		t.Fatalf("history body %s", historyRes.Body)
+	}
+	prsRes := e.do("POST", "/operations/session_exercise_prs", `{"exercise_name":"Squat"}`, identity)
+	if prsRes.Code != http.StatusOK {
+		t.Fatalf("prs status %d body %s", prsRes.Code, prsRes.Body)
+	}
+	var prsBody struct {
+		Records []struct {
+			Reps int     `json:"reps"`
+			Kg   float64 `json:"kg"`
+			Date string  `json:"date"`
+		} `json:"records"`
+	}
+	if err := json.Unmarshal(prsRes.Body.Bytes(), &prsBody); err != nil {
+		t.Fatal(err)
+	}
+	if len(prsBody.Records) != 1 || prsBody.Records[0].Reps != 3 || prsBody.Records[0].Kg != 150 || prsBody.Records[0].Date != "2026-09-14" {
+		t.Fatalf("prs body %s", prsRes.Body)
+	}
+	if len(e.bumps.keys) != 0 {
+		t.Fatalf("bumps %v", e.bumps.keys)
 	}
 }

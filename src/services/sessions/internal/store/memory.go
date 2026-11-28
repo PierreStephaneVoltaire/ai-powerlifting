@@ -81,6 +81,35 @@ func (m *Memory) Listing(_ context.Context, pk, programSK string) ([]value.Item,
 	return items, nil
 }
 
+func (m *Memory) CurrentBlockExercises(_ context.Context, pk, programSK string) ([]value.Item, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	prefix := "session#" + programSK + "#"
+	items := m.sorted(func(i value.Item) bool {
+		if i["pk"] != pk || !strings.HasPrefix(value.Str(i["sk"]), prefix) {
+			return false
+		}
+		block, _ := i["block"].(string)
+		if block != "" && block != "current" {
+			return false
+		}
+		exercises, ok := i["exercises"].([]any)
+		return ok && len(exercises) > 0
+	})
+	slices.Reverse(items)
+	projected := make([]value.Item, len(items))
+	for idx, item := range items {
+		out := value.Item{}
+		for _, field := range []string{"date", "exercises", "completed", "session_id", "id"} {
+			if v, present := item[field]; present {
+				out[field] = value.Copy(v)
+			}
+		}
+		projected[idx] = out
+	}
+	return projected, nil
+}
+
 func (m *Memory) Put(_ context.Context, item value.Item) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

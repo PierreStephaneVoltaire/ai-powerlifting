@@ -9,6 +9,7 @@ import (
 type Sessions interface {
 	ForProgram(ctx context.Context, pk, programSK string) ([]value.Item, error)
 	Listing(ctx context.Context, pk, programSK string) ([]value.Item, error)
+	CurrentBlockExercises(ctx context.Context, pk, programSK string) ([]value.Item, error)
 	Put(ctx context.Context, item value.Item) error
 	Delete(ctx context.Context, pk, sk string) error
 	Apply(ctx context.Context, pk string, deleteSKs []string, puts []value.Item) error

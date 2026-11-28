@@ -36,15 +36,17 @@ type Service struct {
 func New(registry *contract.Registry, access Access, sessions *session.Service, versions store.Versions) (*Service, error) {
 	s := &Service{Registry: registry, access: access, sessions: sessions, versions: versions}
 	s.handlers = map[string]handler{
-		"session_create":            s.create,
-		"session_delete":            s.remove,
-		"session_get":               s.get,
-		"session_list":              s.list,
-		"session_list_full":         s.listFull,
-		"session_patch":             s.patch,
-		"session_patch_by_date":     s.patchByDate,
-		"session_replace":           s.replace,
-		"session_replace_all":       s.replaceAll,
+		"session_create":           s.create,
+		"session_delete":           s.remove,
+		"session_exercise_history": s.exerciseHistory,
+		"session_exercise_prs":     s.exercisePRs,
+		"session_get":              s.get,
+		"session_list":             s.list,
+		"session_list_full":        s.listFull,
+		"session_patch":            s.patch,
+		"session_patch_by_date":    s.patchByDate,
+		"session_replace":          s.replace,
+		"session_replace_all":      s.replaceAll,
 		"health_get_sessions_range": s.rangeOf,
 	}
 	for _, operation := range registry.All() {

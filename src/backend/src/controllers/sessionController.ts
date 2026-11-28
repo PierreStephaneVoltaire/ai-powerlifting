@@ -1,6 +1,6 @@
 import { callOperation } from '../utils/operations'
 import { AppError } from '../middleware/errorHandler'
-import type { Session, Exercise, SessionStatus, SessionWellness } from '@powerlifting/types'
+import type { Session, Exercise, SessionStatus, SessionWellness, ExerciseHistoryEntry, ExercisePRRecord } from '@powerlifting/types'
 
 export interface SessionTarget { session_id?: string }
 interface SessionMutationResult {
@@ -150,4 +150,21 @@ export async function updateExerciseField(
   }
   ;(exercises[exerciseIndex] as any)[field] = value
   return await callOperation('session_patch', { pk, date, index, patch: { exercises }, ...target }) as Session
+}
+
+export async function getExerciseHistory(
+  pk: string,
+  exerciseName: string,
+  excludeSessionId?: string,
+): Promise<{ entries: ExerciseHistoryEntry[] }> {
+  const args: Record<string, unknown> = { pk, exercise_name: exerciseName }
+  if (excludeSessionId) args.exclude_session_id = excludeSessionId
+  return await callOperation('session_exercise_history', args) as { entries: ExerciseHistoryEntry[] }
+}
+
+export async function getExercisePRs(
+  pk: string,
+  exerciseName: string,
+): Promise<{ records: ExercisePRRecord[] }> {
+  return await callOperation('session_exercise_prs', { pk, exercise_name: exerciseName }) as { records: ExercisePRRecord[] }
 }
