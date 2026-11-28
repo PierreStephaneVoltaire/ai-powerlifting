@@ -7,10 +7,13 @@ data "tailscale_acl" "current" {}
 locals {
   policy       = jsondecode(data.tailscale_acl.current.json)
   worker_grant = { src = ["tag:k3s-server", "tag:k3s-worker"], dst = ["tag:k3s-server", "tag:k3s-worker"], ip = ["*"] }
+  k3s_tag_owners = {
+    for tag in local.worker_grant.src : tag => distinct(concat(try(local.policy.tagOwners[tag], ["autogroup:admin"]), [tag]))
+  }
 }
 resource "tailscale_acl" "policy" {
   acl = jsonencode(merge(local.policy, {
-    tagOwners = merge({ "tag:k3s-server" = ["autogroup:admin"], "tag:k3s-worker" = ["autogroup:admin"] }, try(local.policy.tagOwners, {}))
+    tagOwners = merge(try(local.policy.tagOwners, {}), local.k3s_tag_owners)
     grants    = concat([for grant in try(local.policy.grants, []) : grant if jsonencode(grant) != jsonencode(local.worker_grant)], [local.worker_grant])
   }))
   lifecycle { prevent_destroy = true }
