@@ -58,7 +58,7 @@ env:
 
 jobs:
   changes:
-    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]' && github.triggering_actor != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.deploy.outputs.deploy }}
@@ -146,7 +146,7 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: >-
-      ${{ always() && needs.changes.outputs.backend == 'true'
+      ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.backend == 'true'
         && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true')
         && (needs.changes.outputs.live_release != 'true' || needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     steps:
@@ -182,7 +182,7 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: >-
-      ${{ always() && needs.changes.outputs.services == 'true'
+      ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.services == 'true'
         && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true')
         && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled'
         && (needs.changes.outputs.live_release != 'true' || needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
@@ -266,7 +266,7 @@ jobs:
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
     if: >-
-      ${{ always() && needs.changes.outputs.frontend == 'true'
+      ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.frontend == 'true'
         && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true')
         && (needs.changes.outputs.live_release != 'true' || needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     steps:

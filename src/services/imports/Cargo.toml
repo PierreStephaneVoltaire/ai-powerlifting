@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
-aws-sdk-dynamodb = "1.116.0"
+aws-sdk-dynamodb = { version = "1.116.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-config = "1.8.18"
 axum = { version = "0.8.9", features = ["json"] }
 base64 = "0.22.1"

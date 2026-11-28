@@ -6,6 +6,15 @@ backend:
   - 'src/**/package*.json'
   - 'src/**/tsconfig*.json'
   - 'scripts/image_tag.py'
+node:
+  - 'src/backend/**'
+  - 'src/frontend/**'
+  - 'src/dependencies/**'
+  - 'src/package*.json'
+  - 'src/tsconfig.json'
+  - 'src/test-dependency-updates.mjs'
+  - '.github/workflows/**'
+  - '.github/image-filters.yml'
 frontend:
   - 'src/frontend/**'
   - 'src/dependencies/**'
