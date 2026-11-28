@@ -1,0 +1,190 @@
+- name: Configure Spot worker
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install and join k3s
+      block:
+        - name: Install bootstrap dependencies
+          ansible.builtin.apt:
+            name: [curl, unzip, ca-certificates]
+            update_cache: true
+        - name: Download AWS CLI
+          ansible.builtin.get_url:
+            url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+            dest: /tmp/awscliv2.zip
+            mode: '0644'
+        - name: Unpack AWS CLI
+          ansible.builtin.unarchive:
+            src: /tmp/awscliv2.zip
+            dest: /tmp
+            remote_src: true
+        - name: Install AWS CLI
+          ansible.builtin.command:
+            argv: [/tmp/aws/install]
+            creates: /usr/local/bin/aws
+        - name: Get instance metadata token
+          ansible.builtin.uri:
+            url: http://169.254.169.254/latest/api/token
+            method: PUT
+            headers:
+              X-aws-ec2-metadata-token-ttl-seconds: '21600'
+            return_content: true
+          register: metadata_token
+          no_log: true
+        - name: Get instance identity
+          ansible.builtin.uri:
+            url: http://169.254.169.254/latest/dynamic/instance-identity/document
+            headers:
+              X-aws-ec2-metadata-token: '{{ metadata_token.content }}'
+            return_content: true
+          register: identity_response
+        - name: Parse instance identity
+          ansible.builtin.set_fact:
+            identity: '{{ identity_response.content | from_json }}'
+        - name: Read cluster bootstrap parameters
+          ansible.builtin.command:
+            argv: [aws, ssm, get-parameters, --with-decryption, --region, '{{ identity.region }}', --names, /nolift/k3s/server-url, /nolift/k3s/version, /nolift/k3s/agent-token, /nolift/k3s/tailscale-worker-key, --output, json]
+          register: parameters
+          until: parameters.rc == 0 and (parameters.stdout | from_json).Parameters | length == 4
+          retries: 120
+          delay: 10
+          changed_when: false
+          no_log: true
+        - name: Set bootstrap values
+          ansible.builtin.set_fact:
+            bootstrap: '{{ dict((parameters.stdout | from_json).Parameters | map(attribute="Name") | map("basename") | zip((parameters.stdout | from_json).Parameters | map(attribute="Value"))) }}'
+            node_name: 'nolift-k3s-{{ identity.instanceId }}'
+          no_log: true
+        - name: Set node hostname
+          ansible.builtin.hostname:
+            name: '{{ node_name }}'
+        - name: Add Tailscale signing key
+          ansible.builtin.get_url:
+            url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+            dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+            mode: '0644'
+        - name: Add Tailscale package repository
+          ansible.builtin.apt_repository:
+            repo: deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu noble main
+            filename: tailscale
+        - name: Install Tailscale
+          ansible.builtin.apt:
+            name: tailscale
+            state: present
+        - name: Join tailnet
+          ansible.builtin.command:
+            argv: [tailscale, up, '--auth-key={{ bootstrap["tailscale-worker-key"] }}', '--advertise-tags=tag:k3s-worker', '--hostname={{ node_name }}']
+          no_log: true
+        - name: Get Tailscale address
+          ansible.builtin.command: tailscale ip -4
+          register: tailscale_ip
+          changed_when: false
+        - name: Create configuration directories
+          ansible.builtin.file:
+            path: '{{ item }}'
+            state: directory
+            mode: '0755'
+          loop: [/etc/rancher/k3s, /etc/systemd/system/tailscaled.service.d, /etc/systemd/system/k3s-agent.service.d]
+        - name: Configure Tailscale service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/tailscaled.service.d/k3s-agent.conf
+            mode: '0644'
+            content: "[Service]\nExecStartPost=/bin/systemctl --no-block try-restart k3s-agent.service\n"
+        - name: Configure k3s service ordering
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/k3s-agent.service.d/tailscale.conf
+            mode: '0644'
+            content: "[Unit]\nAfter=tailscaled.service\nWants=tailscaled.service\n"
+        - name: Reload systemd
+          ansible.builtin.systemd_service:
+            daemon_reload: true
+        - name: Store k3s token
+          ansible.builtin.copy:
+            dest: /etc/rancher/k3s/agent-token
+            mode: '0600'
+            content: '{{ bootstrap["agent-token"] }}'
+          no_log: true
+        - name: Configure k3s agent
+          ansible.builtin.copy:
+            dest: /etc/rancher/k3s/config.yaml
+            mode: '0600'
+            content: |
+              server: {{ bootstrap['server-url'] }}
+              token-file: /etc/rancher/k3s/agent-token
+              node-name: {{ node_name }}
+              node-ip: {{ tailscale_ip.stdout }}
+              flannel-iface: tailscale0
+              pause-image: registry.k8s.io/pause:3.9
+              node-label: [nolift.io/pool=aws-spot, topology.kubernetes.io/zone={{ identity.availabilityZone }}]
+              node-taint: [nolift.io/pool=aws-spot:NoSchedule]
+              kubelet-arg: [provider-id=aws:///{{ identity.availabilityZone }}/{{ identity.instanceId }}, max-pods=110]
+          no_log: true
+        - name: Download k3s installer
+          ansible.builtin.get_url:
+            url: https://get.k3s.io
+            dest: /tmp/install-k3s.sh
+            mode: '0755'
+        - name: Install k3s agent
+          ansible.builtin.command:
+            argv: [/tmp/install-k3s.sh]
+            creates: /usr/local/bin/k3s
+          environment:
+            INSTALL_K3S_VERSION: '{{ bootstrap["version"] }}'
+            INSTALL_K3S_EXEC: agent
+        - name: Wait for node readiness
+          ansible.builtin.command:
+            argv: [k3s, kubectl, --kubeconfig, /var/lib/rancher/k3s/agent/kubelet.kubeconfig, --request-timeout=5s, get, node, '{{ node_name }}', -o, json]
+          register: node
+          until: node.rc == 0 and ((node.stdout | from_json).status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) == 1
+          retries: 90
+          delay: 10
+          changed_when: false
+        - name: Install worker health playbook
+          ansible.builtin.copy:
+            src: '{{ playbook_dir }}/worker-health.yml'
+            dest: /etc/nolift/spot-worker-health.yml
+            remote_src: true
+            mode: '0644'
+        - name: Configure worker health check
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/nolift-worker-health.service
+            mode: '0644'
+            content: |
+              [Unit]
+              Description=Check worker node readiness
+              After=k3s-agent.service
+              [Service]
+              Type=oneshot
+              ExecStart=/usr/bin/ansible-playbook /etc/nolift/spot-worker-health.yml --extra-vars node_name={{ node_name }}
+        - name: Schedule worker health check
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/nolift-worker-health.timer
+            mode: '0644'
+            content: |
+              [Unit]
+              Description=Schedule worker node readiness check
+              [Timer]
+              OnBootSec=5min
+              OnUnitActiveSec=1min
+              [Install]
+              WantedBy=timers.target
+        - name: Enable worker health check
+          ansible.builtin.systemd_service:
+            name: nolift-worker-health.timer
+            daemon_reload: true
+            enabled: true
+            state: started
+        - name: Record successful worker initialization
+          ansible.builtin.file:
+            path: /etc/nolift/worker-ready
+            state: touch
+            mode: '0644'
+      rescue:
+        - name: Terminate failed worker
+          ansible.builtin.command: shutdown -h now
+          changed_when: true
+        - name: Fail bootstrap
+          ansible.builtin.fail:
+            msg: Worker failed to join the cluster.

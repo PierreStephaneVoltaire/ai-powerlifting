@@ -1,67 +1,6 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: pl-coach-isolation
-  namespace: powerlifting
-  annotations:
-    argocd.argoproj.io/sync-wave: '-1'
-    nolift.io/isolation: pl-coach
-spec:
-  egress:
-  - ports:
-    - port: 15008
-      protocol: TCP
-    to:
-    - podSelector:
-        matchLabels:
-          gateway.networking.k8s.io/gateway-name: nolift-waypoint
-  - ports:
-    - port: 53
-      protocol: UDP
-    - port: 53
-      protocol: TCP
-    to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-      podSelector:
-        matchLabels:
-          k8s-app: kube-dns
-  - ports:
-    - port: 15008
-      protocol: TCP
-    to:
-    - podSelector:
-        matchLabels:
-          app: pl-valkey
-  - ports:
-    - port: 15008
-      protocol: TCP
-    to:
-    - podSelector:
-        matchLabels:
-          app: pl-prompt-cache-mcp
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels:
-          gateway.networking.k8s.io/gateway-name: nolift-waypoint
-    ports:
-    - port: 15008
-      protocol: TCP
-  - from:
-    - ipBlock:
-        cidr: 169.254.7.127/32
-  podSelector:
-    matchLabels:
-      app: pl-coach
-  policyTypes:
-  - Ingress
-  - Egress
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
   name: pl-coach-discord-isolation
   namespace: powerlifting
   annotations:

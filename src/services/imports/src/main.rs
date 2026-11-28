@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = Arc::new(Service::new(
         aws_sdk_dynamodb::Client::new(&aws),
         setting("PL_PROFILE_URL", "http://pl-profile:8000"),
-        setting("IF_API_URL", "http://pl-coach:8000"),
+        setting("IF_API_URL", "http://pl-assistant:8000"),
         setting("IF_HEALTH_TABLE_NAME", "if-health"),
         setting("PL_SERVICE_URL_TEMPLATE", "http://pl-{domain}:8000"),
         setting("PL_JOB_TOKEN_PUBLIC_KEY", ""),

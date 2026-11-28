@@ -77,3 +77,18 @@ module "tunnel" {
   argocd_origin_url    = var.tunnel_origin_url
   token_parameter_name = "/powerlifting/k8s/tunnel-token"
 }
+
+module "k3s_workers" {
+  count             = var.workers_enabled ? 1 : 0
+  home_lan_cidr     = var.home_lan_cidr
+  source            = "./modules/k3s_workers"
+  region            = var.region
+  azs               = var.worker_azs
+  min               = var.worker_min
+  desired           = var.worker_desired
+  max               = var.worker_max
+  instance_types    = var.worker_instance_types
+  ami_ssm_parameter = var.worker_ami_ssm_parameter
+  root_volume_gib   = var.worker_root_volume_gib
+  spot_max_price    = var.worker_spot_max_price
+}

@@ -128,16 +128,14 @@ Highlights (full math and reasoning in [`docs/FORMULAS.md`](docs/FORMULAS.md)):
 The AI is narrow and tool-scoped. The browser never talks to a model, and
 neither do the domain services. There are two paths. Conversational help goes
 through the **Assistant** (`pl-assistant`), a Go service on Dapr durable
-workflows. Analytics reports and imports go through the **Coach**, a small
-worker that uses OpenAI's **Codex** as its agent harness, locked down: no
-shell, no file writes, no plugins, and no access to secrets. The Coach no
-longer handles chat.
+workflows. Analytics reports and imports use the domain job API. The Assistant
+runs those jobs as Dapr workflows through the same LiteLLM gateway.
 
 Models are only ever named by LiteLLM alias, and providers are registered once
 in LiteLLM. Right now the subscription-backed aliases run on my ChatGPT
-subscription, but the harness and the model are separate. The concrete model
-behind each alias, with its fallbacks, lives in Terraform vars, so moving a
-feature to OpenRouter or API pricing is a config change, not a rewrite. The
+subscription. `pl-analysis` uses Gemini 4 Hydrogen through OpenRouter, and
+LiteLLM also registers Gemini 4 Carbon, Neon, and Argon. The model and fallback
+configuration lives in the LiteLLM registry. The
 heavier reviews (program evaluation, multi-block comparison, template
 evaluation) run at high effort; everything else runs at medium.
 
@@ -283,7 +281,6 @@ flowchart LR
     AnalyticsAI["pl-analytics-ai<br/>Go, AI reports"]
     AnalyticsExport["pl-analytics-export<br/>Go, exports"]
     Rankings["pl-rankings<br/>Rust, OpenPowerlifting data"]
-    Coach["pl-coach<br/>Codex worker, jobs"]
     Assistant["pl-assistant<br/>Go, Dapr workflows"]
     AssistantDB[("assistant-postgres<br/>pgvector")]
     Bot["pl-coach-discord<br/>gateway bot"]
@@ -311,21 +308,18 @@ flowchart LR
   Gateway -->|"/api"| BE
   BE --> Valkey
   BE -->|"typed operations"| Services
-  BE -->|"AI jobs"| Coach
   BE --> Auth
   Services --- Analytics
   Analytics <-->|"gRPC"| AnalyticsAI
   AnalyticsAI -->|"gRPC"| AnalyticsExport
-  AnalyticsAI -->|"AI jobs"| Coach
+  AnalyticsAI -->|"domain jobs"| Assistant
   Services --- Rankings
-  Services -->|"inference steps"| Coach
-  Coach -->|"tools"| Services
+  Services <-->|"domain jobs and continuations"| Assistant
   DiscordApp <-->|"websocket"| Bot
-  BE -->|"chat"| Assistant
+  BE -->|"chat and jobs"| Assistant
   Bot --> Assistant
   Assistant --> AssistantDB
   Assistant -->|"model calls + MCP tools"| LiteLLM
-  Coach -->|"model calls"| LiteLLM
   Tunnel -->|"llm host"| LiteLLM
   Services -->|"projected service-account token"| STS
   STS -->|"verify issuer and keys"| Discovery
@@ -364,6 +358,13 @@ public OIDC discovery document and signing keys from S3. The deployment pipeline
 publishes these documents and configures the issuer before rolling out workloads.
 See [AWS workload identity](docs/ARCHITECTURE.md#aws-workload-identity)
 and [ADR 0010](docs/adr/0010-aws-workload-identity-and-network-hardening.md).
+
+Optional EC2 Spot workers in private subnets join the k3s cluster over
+Tailscale. They have no public IPs or direct inbound access; one ARM64 fck-nat
+instance provides IPv4 egress. Workers are tainted so workloads remain on the
+home node unless explicitly opted in.
+Worker interruption handling drains nodes before termination. See
+[ADR 0011](docs/adr/0011-argocd-mutation-injection-and-spot-workers.md).
 
 CI provisions AWS, Cloudflare and the cluster platform. Argo CD tracks the
 portal, Coach and gateway manifests on `master`. Terraform injects the

@@ -54,3 +54,11 @@ to restate saved details. Other conversations are not injected automatically.
 Tool results, history, retrieved content and proposal snapshots are not clipped
 by character count. History reads preserve conversation access and permission
 filters, including the permissions passed through subagent results.
+
+## Domain jobs
+
+The Assistant worker also runs the domain-job continuation protocol on Dapr
+using its existing LiteLLM client. Job payloads, results, and activity checkpoints
+are stored in Assistant PostgreSQL. The `/v1/jobs` request and result contract
+and the domain services' permission checks carry through the change. Historical
+Coach jobs remain on the retired worker's SQLite volume.

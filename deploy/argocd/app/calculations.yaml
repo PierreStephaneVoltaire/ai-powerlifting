@@ -26,8 +26,6 @@ spec:
           value: calculations
         - name: PORT
           value: '8000'
-        - name: IF_API_URL
-          value: http://pl-coach.powerlifting.svc.cluster.local:8000
         - name: IF_SUPPLEMENTS_TABLE_NAME
           value: if-supplements
         - name: PL_JOB_TOKEN_PUBLIC_KEY

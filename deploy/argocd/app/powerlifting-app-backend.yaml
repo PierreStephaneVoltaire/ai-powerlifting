@@ -24,7 +24,7 @@ spec:
       containers:
       - env:
         - name: IF_API_URL
-          value: http://pl-coach.powerlifting.svc.cluster.local:8000
+          value: http://pl-assistant.powerlifting.svc.cluster.local:8000
         - name: MEDIA_SIGNING_PRIVATE_KEY
           valueFrom:
             secretKeyRef:

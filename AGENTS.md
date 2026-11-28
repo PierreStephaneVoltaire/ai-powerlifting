@@ -18,7 +18,6 @@ working — this file is only layout + operating rules.
 
 - `powerlifting-app/terraform/` → AWS resources only, applied by CI.
 - `powerlifting-app/terraform/k8s/{core,perms,network,mesh,app}` → the Powerlifting Kubernetes resources, one state each, applied by the in-cluster runner.
-- `powerlifting-app/terraform/coach/` → its own state for the Coach Kubernetes resources (PVC, Deployments, Services), applied by the same runner. Coach ECR repositories live in `powerlifting-app/terraform/` with the other AWS resources. See [Coach](src/services/coach/README.md).
 
 Keep infrastructure deployment and verification in the [pipeline](.github/workflows/build-images.yml). Document the architecture in the README and architecture guide. Omit operator runbooks.
 
@@ -36,7 +35,7 @@ npm run typecheck      # typecheck all workspaces
 ## Operating rules
 
 1. **Diagnose from the live env, not the code.** Check pod logs, `kubectl
-   describe`, `kubectl get events`, and AWS resources first. Live cluster is the
+describe`, `kubectl get events`, and AWS resources first. Live cluster is the
    source of truth — never guess from code.
 2. **Protect the live IF agent API.** Non-targeted `terraform apply` and all
    `terraform destroy` are hook-blocked. `kubectl cordon/drain` are blocked
@@ -45,7 +44,7 @@ npm run typecheck      # typecheck all workspaces
    `--all` blast in `if-portals`; this portal's backend/frontend may be mutated
    freely. `terraform apply -target=...` needs explicit operator approval.
    Otherwise give the operator the command. Read-only kubectl and `terraform
-   fmt/validate/plan` are fine.
+fmt/validate/plan` are fine.
 3. **Never delete AWS resources.** Give the operator the command.
 4. **No git writes.** Give the operator the command.
 5. **Code first; don't over-plan.** Start implementing. Plan part 1 → implement →

@@ -127,6 +127,11 @@ pub async fn authorize(
     if identity.person.is_empty() {
         return Err("Person required".into());
     }
+    let access_args: Map<String, Value> = args
+        .iter()
+        .filter(|(key, _)| operation != "import_parse_file" || key.as_str() != "base64_content")
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
     let response = client
         .post(format!(
             "{}/operations/access_context",
@@ -135,7 +140,7 @@ pub async fn authorize(
         .header("X-Person-Pk", &identity.person)
         .header("X-Athlete-Pk", &identity.athlete)
         .timeout(std::time::Duration::from_secs(10))
-        .json(&json!({"operation": operation, "arguments": args}))
+        .json(&json!({"operation": operation, "arguments": access_args}))
         .send()
         .await
         .map_err(|_| "access unavailable")?;

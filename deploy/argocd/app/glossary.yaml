@@ -31,7 +31,7 @@ spec:
         - name: PROMPT_CACHE_URL
           value: http://pl-prompt-cache-api.powerlifting.svc.cluster.local:8000
         - name: IF_API_URL
-          value: http://pl-coach.powerlifting.svc.cluster.local:8000
+          value: http://pl-assistant.powerlifting.svc.cluster.local:8000
         - name: GLOSSARY_GENERIC_INTERVAL
           value: 5m
         - name: GOMEMLIMIT

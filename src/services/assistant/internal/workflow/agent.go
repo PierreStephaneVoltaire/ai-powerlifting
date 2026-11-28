@@ -43,6 +43,9 @@ func call[O any](ctx *workflow.WorkflowContext, name string, input any, policy *
 }
 
 func (w *Workflows) Register(registry *workflow.Registry) error {
+	if err := registry.AddWorkflowN(NameDomainJob, w.DomainJob); err != nil {
+		return err
+	}
 	if err := registry.AddWorkflowN(NameConversationTurn, w.ConversationTurn); err != nil {
 		return err
 	}

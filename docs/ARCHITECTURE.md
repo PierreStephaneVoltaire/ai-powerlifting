@@ -10,8 +10,8 @@ Services/Deployments, one per operation manifest in
 `src/services/operations/*.json`. Each manifest defines typed HTTP and MCP
 operations. The Express gateway calls them over the cluster network, and the
 Assistant (`pl-assistant`) runs conversational turns and calls them as tools.
-The Coach (`pl-coach`) remains the `/v1/jobs` broker and Codex inference
-answerer for analytics reports and imports. DynamoDB and S3 hold the data.
+The Assistant also serves the `/v1/jobs` domain job contract for analytics
+reports and imports. DynamoDB and S3 hold the training data.
 
 The AI workflow (use cases, models, request flow, concurrency, output
 validation and hallucination controls) is in the README's
@@ -24,9 +24,8 @@ Lift profiles and the other native domain services use their own images.
 flowchart LR
   Browser["Browser"] --> Gateway["Express gateway"]
   Gateway --> Service["19 typed HTTP/MCP services"]
-  Gateway --> Coach["pl-coach"]
   Gateway --> Assistant["pl-assistant"]
-  Service -->|"inference steps"| Coach
+  Service <-->|"inference continuations"| Assistant
   Assistant -->|"MCP tools via LiteLLM"| Service
   Bot["pl-coach-discord"] --> Assistant
   Assistant --> AssistantDB[("assistant-postgres")]
@@ -70,7 +69,6 @@ flowchart TB
     Auth["authentik-server<br/>OIDC identity authority"]
     AuthWorker["authentik-worker<br/>background tasks"]
     Postgres[("CNPG Postgres<br/>Authentik data")]
-    Coach["pl-coach<br/>Codex worker, jobs"]
     Assistant["pl-assistant<br/>Dapr workflows"]
     AssistantDB[("assistant-postgres<br/>CNPG + pgvector")]
     Bot["pl-coach-discord<br/>gateway bot"]
@@ -88,14 +86,12 @@ flowchart TB
   AuthWorker --> Postgres
   Proxy -->|"login sessions"| Valkey
   BE -->|"application cache"| Valkey
-  BE -->|"AI jobs and polling"| Coach
   DiscordApp <-->|"websocket"| Bot
-  BE -->|"chat"| Assistant
+  BE -->|"chat and jobs"| Assistant
   Bot -->|"chat"| Assistant
   Assistant --> AssistantDB
   Gateway -->|"llm hostname"| LiteLLM
   Assistant -->|"model calls + MCP"| LiteLLM
-  Coach -->|"model calls"| LiteLLM
 ```
 
 Authentik is the only login authority; Discord is its identity source.
@@ -180,14 +176,14 @@ flowchart LR
   AI["pl-analytics-ai"]
   Export["pl-analytics-export"]
   Features["AI-enabled domain operations<br/>pl-templates, pl-glossary, pl-imports,<br/>pl-lift-profiles"]
-  Coach["pl-coach<br/>Codex runtime"]
+  Jobs["pl-assistant<br/>Dapr domain jobs"]
   Valkey[("pl-valkey<br/>analysis, report pointers,<br/>prompt cache entries")]
   PromptCache["pl-prompt-cache-api<br/>exact + semantic lookup"]
   CacheMCP["pl-prompt-cache-mcp<br/>semantic cache tools"]
   Decisions["OpenAI Decisions API<br/>gpt-6-luna"]
   Reports[("S3 analysis-reports/<br/>finished AI reports")]
   Qdrant[("pl-prompt-cache<br/>Qdrant vectors")]
-  State[("pl-coach-state PVC<br/>jobs + Codex state")]
+  State[("assistant-postgres<br/>jobs + checkpoints")]
 
   subgraph LLM["LiteLLM layer"]
     direction TB
@@ -207,24 +203,22 @@ flowchart LR
   AI -->|"gRPC: analysis data"| Analytics
   AI -->|"gRPC: export context"| Export
   Export -->|"gRPC: analysis data"| Analytics
-  AI -->|"inference jobs"| Coach
-  Features -->|"inference jobs"| Coach
-  Coach -->|"Responses API"| Aliases
+  AI -->|"inference jobs"| Jobs
+  Features -->|"inference jobs"| Jobs
+  Jobs -->|"model calls"| Aliases
   Router --> ChatGPT & OpenRouter & Compat
   Analytics --> Valkey
   AI -->|"report pointer + reservation"| Valkey
   AI -->|"finished reports"| Reports
   AI -->|"lookup before inference,<br/>store after"| PromptCache
   Features -->|"lookup before inference,<br/>store after"| PromptCache
-  Coach -->|"exact reply cache"| Valkey
-  Coach -->|"semantic reply lookup"| CacheMCP
   PromptCache -->|"exact key + entries"| Valkey
   PromptCache -->|"top 3 candidates"| CacheMCP --> Qdrant
   PromptCache -->|"same / contextual /<br/>temporal / none"| Decisions
-  Coach --> State
+  Jobs --> State
 ```
 
-AI-capable operations hand inference to the Coach and resume with its
+AI-capable operations hand inference to the Dapr workflow and resume with its
 validated response. The analytics services also exchange computed data over
 gRPC; report generation and export run outside the deterministic analytics
 process. Every domain AI call, from the Python runtime and from pl-analytics-ai,
@@ -315,31 +309,32 @@ rejects a wrong audience or an unrelated service account. See the
 
 ### Workload delivery
 
-Each Argo Application reads one manifest directory on `master`. The in-cluster
-runner scans those same files for ECR names, private values and workload
+Each Argo Application reads one manifest directory on the release branch.
+Owner releases from `feature/*` use GitHub's `stage` environment and publish
+`latest` to ECR. A release from `master` selects the golden branch again.
+The in-cluster runner scans those files for ECR names, private values and workload
 identity markers. Terraform owns the resulting Kustomize patches. Image Updater
-owns the digest overrides and reads the refreshed ECR pull secret. Its
-write-back replaces the Application spec, so the runner pauses the updater
-while Terraform changes patches. Kustomize preserves the repository and digest
+owns the digest overrides and reads the refreshed ECR pull secret. The pinned
+updater can overwrite concurrent Application changes, so the runner pauses it
+for the Argo Terraform apply. Kustomize preserves the repository and digest
 when the updater adds a redundant `:latest` tag. This keeps sibling pod
 templates stable when one service gets a new digest. Authentik
-grants console access through the `argocd-admins` group. The master environment
+grants console access through the `argocd-admins` group. The release environment
 supplies `ARGOCD_DOMAIN`. Its `K8S_TFVARS` contains the matching
 `argocd_domain` and the Authentik usernames in `argocd_admins`.
 
-During adoption the pipeline keeps sync manual and pauses Image Updater. It
-seeds digests from live Deployments, compares server-side dry runs, then
-checks Deployment specs, pod UIDs and restart counts after sync. Terraform
-releases each object only after its UID and Argo tracking ID match. The
-namespaced handoff record retains import addresses for rollback. The first
-successful run completes this phase even when automatic sync was requested.
+After Terraform updates the Application specs, Argo CD reconciles the selected
+branch automatically and Image Updater reconciles the ECR digests.
 
-The run after the handoff moves OAuth2 Proxy to its existing cookie key in its
-Secret and expands the redirect domain in its arguments. This rolls the proxy
-once. The handoff itself preserves the running template and keeps the key out
-of Git and the Application spec. On a later infrastructure release,
-`argocd_auto_sync = true` enables pruning, self-healing and two-minute image
-polling.
+The home node and private EC2 Spot workers communicate over Tailscale. Workers
+have no public IPs or direct inbound access; one ARM64 fck-nat instance in a
+dedicated public subnet provides IPv4 egress. Workers use a restricted instance role for bootstrap; pod AWS access uses the existing
+projected workload identity. Spot workers are tainted, so existing workloads
+remain on the home node unless explicitly configured otherwise. Argo manages
+the termination handler, which drains workers on interruption or scale-in, and
+a CronJob that removes stale worker records. Terraform keeps the desired worker
+count at zero by default.
+
 [ADR 0011](adr/0011-argocd-mutation-injection-and-spot-workers.md)
 
 ### Mesh, monitoring and deployment
@@ -390,14 +385,14 @@ has its own state. The Git manifests live alongside those stacks.
 | `terraform/k8s/perms` | Kubernetes service accounts and RBAC |
 | `terraform/k8s/network` | NGINX Gateway, Gateway API and tunnel credential checksum |
 | `terraform/k8s/argocd` | Argo CD, Authentik SSO settings, ECR Image Updater and Application patches |
+| `terraform/k8s/nodes` | Tailscale, k3s bootstrap parameters and generated credentials |
+| `deploy/argocd/nodes` | Worker termination handler and reaper CronJob |
 | `deploy/argocd/{app,coach,network}` | Namespaced workloads, workload policies, waypoint and HTTP routes |
 | `terraform/k8s/mesh` | Istio control plane, CNI and ztunnel |
 | `terraform/k8s/app` | Application secrets, private configuration, persistent volumes, registry refresh and LiteLLM key registration |
 | `terraform/coach` | Coach credentials and persistent state |
 
-The in-cluster runner applies the core, permissions, network, mesh and app
-stacks in order. The same job applies the separate Coach state when a Coach
-image builds successfully or the workflow selects Kubernetes changes.
+The in-cluster runner applies the platform, Argo CD, node and Coach states through the deployment pipeline.
 
 ## Analysis page: the four computation paths
 
@@ -676,9 +671,9 @@ is a `ConversationTurn` workflow. Every model call, tool call, proposal and
 delivery is a checkpointed activity, stored in the pgvector-enabled CNPG
 cluster `assistant-postgres`, next to the assistant's own schema
 (conversations, turns, participants, embeddings, proposals, audit,
-orchestration events). It replaces the old `pl-coach` chat path; `pl-coach`
-stays only as the `/v1/jobs` broker and Codex inference answerer for analytics
-reports and imports. See ADR-0007 and ADR-0008.
+orchestration events). The same Dapr worker executes domain jobs using the
+service-issued inference challenge and the existing LiteLLM client. Discord
+uses the Assistant's conversation endpoint. See ADR-0007 and ADR-0008.
 
 Models are only ever named by LiteLLM alias, with providers registered once:
 `pl-coordinator` (ChatGPT subscription, OpenRouter fallback),
@@ -837,20 +832,20 @@ This section covers domain AI jobs (analytics reports, imports); chat is the
 Assistant above.
 
 The gateway calls the typed domain operation. AI operations submit a domain job
-through the `pl-coach` `/v1/jobs` broker and native Codex worker. A retained handler requests
-inference through `services.ai`; its continuation yields a structured challenge.
-The native Specialist answers it, and `domain_resume` validates the
-response before the handler continues. There is no separate model queue,
-OpenRouter fallback, Fission service or second Codex host.
+through `/v1/jobs`. The Assistant schedules a Dapr workflow with the job ID.
+PostgreSQL holds payloads and checkpoints, including large imports. The domain
+service yields a structured inference challenge, the workflow calls LiteLLM,
+and `domain_resume` validates the answer before the handler continues. A replay
+uses the saved checkpoint. An ambiguous domain-write outcome becomes `uncertain`.
 
 ```mermaid
 flowchart LR
   Browser --> Gateway
   Gateway --> Domain[Typed domain operation]
-  Domain --> Job[Existing IF domain job]
-  Job --> Worker[Existing native Codex worker]
-  Worker --> Specialist[Native Specialist]
-  Specialist --> Resume[Validated domain continuation]
+  Domain --> Job[Domain job API]
+  Job --> Worker[Assistant Dapr workflow]
+  Worker --> Model[LiteLLM model alias]
+  Model --> Resume[Validated domain continuation]
   Resume --> Result[Persisted result and reference]
   Result --> Gateway
 ```

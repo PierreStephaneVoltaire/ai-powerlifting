@@ -1,29 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- agent.yaml
 - discord.yaml
 - mesh.yaml
 - network-policy.yaml
 replacements:
-- source:
-    kind: Deployment
-    name: pl-coach
-    fieldPath: spec.template.spec.containers.[name=coach].image
-    options: {delimiter: ':latest@', index: 0}
-  targets:
-  - select: {kind: Deployment, name: pl-coach}
-    fieldPaths: ['metadata.annotations.[nolift.io/coach-image-base]']
-    options: {create: true}
-- source:
-    kind: Deployment
-    name: pl-coach
-    fieldPath: metadata.annotations.[nolift.io/coach-image-base]
-    options: {delimiter: '@', index: 0}
-  targets:
-  - select: {kind: Deployment, name: pl-coach}
-    fieldPaths: ['spec.template.spec.containers.[name=coach].image']
-    options: {delimiter: '@', index: 0}
 - source:
     kind: Deployment
     name: pl-coach-discord

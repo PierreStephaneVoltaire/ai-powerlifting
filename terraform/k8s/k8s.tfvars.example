@@ -61,7 +61,11 @@ litellm_providers = {
   openrouter = { type = "openrouter" }
 }
 litellm_models = {
-  pl-analysis  = [{ provider = "chatgpt", model = "gpt-6-sol" }]
+  pl-analysis       = [{ provider = "openrouter", model = "google/gemini-4-hydrogen" }]
+  gemini-4-hydrogen = [{ provider = "openrouter", model = "google/gemini-4-hydrogen" }]
+  gemini-4-carbon   = [{ provider = "openrouter", model = "google/gemini-4-carbon" }]
+  gemini-4-neon     = [{ provider = "openrouter", model = "google/gemini-4-neon" }]
+  gemini-4-argon    = [{ provider = "openrouter", model = "google/gemini-4-argon" }]
   pl-standard  = [{ provider = "chatgpt", model = "gpt-5.6-terra" }]
   pl-light     = [{ provider = "chatgpt", model = "gpt-6-luna" }]
   pl-documents = [{ provider = "chatgpt", model = "gpt-6-astra" }]

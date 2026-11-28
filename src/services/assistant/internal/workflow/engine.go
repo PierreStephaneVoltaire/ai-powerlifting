@@ -55,6 +55,11 @@ func (e *Engine) Schedule(ctx context.Context, id string, input TurnInput) error
 	return err
 }
 
+func (e *Engine) ScheduleDomain(ctx context.Context, id string) error {
+	_, err := e.client.ScheduleWorkflow(ctx, NameDomainJob, dw.WithInstanceID(id), dw.WithInput(id))
+	return err
+}
+
 func (e *Engine) Status(ctx context.Context, id string) (EngineStatus, error) {
 	metadata, err := e.client.FetchWorkflowMetadata(ctx, id)
 	if err != nil {

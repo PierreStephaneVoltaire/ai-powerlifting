@@ -52,3 +52,44 @@ variable "glossary_table_name" {
 variable "glossary_catalog_function_name" {
   type = string
 }
+
+variable "workers_enabled" {
+  type    = bool
+  default = false
+}
+variable "home_lan_cidr" {
+  type    = string
+  default = null
+}
+variable "worker_azs" {
+  type    = list(string)
+  default = ["ca-central-1a", "ca-central-1b", "ca-central-1d"]
+}
+variable "worker_min" {
+  type    = number
+  default = 0
+}
+variable "worker_desired" {
+  type    = number
+  default = 0
+}
+variable "worker_max" {
+  type    = number
+  default = 3
+}
+variable "worker_instance_types" {
+  type    = list(string)
+  default = ["m6a.large", "m6i.large", "m5a.large", "m5.large", "m7i.large"]
+}
+variable "worker_ami_ssm_parameter" {
+  type    = string
+  default = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
+}
+variable "worker_root_volume_gib" {
+  type    = number
+  default = 40
+}
+variable "worker_spot_max_price" {
+  type    = string
+  default = null
+}

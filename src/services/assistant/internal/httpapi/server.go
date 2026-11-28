@@ -14,6 +14,7 @@ import (
 	"powerlifting/assistant/internal/access"
 	"powerlifting/assistant/internal/activities"
 	"powerlifting/assistant/internal/audit"
+	"powerlifting/assistant/internal/domainjobs"
 	"powerlifting/assistant/internal/store"
 	"powerlifting/assistant/internal/workflow"
 )
@@ -25,6 +26,7 @@ const (
 
 type Engine interface {
 	Schedule(ctx context.Context, id string, input workflow.TurnInput) error
+	ScheduleDomain(ctx context.Context, id string) error
 	Status(ctx context.Context, id string) (workflow.EngineStatus, error)
 	Terminate(ctx context.Context, id string) error
 	RaiseApproval(ctx context.Context, workflowID, proposalID string, event activities.ApprovalEvent) error
@@ -35,6 +37,7 @@ type Server struct {
 	Access         *access.Client
 	Audit          *audit.Recorder
 	Engine         Engine
+	DomainJobs     *domainjobs.Service
 	Log            *slog.Logger
 	AllowedCallers []string
 	Now            func() time.Time
@@ -106,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/conversations/{conversation_id}/turns", s.createTurn)
 	mux.HandleFunc("GET /v1/conversations/{conversation_id}/history", s.history)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.job(false))
+	mux.HandleFunc("POST /v1/jobs", s.submitDomain)
 	mux.HandleFunc("GET /v1/jobs/{id}/result", s.job(true))
 	mux.HandleFunc("POST /v1/jobs/{id}/cancel", s.cancel)
 	mux.HandleFunc("POST /v1/proposals/{id}/approve", s.decide(true))

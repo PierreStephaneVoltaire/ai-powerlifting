@@ -12,7 +12,6 @@ on:
       - "docker/**"
       - "terraform/**"
       - "deploy/argocd/**"
-      - "scripts/*argocd*"
       - "src/package.json"
       - "src/package-lock.json"
       - "src/tsconfig.json"
@@ -20,6 +19,7 @@ on:
       - "scripts/migrate_identity_pointers.py"
       - "scripts/verify_workload_identity.py"
       - "scripts/k3s-workload-identity*"
+      - "scripts/k3s-home-tailnet-setup.sh"
       - "scripts/verify_network_canary.py"
       - "scripts/test_verify_*.py"
       - ".github/workflows/**"
@@ -28,10 +28,6 @@ on:
 
   workflow_dispatch:
     inputs:
-      argocd_rollback_revision:
-        description: Restore Terraform ownership before auto-sync using this pre-migration commit SHA
-        required: false
-        type: string
       backend_only:
         description: Build only backend
         required: false
@@ -72,26 +68,38 @@ jobs:
       terraform: ${{ steps.result.outputs.terraform }}
       kubernetes: ${{ steps.result.outputs.kubernetes }}
       image_tag: ${{ steps.release.outputs.image_tag }}
+      live_release: ${{ steps.release.outputs.live_release }}
     steps:
       - uses: actions/checkout@v4
 
       - id: release
         env:
           RELEASE_BRANCH: ${{ github.ref_name }}
+          OWNER_RELEASE: >-
+            ${{ github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+              && (github.event_name == 'push' || (inputs.apply_terraform == 'true'
+                && (github.ref_name == 'master' || (inputs.backend_only != 'true' && inputs.frontend_only != 'true')))) }}
         run: |
           image_tag="$(python3 scripts/image_tag.py "$RELEASE_BRANCH")"
+          live_release=false
+          if [[ "$OWNER_RELEASE" == true && ( "$RELEASE_BRANCH" == master || "$RELEASE_BRANCH" == feature/* ) ]]; then
+            image_tag=latest
+            live_release=true
+          fi
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
+          echo "live_release=$live_release" >> "$GITHUB_OUTPUT"
 
       - id: deploy
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.ref_name }}
+          LIVE_RELEASE: ${{ steps.release.outputs.live_release }}
         run: |
           open_prs=0
           if [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" != "master" ]; then
             open_prs="$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq length)"
           fi
-          if [ "$open_prs" -gt 0 ] \
+          if [ "$LIVE_RELEASE" = true ] || [ "$open_prs" -gt 0 ] \
             || { [ "${{ github.event_name }}" = "push" ] && [ "$BRANCH" = "master" ]; } \
             || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.apply_terraform }}" = "true" ]; } \
             || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.frontend_only }}" = "true" ] && [ "${{ inputs.backend_only }}" != "true" ] && [ "${{ inputs.apply_terraform }}" != "true" ]; }; then
@@ -108,18 +116,10 @@ jobs:
           filters: .github/image-filters.yml
 
       - id: result
-        env:
-          ROLLBACK_REVISION: ${{ inputs.argocd_rollback_revision }}
         shell: bash
         run: |
           {
-            if [ -n "$ROLLBACK_REVISION" ]; then
-              echo "frontend=false"
-              echo "backend=false"
-              echo "services=false"
-              echo "terraform=false"
-              echo "kubernetes=true"
-            elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
               echo "frontend=true"
               if [ "${{ inputs.frontend_only }}" = "true" ] && [ "${{ inputs.backend_only }}" != "true" ] && [ "${{ inputs.apply_terraform }}" != "true" ]; then
                 echo "backend=false"
@@ -142,10 +142,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build-backend:
-    needs: changes
+    needs: [changes, terraform-apply]
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.backend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') }}
+    if: >-
+      ${{ always() && needs.changes.outputs.backend == 'true'
+        && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true')
+        && (needs.changes.outputs.live_release != 'true' || needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -178,7 +181,11 @@ jobs:
     needs: [changes, terraform-apply]
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ always() && needs.changes.outputs.services == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled' }}
+    if: >-
+      ${{ always() && needs.changes.outputs.services == 'true'
+        && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true')
+        && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled'
+        && (needs.changes.outputs.live_release != 'true' || needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     strategy:
       matrix:
         include:
@@ -222,6 +229,8 @@ jobs:
             repository: powerlifting-profile
           - image: powerlifting-glossary
             repository: powerlifting-glossary
+          - image: powerlifting-coach-discord
+            repository: powerlifting-coach-discord
           - image: powerlifting-assistant
             repository: powerlifting-assistant
     steps:
@@ -252,47 +261,14 @@ jobs:
             -var "image_tag=${{ needs.changes.outputs.image_tag }}" \
             ${{ matrix.image }}.pkr.hcl
 
-  build-coach:
+  build-frontend:
     needs: [changes, terraform-apply]
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ always() && needs.changes.outputs.services == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.frontend_only == 'true') && needs.terraform-apply.result != 'failure' && needs.terraform-apply.result != 'cancelled' }}
-    strategy:
-      matrix:
-        image: [powerlifting-coach-agent, powerlifting-coach-discord]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Login to public ECR
-        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
-
-      - uses: hashicorp/setup-packer@v3
-        with:
-          version: 1.13.x
-
-      - working-directory: docker
-        run: packer init ${{ matrix.image }}.pkr.hcl
-
-      - working-directory: docker
-        run: |
-          packer build -color=false \
-            -var "image_repository=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPO_PREFIX }}-${{ matrix.image }}" \
-            -var "image_tag=${{ needs.changes.outputs.image_tag }}" \
-            ${{ matrix.image }}.pkr.hcl
-
-  build-frontend:
-    needs: changes
-    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
-    runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.frontend == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true') }}
+    if: >-
+      ${{ always() && needs.changes.outputs.frontend == 'true'
+        && !(github.event_name == 'workflow_dispatch' && inputs.backend_only == 'true')
+        && (needs.changes.outputs.live_release != 'true' || needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -362,6 +338,11 @@ jobs:
       - working-directory: terraform
         run: terraform validate
 
+      - working-directory: terraform/k8s/nodes
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
   workload-identity-inputs:
     needs: changes
     if: >-
@@ -421,6 +402,9 @@ jobs:
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
       TF_VAR_workload_identity_jwks: ${{ needs.workload-identity-inputs.outputs.jwks }}
+      TF_VAR_workers_enabled: ${{ vars.WORKERS_ENABLED || 'false' }}
+      TF_VAR_worker_desired: ${{ vars.WORKER_DESIRED || '0' }}
+      TF_VAR_home_lan_cidr: ${{ secrets.HOME_LAN_CIDR }}
     steps:
       - uses: actions/checkout@v4
 
@@ -455,7 +439,7 @@ jobs:
       workload_issuer: ${{ steps.apply.outputs.workload_issuer }}
     environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: ubuntu-latest
-    if: ${{ github.ref_name == 'master' && needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
+    if: ${{ needs.changes.outputs.live_release == 'true' && needs.changes.outputs.deploy == 'true' && needs.terraform-plan.result == 'success' }}
     env:
       TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -470,6 +454,9 @@ jobs:
       TF_VAR_glossary_table_name: ${{ vars.GLOSSARY_TABLE_NAME }}
       TF_VAR_glossary_catalog_function_name: ${{ vars.GLOSSARY_CATALOG_FUNCTION_NAME }}
       TF_VAR_workload_identity_jwks: ${{ needs.workload-identity-inputs.outputs.jwks }}
+      TF_VAR_workers_enabled: ${{ vars.WORKERS_ENABLED || 'false' }}
+      TF_VAR_worker_desired: ${{ vars.WORKER_DESIRED || '0' }}
+      TF_VAR_home_lan_cidr: ${{ secrets.HOME_LAN_CIDR }}
     steps:
       - uses: actions/checkout@v4
 
@@ -504,24 +491,30 @@ jobs:
           printf 'workload_issuer=%s\n' "$(terraform output -raw workload_identity_issuer)" >> "$GITHUB_OUTPUT"
 
   kubernetes-apply:
-    needs: [changes, terraform-apply]
-    environment: main
+    needs: [changes, terraform-apply, build-backend, build-services, build-frontend]
+    environment: ${{ github.ref_name == 'master' && 'main' || 'stage' }}
     runs-on: powerlifting-k8s
     if: >-
-      ${{ always() && github.ref_name == 'master'
-        && needs.changes.outputs.kubernetes == 'true' && (needs.changes.outputs.deploy == 'true' || inputs.argocd_rollback_revision != '')
+      ${{ always() && needs.changes.outputs.live_release == 'true'
+        && (needs.changes.outputs.kubernetes == 'true' || startsWith(github.ref_name, 'feature/'))
+        && needs.changes.outputs.deploy == 'true'
         && github.triggering_actor == github.repository_owner && github.actor == github.repository_owner
+        && (github.ref_name == 'master'
+          || ((needs.changes.outputs.backend != 'true' || needs.build-backend.result == 'success')
+            && (needs.changes.outputs.services != 'true' || needs.build-services.result == 'success')
+            && (needs.changes.outputs.frontend != 'true' || needs.build-frontend.result == 'success')))
         && (needs.changes.outputs.terraform != 'true' || needs.terraform-apply.result == 'success') }}
     concurrency:
       group: kubernetes-apply
       cancel-in-progress: false
     env:
       KUBE_LOAD_CONFIG_FILE: "false"
+      TF_VAR_workers_enabled: ${{ vars.WORKERS_ENABLED || 'false' }}
+      TAILSCALE_OAUTH_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      TAILSCALE_OAUTH_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
       TF_VAR_argocd_domain: ${{ vars.ARGOCD_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ inputs.argocd_rollback_revision && '0' || '1' }}
 
       - run: command -v unzip || (sudo apt-get update && sudo apt-get install -y unzip)
 
@@ -546,7 +539,6 @@ jobs:
       - run: python -m pip install boto3==1.42.83 PyYAML==6.0.3
 
       - name: Preserve existing identity pointers
-        if: ${{ !inputs.argocd_rollback_revision }}
         run: |
           python scripts/migrate_identity_pointers.py
           python scripts/migrate_identity_pointers.py --apply
@@ -612,24 +604,68 @@ jobs:
             kubectl wait --for=condition=Ready --timeout=120s node -l node-role.kubernetes.io/control-plane
           fi
 
-      - name: Install pinned Argo CD CLI
+      - name: Reconcile platform infrastructure
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/argocd-bin"
-          cd "$RUNNER_TEMP/argocd-bin"
-          curl --fail --silent --show-error --location --retry 3 -o argocd https://github.com/argoproj/argo-cd/releases/download/v3.6.3/argocd-linux-amd64
-          echo "3750cd7ed2a2ef05c640344b86f29aa99c9783e847c8f326c81e3900ad39412b  argocd" | sha256sum -c -
-          chmod 755 argocd
-          echo "$PWD" >> "$GITHUB_PATH"
+          for stack in core perms network mesh app coach; do
+            directory="terraform/k8s/$stack"
+            key="powerlifting-app/k8s/$stack.tfstate"
+            variables="$RUNNER_TEMP/k8s.tfvars"
+            if [[ $stack == coach ]]; then
+              directory=terraform/coach
+              key=powerlifting-app/coach/terraform.tfstate
+              variables="$RUNNER_TEMP/coach.tfvars"
+            fi
+            terraform -chdir="$directory" init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
+              -backend-config="key=$key" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+            terraform -chdir="$directory" apply -input=false -auto-approve -compact-warnings -var-file="$variables"
+          done
 
       - name: Reconcile NoLift applications
         env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          ROLLBACK_REVISION: ${{ inputs.argocd_rollback_revision }}
-        run: bash scripts/deploy_argocd.sh
+          TF_VAR_argocd_target_revision: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          terraform -chdir=terraform/k8s/argocd init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=powerlifting-app/k8s/argocd.tfstate" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+
+          TF_VAR_app_inputs=$(terraform -chdir=terraform/k8s/app output -json manifest_inputs)
+          TF_VAR_coach_inputs=$(terraform -chdir=terraform/coach output -json manifest_inputs)
+          TF_VAR_network_inputs=$(terraform -chdir=terraform/k8s/network output -json manifest_inputs)
+          TF_VAR_argocd_client_secret=$(terraform -chdir=terraform/k8s/core output -raw argocd_client_secret)
+          export TF_VAR_app_inputs TF_VAR_coach_inputs TF_VAR_network_inputs TF_VAR_argocd_client_secret
+
+          updater=deployment/argocd-image-updater-controller
+          resume_image_updater() {
+            if [[ -n $(kubectl -n argocd get applications.argoproj.io nolift-app -o jsonpath='{.spec.syncPolicy.automated}') ]]; then
+              kubectl -n argocd scale "$updater" --replicas=1
+            fi
+          }
+          if [[ $(kubectl -n argocd get "$updater" --ignore-not-found -o jsonpath='{.spec.replicas}') == 1 ]]; then
+            trap resume_image_updater EXIT
+            kubectl -n argocd scale "$updater" --replicas=0
+            kubectl -n argocd wait --for=delete pod -l app.kubernetes.io/name=argocd-image-updater --timeout=2m
+          fi
+
+          terraform -chdir=terraform/k8s/argocd apply -input=false -compact-warnings -auto-approve \
+            -var-file="$RUNNER_TEMP/k8s.tfvars" > /dev/null
+
+      - name: Reconcile worker infrastructure
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          terraform -chdir=terraform/k8s/nodes init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=powerlifting-app/k8s/nodes.tfstate" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+          terraform -chdir=terraform/k8s/nodes apply -input=false -auto-approve -compact-warnings -var-file="$RUNNER_TEMP/k8s.tfvars"
+
+      - name: Wait for home server Tailscale setup
+        if: ${{ vars.WORKERS_ENABLED == 'true' }}
+        run: sh scripts/k3s-home-tailnet-setup.sh
 
       - name: Verify Argo CD login through the gateway
-        if: ${{ !inputs.argocd_rollback_revision }}
         env:
           ARGOCD_DOMAIN: ${{ vars.ARGOCD_DOMAIN }}
           AUTH_DOMAIN: ${{ vars.AUTH_DOMAIN }}
