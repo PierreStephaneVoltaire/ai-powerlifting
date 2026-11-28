@@ -39,10 +39,13 @@
             headers:
               X-aws-ec2-metadata-token: '{{ metadata_token.content }}'
             return_content: true
-          register: identity
+          register: identity_response
+        - name: Parse instance identity
+          ansible.builtin.set_fact:
+            identity: '{{ identity_response.content | from_json }}'
         - name: Read cluster bootstrap parameters
           ansible.builtin.command:
-            argv: [aws, ssm, get-parameters, --with-decryption, --region, '{{ identity.json.region }}', --names, /nolift/k3s/server-url, /nolift/k3s/version, /nolift/k3s/agent-token, /nolift/k3s/tailscale-worker-key, --output, json]
+            argv: [aws, ssm, get-parameters, --with-decryption, --region, '{{ identity.region }}', --names, /nolift/k3s/server-url, /nolift/k3s/version, /nolift/k3s/agent-token, /nolift/k3s/tailscale-worker-key, --output, json]
           register: parameters
           until: parameters.rc == 0 and (parameters.stdout | from_json).Parameters | length == 4
           retries: 120
@@ -52,7 +55,7 @@
         - name: Set bootstrap values
           ansible.builtin.set_fact:
             bootstrap: '{{ dict((parameters.stdout | from_json).Parameters | map(attribute="Name") | map("basename") | zip((parameters.stdout | from_json).Parameters | map(attribute="Value"))) }}'
-            node_name: 'nolift-k3s-{{ identity.json.instanceId }}'
+            node_name: 'nolift-k3s-{{ identity.instanceId }}'
           no_log: true
         - name: Set node hostname
           ansible.builtin.hostname:
@@ -72,7 +75,7 @@
             state: present
         - name: Join tailnet
           ansible.builtin.command:
-            argv: [tailscale, up, '--auth-key={{ bootstrap["tailscale-worker-key"] }}', '--advertise-tags=tag:k3s-worker', '--hostname={{ node_name }}', '--port=41641']
+            argv: [tailscale, up, '--auth-key={{ bootstrap["tailscale-worker-key"] }}', '--advertise-tags=tag:k3s-worker', '--hostname={{ node_name }}']
           no_log: true
         - name: Get Tailscale address
           ansible.builtin.command: tailscale ip -4
@@ -114,9 +117,9 @@
               node-ip: {{ tailscale_ip.stdout }}
               flannel-iface: tailscale0
               pause-image: registry.k8s.io/pause:3.9
-              node-label: [nolift.io/pool=aws-spot, topology.kubernetes.io/zone={{ identity.json.availabilityZone }}]
+              node-label: [nolift.io/pool=aws-spot, topology.kubernetes.io/zone={{ identity.availabilityZone }}]
               node-taint: [nolift.io/pool=aws-spot:NoSchedule]
-              kubelet-arg: [provider-id=aws:///{{ identity.json.availabilityZone }}/{{ identity.json.instanceId }}, max-pods=110]
+              kubelet-arg: [provider-id=aws:///{{ identity.availabilityZone }}/{{ identity.instanceId }}, max-pods=110]
           no_log: true
         - name: Download k3s installer
           ansible.builtin.get_url:

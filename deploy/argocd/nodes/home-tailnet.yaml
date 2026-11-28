@@ -5,7 +5,7 @@ metadata:
   namespace: cattle-system
 spec:
   concurrency: 1
-  version: v1
+  version: v2
   serviceAccountName: system-upgrade-controller
   nodeSelector:
     matchExpressions:
@@ -28,7 +28,7 @@ spec:
           DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale
         fi
         join_key=$(k3s kubectl -n cattle-system get secret nolift-tailnet-server -o 'jsonpath={.data.key}')
-        tailscale up --auth-key="$(printf '%s' "$join_key" | base64 -d)" --advertise-tags=tag:k3s-server --hostname=nolift-k3s-server --port=41641
+        tailscale up --auth-key="$(printf '%s' "$join_key" | base64 -d)" --advertise-tags=tag:k3s-server --hostname=nolift-k3s-server
         tailscale set --auto-update=false
         tailnet_ip=$(tailscale ip -4)
         lan_interface=$(ip -4 route show default | awk 'NR == 1 {print $5}')
