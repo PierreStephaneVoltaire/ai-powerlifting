@@ -79,7 +79,7 @@ variable "worker_max" {
 }
 variable "worker_instance_types" {
   type    = list(string)
-  default = ["m6a.large", "m6i.large", "m5a.large", "m5.large", "m7a.large", "m7i.large"]
+  default = ["m6a.large", "m6i.large", "m5a.large", "m5.large", "m7i.large"]
 }
 variable "worker_ami_ssm_parameter" {
   type    = string

@@ -8,7 +8,7 @@ resource "aws_iam_role_policy" "k3s_workers" {
         Effect = "Allow"
         Action = [
           "ec2:Describe*", "ec2:CreateVpc", "ec2:ModifyVpcAttribute", "ec2:CreateInternetGateway", "ec2:AttachInternetGateway",
-          "ec2:CreateSubnet", "ec2:ModifySubnetAttribute", "ec2:CreateRouteTable", "ec2:CreateRoute", "ec2:ReplaceRoute", "ec2:AssociateRouteTable",
+          "ec2:CreateSubnet", "ec2:ModifySubnetAttribute", "ec2:CreateRouteTable", "ec2:CreateRoute", "ec2:ReplaceRoute", "ec2:DeleteRoute", "ec2:AssociateRouteTable", "ec2:ReplaceRouteTableAssociation",
           "ec2:CreateVpcEndpoint", "ec2:ModifyVpcEndpoint", "ec2:CreateSecurityGroup", "ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
           "ec2:AuthorizeSecurityGroupEgress", "ec2:RevokeSecurityGroupEgress", "ec2:CreateLaunchTemplate", "ec2:CreateLaunchTemplateVersion",
           "ec2:ModifyLaunchTemplate", "ec2:CreateTags", "ec2:DeleteTags", "ec2:RunInstances"
@@ -17,14 +17,25 @@ resource "aws_iam_role_policy" "k3s_workers" {
       },
       {
         Effect    = "Allow"
-        Action    = ["ec2:ModifyInstanceAttribute"]
+        Action    = ["ec2:ModifyInstanceAttribute", "ec2:ModifyInstanceMetadataOptions", "ec2:StartInstances", "ec2:StopInstances"]
         Resource  = "arn:aws:ec2:${var.region}:${local.account}:instance/*"
         Condition = { StringEquals = { "ec2:ResourceTag/Name" = "nolift-k3s-fck-nat" } }
       },
       {
+        Effect    = "Allow"
+        Action    = ["ec2:ModifyNetworkInterfaceAttribute"]
+        Resource  = "arn:aws:ec2:${var.region}:${local.account}:network-interface/*"
+        Condition = { StringEquals = { "ec2:Attribute" = "groupSet" } }
+      },
+      {
         Effect   = "Allow"
-        Action   = ["autoscaling:Describe*", "autoscaling:CreateAutoScalingGroup", "autoscaling:UpdateAutoScalingGroup", "autoscaling:CreateOrUpdateTags", "autoscaling:PutLifecycleHook", "autoscaling:StartInstanceRefresh", "autoscaling:CancelInstanceRefresh"]
+        Action   = ["autoscaling:Describe*"]
         Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["autoscaling:CreateAutoScalingGroup", "autoscaling:UpdateAutoScalingGroup", "autoscaling:CreateOrUpdateTags", "autoscaling:DeleteTags", "autoscaling:PutLifecycleHook", "autoscaling:StartInstanceRefresh", "autoscaling:CancelInstanceRefresh"]
+        Resource = "arn:aws:autoscaling:${var.region}:${local.account}:autoScalingGroup:*:autoScalingGroupName/nolift-k3s-workers"
       },
       {
         Effect   = "Allow"
