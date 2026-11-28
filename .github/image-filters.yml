@@ -31,6 +31,7 @@ kubernetes:
   - 'scripts/migrate_identity_pointers.py'
   - 'scripts/verify_workload_identity.py'
   - 'scripts/k3s-workload-identity*'
+  - 'scripts/k3s-home-tailnet-setup.sh'
   - 'scripts/verify_network_canary.py'
   - 'scripts/test_verify_*.py'
 terraform:

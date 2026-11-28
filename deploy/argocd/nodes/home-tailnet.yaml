@@ -1,0 +1,49 @@
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: nolift-home-tailnet
+  namespace: cattle-system
+spec:
+  concurrency: 1
+  version: v1
+  serviceAccountName: system-upgrade-controller
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+  secrets:
+    - name: nolift-tailnet-server
+      path: /run/nolift-tailnet
+      ignoreUpdates: true
+  upgrade:
+    image: public.ecr.aws/docker/library/alpine:3.21.3
+    command: [/bin/sh, -ec]
+    args:
+      - |
+        chroot /host /usr/bin/systemd-run --wait --collect --pipe /bin/sh -es <<'HOST_SETUP'
+        if ! command -v tailscale >/dev/null; then
+          curl -fsSLo /usr/share/keyrings/tailscale-archive-keyring.gpg https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+          printf '%s\n' 'deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu noble main' > /etc/apt/sources.list.d/tailscale.list
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale
+        fi
+        join_key=$(k3s kubectl -n cattle-system get secret nolift-tailnet-server -o 'jsonpath={.data.key}')
+        tailscale up --auth-key="$(printf '%s' "$join_key" | base64 -d)" --advertise-tags=tag:k3s-server --hostname=nolift-k3s-server --port=41641
+        tailscale set --auto-update=false
+        tailnet_ip=$(tailscale ip -4)
+        lan_interface=$(ip -4 route show default | awk 'NR == 1 {print $5}')
+        lan_ip=$(ip -o -4 address show dev "$lan_interface" scope global | awk 'NR == 1 {split($4, address, "/"); print address[1]}')
+        test -n "$lan_ip"
+        install -d /etc/rancher/k3s/config.yaml.d /etc/systemd/system/k3s.service.d
+        umask 077
+        cat > /etc/rancher/k3s/config.yaml.d/zzzz-nolift-tailnet.yaml <<EOF
+        node-ip: $tailnet_ip
+        flannel-iface: tailscale0
+        tls-san+:
+          - nolift-k3s-server
+          - $tailnet_ip
+          - $lan_ip
+        EOF
+        printf '%s\n' '[Unit]' 'After=tailscaled.service' 'Wants=tailscaled.service' > /etc/systemd/system/k3s.service.d/nolift-tailnet.conf
+        systemctl daemon-reload
+        HOST_SETUP

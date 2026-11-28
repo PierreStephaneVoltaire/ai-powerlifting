@@ -19,6 +19,7 @@ on:
       - "scripts/migrate_identity_pointers.py"
       - "scripts/verify_workload_identity.py"
       - "scripts/k3s-workload-identity*"
+      - "scripts/k3s-home-tailnet-setup.sh"
       - "scripts/verify_network_canary.py"
       - "scripts/test_verify_*.py"
       - ".github/workflows/**"
@@ -659,6 +660,10 @@ jobs:
           terraform -chdir=terraform/k8s/nodes init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=powerlifting-app/k8s/nodes.tfstate" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
           terraform -chdir=terraform/k8s/nodes apply -input=false -auto-approve -compact-warnings -var-file="$RUNNER_TEMP/k8s.tfvars"
+
+      - name: Wait for home server Tailscale setup
+        if: ${{ vars.WORKERS_ENABLED == 'true' }}
+        run: sh scripts/k3s-home-tailnet-setup.sh
 
       - name: Verify Argo CD login through the gateway
         env:

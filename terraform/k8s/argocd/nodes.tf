@@ -8,8 +8,17 @@ resource "kubectl_manifest" "nodes_project" {
     kind       = "AppProject"
     metadata   = { name = "nolift-nodes", namespace = "argocd" }
     spec = {
-      sourceRepos  = [local.repo]
-      destinations = [{ server = "https://kubernetes.default.svc", namespace = "kube-system" }]
+      sourceRepos = [local.repo]
+      destinations = [
+        { server = "https://kubernetes.default.svc", namespace = "kube-system" },
+        { server = "https://kubernetes.default.svc", namespace = "cattle-system" }
+      ]
+      namespaceResourceWhitelist = [
+        { group = "", kind = "ServiceAccount" },
+        { group = "apps", kind = "Deployment" },
+        { group = "batch", kind = "CronJob" },
+        { group = "upgrade.cattle.io", kind = "Plan" }
+      ]
       clusterResourceWhitelist = [
         { group = "rbac.authorization.k8s.io", kind = "ClusterRole" },
         { group = "rbac.authorization.k8s.io", kind = "ClusterRoleBinding" }

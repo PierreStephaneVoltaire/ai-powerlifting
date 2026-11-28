@@ -111,18 +111,15 @@ resource "aws_launch_template" "workers" {
     }
   }
   user_data = base64encode("#cloud-config\n${yamlencode({
-    packages = ["git"]
-    ansible = {
-      package_name   = "ansible-core"
-      install_method = "distro"
-      pull = [{
-        url            = "https://github.com/PierreStephaneVoltaire/ai-powerlifting.git"
-        checkout       = "master"
-        playbook_names = ["terraform/modules/k3s_workers/worker.yml"]
-      }]
-    }
-    write_files = [{ path = "/etc/nolift-playbook-version", content = sha256("${filesha256("${path.module}/worker.yml")}${filesha256("${path.module}/worker-health.yml")}") }]
-    runcmd      = [["sh", "-c", "test -f /etc/nolift/worker-ready || shutdown -h now"]]
+    packages = ["ansible-core"]
+    write_files = [
+      { path = "/etc/nolift/worker.yml", content = file("${path.module}/worker.yml") },
+      { path = "/etc/nolift/worker-health.yml", content = file("${path.module}/worker-health.yml") }
+    ]
+    runcmd = [
+      ["ansible-playbook", "/etc/nolift/worker.yml"],
+      ["sh", "-c", "test -f /etc/nolift/worker-ready || shutdown -h now"]
+    ]
   })}")
 }
 resource "aws_autoscaling_group" "workers" {
