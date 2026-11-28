@@ -23,7 +23,6 @@ services:
   - 'scripts/image_tag.py'
 kubernetes:
   - 'deploy/argocd/**'
-  - 'scripts/*argocd*'
   - '.github/workflows/build-images.yml'
   - '.github/image-filters.yml'
   - 'terraform/k8s/**'

@@ -389,10 +389,7 @@ Tailscale is $0.
 - **No Terraform for code pushes.** `kubernetes-apply` no longer depends on the build jobs. It runs only when the `kubernetes` filter matches (add `deploy/argocd/**`), and **only on master**. PR branches no longer deploy to the live cluster. That is a behavior change, and it follows from "Argo points to master".
 - **Stack order** becomes `core perms network mesh app argocd nodes`, then Coach. The `argocd` and `nodes` states use the same `-backend-config` loop.
 - **New env.** `TAILSCALE_OAUTH_CLIENT_ID` / `TAILSCALE_OAUTH_CLIENT_SECRET` (provider env), and `TF_VAR_argocd_domain` for the AWS root.
-- **Replace the rollout loop.** The loop over every Deployment and `rollout status` goes. Instead:
-  - Annotate a refresh: `kubectl -n argocd annotate application nolift-<app> argocd.argoproj.io/refresh=normal --overwrite`.
-  - Wait for `status.sync.revision == $GITHUB_SHA`, `sync.status == Synced` and `health.status == Healthy`.
-  - Keep the Istio DaemonSet waits and the `Verify projected AWS trust` step.
+- **Let Argo reconcile.** Applying the Application specs is sufficient for auto-sync. Keep the independent Istio and projected AWS trust checks.
 - **Remove deploy-frontend-only** (job `deploy-frontend-only` in `build-images.yml`). Image Updater deploys the frontend.
 - **Remove `image_tag` from the k8s stacks.** Drop `-var image_tag` from the `app` and Coach applies.
 - **Leave `pull-requests.yml` alone.**
@@ -403,7 +400,7 @@ Tailscale is $0.
 push master (src/**) → GitHub-hosted build → ECR :latest digest changes → Image Updater (≤2 min poll)
                      → writes Application kustomize.images → Argo renders master + Terraform patches → rollout
 push master (terraform/k8s/** or deploy/argocd/**) → in-cluster runner applies changed state(s)
-                     → mutations regenerated from the same checkout → refresh annotation → Argo sync
+                     → mutations regenerated from the same checkout → Argo auto-sync
 ```
 
 ---

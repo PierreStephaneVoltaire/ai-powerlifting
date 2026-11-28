@@ -12,7 +12,6 @@ on:
       - "docker/**"
       - "terraform/**"
       - "deploy/argocd/**"
-      - "scripts/*argocd*"
       - "src/package.json"
       - "src/package-lock.json"
       - "src/tsconfig.json"
@@ -608,16 +607,6 @@ jobs:
             kubectl wait --for=condition=Ready --timeout=120s node -l node-role.kubernetes.io/control-plane
           fi
 
-      - name: Install pinned Argo CD CLI
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/argocd-bin"
-          cd "$RUNNER_TEMP/argocd-bin"
-          curl --fail --silent --show-error --location --retry 3 -o argocd https://github.com/argoproj/argo-cd/releases/download/v3.6.3/argocd-linux-amd64
-          echo "3750cd7ed2a2ef05c640344b86f29aa99c9783e847c8f326c81e3900ad39412b  argocd" | sha256sum -c -
-          chmod 755 argocd
-          echo "$PWD" >> "$GITHUB_PATH"
-
       - name: Reconcile platform infrastructure
         env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
@@ -641,7 +630,31 @@ jobs:
         env:
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
           TF_VAR_argocd_target_revision: ${{ github.ref_name }}
-        run: bash scripts/deploy_argocd.sh
+        run: |
+          set -euo pipefail
+          terraform -chdir=terraform/k8s/argocd init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=powerlifting-app/k8s/argocd.tfstate" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
+
+          TF_VAR_app_inputs=$(terraform -chdir=terraform/k8s/app output -json manifest_inputs)
+          TF_VAR_coach_inputs=$(terraform -chdir=terraform/coach output -json manifest_inputs)
+          TF_VAR_network_inputs=$(terraform -chdir=terraform/k8s/network output -json manifest_inputs)
+          TF_VAR_argocd_client_secret=$(terraform -chdir=terraform/k8s/core output -raw argocd_client_secret)
+          export TF_VAR_app_inputs TF_VAR_coach_inputs TF_VAR_network_inputs TF_VAR_argocd_client_secret
+
+          updater=deployment/argocd-image-updater-controller
+          resume_image_updater() {
+            if [[ -n $(kubectl -n argocd get applications.argoproj.io nolift-app -o jsonpath='{.spec.syncPolicy.automated}') ]]; then
+              kubectl -n argocd scale "$updater" --replicas=1
+            fi
+          }
+          if [[ $(kubectl -n argocd get "$updater" --ignore-not-found -o jsonpath='{.spec.replicas}') == 1 ]]; then
+            trap resume_image_updater EXIT
+            kubectl -n argocd scale "$updater" --replicas=0
+            kubectl -n argocd wait --for=delete pod -l app.kubernetes.io/name=argocd-image-updater --timeout=2m
+          fi
+
+          terraform -chdir=terraform/k8s/argocd apply -input=false -compact-warnings -auto-approve \
+            -var-file="$RUNNER_TEMP/k8s.tfvars" > /dev/null
 
       - name: Reconcile worker infrastructure
         env:
@@ -650,12 +663,6 @@ jobs:
           terraform -chdir=terraform/k8s/nodes init -input=false -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=powerlifting-app/k8s/nodes.tfstate" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true" -backend-config="use_lockfile=true"
           terraform -chdir=terraform/k8s/nodes apply -input=false -auto-approve -compact-warnings -var-file="$RUNNER_TEMP/k8s.tfvars"
-
-      - name: Refresh worker application
-        if: ${{ vars.WORKERS_ENABLED == 'true' }}
-        run: |
-          kubectl -n argocd annotate application nolift-nodes argocd.argoproj.io/refresh=normal --overwrite
-          argocd app wait nolift-nodes --core --sync --health --timeout 900
 
       - name: Verify Argo CD login through the gateway
         env:

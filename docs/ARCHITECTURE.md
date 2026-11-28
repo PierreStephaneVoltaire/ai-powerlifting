@@ -314,18 +314,17 @@ Owner releases from `feature/*` use GitHub's `stage` environment and publish
 `latest` to ECR. A release from `master` selects the golden branch again.
 The in-cluster runner scans those files for ECR names, private values and workload
 identity markers. Terraform owns the resulting Kustomize patches. Image Updater
-owns the digest overrides and reads the refreshed ECR pull secret. Its
-write-back replaces the Application spec, so the runner pauses the updater
-while Terraform changes patches. Kustomize preserves the repository and digest
+owns the digest overrides and reads the refreshed ECR pull secret. The pinned
+updater can overwrite concurrent Application changes, so the runner pauses it
+for the Argo Terraform apply. Kustomize preserves the repository and digest
 when the updater adds a redundant `:latest` tag. This keeps sibling pod
 templates stable when one service gets a new digest. Authentik
 grants console access through the `argocd-admins` group. The release environment
 supplies `ARGOCD_DOMAIN`. Its `K8S_TFVARS` contains the matching
 `argocd_domain` and the Authentik usernames in `argocd_admins`.
 
-The promoted Applications use automatic sync and digest-based image updates.
-The deployment pipeline verifies rendered manifests and Application health after
-Terraform refreshes their private patches.
+After Terraform updates the Application specs, Argo CD reconciles the selected
+branch automatically and Image Updater reconciles the ECR digests.
 
 The home node and public EC2 Spot workers communicate over Tailscale. Workers
 use a restricted instance role for bootstrap; pod AWS access uses the existing
