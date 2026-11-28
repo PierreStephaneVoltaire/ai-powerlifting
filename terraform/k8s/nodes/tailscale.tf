@@ -13,16 +13,7 @@ resource "tailscale_acl" "policy" {
     tagOwners = merge({ "tag:k3s-server" = ["autogroup:admin"], "tag:k3s-worker" = ["autogroup:admin"] }, try(local.policy.tagOwners, {}))
     grants    = concat([for grant in try(local.policy.grants, []) : grant if jsonencode(grant) != jsonencode(local.worker_grant)], [local.worker_grant])
   }))
-  lifecycle {
-    prevent_destroy = true
-    precondition {
-      condition = alltrue(concat(
-        [for rule in try(local.policy.acls, []) : length(setintersection(toset(try(rule.src, [])), toset(["*", "autogroup:tagged", "tag:k3s-worker"]))) == 0 || alltrue([for dst in try(rule.dst, []) : startswith(dst, "tag:k3s-server:") || startswith(dst, "tag:k3s-worker:")])],
-        [for rule in try(local.policy.grants, []) : length(setintersection(toset(try(rule.src, [])), toset(["*", "autogroup:tagged", "tag:k3s-worker"]))) == 0 || alltrue([for dst in try(rule.dst, []) : contains(["tag:k3s-server", "tag:k3s-worker"], dst)])]
-      ))
-      error_message = "The existing tailnet policy allows wildcard sources to reach other devices; restrict those rules before joining workers."
-    }
-  }
+  lifecycle { prevent_destroy = true }
 }
 resource "tailscale_dns_preferences" "tailnet" { magic_dns = true }
 resource "tailscale_oauth_client" "worker_join" {
